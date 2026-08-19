@@ -2,7 +2,7 @@
   "schemaVersion": 1,
   "id": "io.github.ncr.omaphones",
   "name": "Omaphones",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "author": "Jacek Becela",
   "license": "MIT",
   "description": "Battery for wireless headphones over the Google Fast Pair Message Stream — left, right and case for earbuds, one figure for a headset — plus noise control (Off / ANC / Ambient / TalkThru) on JBL earbuds and Sony MDR v2 headsets. One icon per connected set.",
