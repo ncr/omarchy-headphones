@@ -49,14 +49,24 @@ function asInt(value, fallback) {
   return isFinite(number) ? Math.round(number) : fallback
 }
 
+// Qt Text defaults to AutoText, which renders anything tag-shaped as rich
+// text — and a device names itself, so a crafted name could smuggle <img>
+// markup into the panel title, the tooltip or a notification and make the
+// shell load a resource of the attacker's choosing. Every string a device
+// authored passes through here on its way to a Text; the angle brackets are
+// swapped for lookalikes so the string can never read as markup.
+function plainText(value) {
+  return str(value).replace(/</g, "\u2039").replace(/>/g, "\u203a")
+}
+
 // device.name is the writable BlueZ Alias and device.deviceName the read-only
 // name the device reports; the user-set alias is preferred deliberately, so
 // renaming the buds in the Bluetooth panel renames them in the bar too.
 function deviceLabel(device) {
   if (!device) return ""
-  var name = str(device.name).trim()
+  var name = plainText(device.name).trim()
   if (name) return name
-  var reported = str(device.deviceName).trim()
+  var reported = plainText(device.deviceName).trim()
   if (reported) return reported
   return str(device.address)
 }
@@ -315,6 +325,7 @@ function shortError(text, fallback) {
   for (var i = lines.length - 1; i >= 0; i--) {
     var line = lines[i].replace(/^\s+|\s+$/g, "")
     if (line === "") continue
+    line = plainText(line)
     return line.length > 160 ? line.substring(0, 157) + "…" : line
   }
   return fallback

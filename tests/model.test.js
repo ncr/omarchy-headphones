@@ -612,3 +612,22 @@ Deno.test("modesAvailable defaults to the JBL four and filters what Sony names",
   // different from a line that never mentioned the subject.
   assertEquals(Model.modesAvailable({ available: [] }), []);
 });
+
+Deno.test("a device-authored name can never read as rich text", () => {
+  assertEquals(
+    Model.deviceLabel({ name: '<img src="http://evil/x.png">' }),
+    "‹img src=\"http://evil/x.png\"›",
+  );
+  assertEquals(
+    Model.deviceLabel({ name: "", deviceName: "<b>Buds</b>" }),
+    "‹b›Buds‹/b›",
+  );
+  assertEquals(Model.deviceLabel({ name: "JBL <3" }), "JBL ‹3");
+});
+
+Deno.test("shortError neutralises markup a helper quoted", () => {
+  assertEquals(
+    Model.shortError("boom: <img src=x>\n", "fallback"),
+    "boom: ‹img src=x›",
+  );
+});

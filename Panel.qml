@@ -549,6 +549,7 @@ Panel {
             if (!root.useFastPair) return "Fast Pair off — BlueZ figure only"
             return "No level yet — press r to re-open the channel"
           }
+          textFormat: Text.PlainText
           color: root.dim
           font.family: root.fontFamily
           font.pixelSize: Style.font.caption
@@ -684,6 +685,7 @@ Panel {
           width: parent.width
           visible: root.connected && !root.modeRowVisible && root.ancError !== ""
           text: "Mode · " + root.ancError
+          textFormat: Text.PlainText
           color: root.dim
           font.family: root.fontFamily
           font.pixelSize: Style.font.caption
