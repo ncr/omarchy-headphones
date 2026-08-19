@@ -1,0 +1,133 @@
+#!/bin/bash
+# Build the README's hero pictures: one animated WebP for dark themes, one for
+# light, each a slideshow of the same shot taken under several Omarchy themes.
+#
+#   tools/hero-set [--which jbl] [--frame 900x400] [--seconds 1.8] [--backgrounds 2] [--morph 3] [--encode-only] [theme ...]
+#
+# Walks the themes (default: a handful of stock dark and light ones), sets each
+# with `omarchy theme set`, waits for the shell to repaint, takes the hero frame
+# with tools/gallery-shot — then cycles the theme's backgrounds with `omarchy
+# theme bg next` for --backgrounds frames in all — and sorts them by the
+# theme's `mode` into the dark or the light stack. Writes docs/hero-dark.webp and docs/hero-light.webp (animated
+# WebP — GitHub shows them), then puts your own theme back. README shows the right
+# one with <picture> and prefers-color-scheme.
+#
+# Your screen changes theme a few times while this runs; it takes about ten
+# seconds per theme. The headphones named by --which must be connected.
+set -euo pipefail
+
+here=$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)
+which_=jbl frame=900x400 seconds=1.8 backgrounds=2 morph=3 encode_only=0
+themes=()
+while (($#)); do
+  case "$1" in
+    --which) which_="$2"; shift 2 ;;
+    --frame) frame="$2"; shift 2 ;;
+    --seconds) seconds="$2"; shift 2 ;;
+    --backgrounds) backgrounds="$2"; shift 2 ;;
+    --encode-only) encode_only=1; shift ;;
+    --morph) morph="$2"; shift 2 ;;
+    -h|--help) sed -n '2,16p' "${BASH_SOURCE[0]}" | sed 's/^# \{0,1\}//'; exit 0 ;;
+    *) themes+=("$1"); shift ;;
+  esac
+done
+((${#themes[@]})) || themes=(tokyo-night gruvbox nord kanagawa osaka-jade catppuccin-latte rose-pine flexoki-light)
+
+for bin in omarchy python3; do command -v "$bin" >/dev/null || { echo "hero-set: $bin is missing" >&2; exit 1; }; done
+python3 -c 'import PIL' 2>/dev/null || { echo "hero-set: python-pillow is missing (sudo pacman -S python-pillow)" >&2; exit 1; }
+
+original=$(omarchy theme current)
+# The captured frames stay in the cache so the animation can be re-encoded
+# (other pacing, other quality) without walking the themes again:
+#   tools/hero-set --encode-only
+work="${XDG_CACHE_HOME:-$HOME/.cache}/omaphones-hero"
+trap 'omarchy theme set "$original" >/dev/null 2>&1 || true' EXIT
+
+theme_mode() {
+  local dir; dir=$(omarchy theme dir "$1" 2>/dev/null || true)
+  [[ -n $dir && -f $dir/colors.toml ]] || { echo dark; return; }
+  grep -qE '^mode *= *"light"' "$dir/colors.toml" && echo light || echo dark
+}
+
+if (( ! encode_only )); then rm -rf "$work"; fi
+mkdir -p "$work"
+for theme in "${themes[@]}"; do
+  (( encode_only )) && break
+  mode=$(theme_mode "$theme")
+  echo "== $theme ($mode)"
+  omarchy theme set "$theme" >/dev/null 2>&1 || { echo "hero-set: could not set theme $theme, skipping" >&2; continue; }
+  # The shell fades the background over and repaints the bar; the plugin is
+  # also reloaded when its theme tokens change. Give it a moment.
+  sleep 7
+  for (( b = 1; b <= backgrounds; b++ )); do
+    if (( b > 1 )); then
+      omarchy theme bg next >/dev/null 2>&1 || break
+      sleep 4
+    fi
+    if ! "$here/tools/gallery-shot" "$which_" --frame "$frame" --anchor right \
+         --out "$work/$mode-$theme-$b-open.png" >/dev/null; then
+      echo "hero-set: no frame for $theme (background $b)" >&2
+    fi
+  done
+done
+
+python3 - "$work" "$here/docs" "$seconds" "$morph" <<'EOF'
+import sys, glob, os
+from PIL import Image, ImageDraw, ImageFilter
+work, docs, seconds, morph = sys.argv[1], sys.argv[2], float(sys.argv[3]), int(sys.argv[4])
+
+def card(im, mode, pad=28, radius=12):
+    im = im.resize((im.width * 3 // 4, im.height * 3 // 4), Image.LANCZOS)
+    w, h = im.size
+    border = (48, 54, 61, 255) if mode == "dark" else (208, 215, 222, 255)
+    shadow_alpha = 150 if mode == "dark" else 70
+    canvas = Image.new("RGBA", (w + 2 * pad, h + 2 * pad), (0, 0, 0, 0))
+    shadow = Image.new("RGBA", canvas.size, (0, 0, 0, 0))
+    ImageDraw.Draw(shadow).rounded_rectangle((pad, pad + 6, pad + w, pad + h + 6), radius, fill=(0, 0, 0, shadow_alpha))
+    shadow = shadow.filter(ImageFilter.GaussianBlur(14))
+    canvas.alpha_composite(shadow)
+    mask = Image.new("L", (w, h), 0)
+    ImageDraw.Draw(mask).rounded_rectangle((0, 0, w - 1, h - 1), radius, fill=255)
+    card_img = Image.new("RGBA", (w, h), border)
+    card_img.paste(im, (0, 0))
+    canvas.paste(card_img, (pad, pad), mask)
+    ImageDraw.Draw(canvas).rounded_rectangle((pad, pad, pad + w - 1, pad + h - 1), radius, outline=border, width=1)
+    return canvas
+for mode in ("dark", "light"):
+    opens = sorted(glob.glob(os.path.join(work, f"{mode}-*-open.png")))
+    if not opens:
+        print(f"hero-set: no {mode} frames, leaving docs/hero-{mode}.webp alone")
+        continue
+    # Three quarters of the captured size, lossy WebP with a card around each
+    # frame (rounded corners, GitHub's border colour for the scheme, a soft
+    # shadow on a transparent margin — a light wallpaper otherwise bleeds into
+    # a light README page). Each wallpaper is a little scene: the bar alone,
+    # then the panel fading in over two steps — the real panel fades in over
+    # about as long — then the panel held.
+    # The panel is simply open, and the themes and wallpapers change under it:
+    # one frame per wallpaper, held for --seconds, with a cross-fade of --morph
+    # in-between frames into the next one — the last fades into the first, so
+    # the loop has no seam. (Full keyframes, so the blends stay clean across
+    # the soft shadow.)
+    stills = [card(Image.open(f).convert("RGB"), mode) for f in opens]
+    hold = int(seconds * 1000)
+    frames, durations = [], []
+    for i, still in enumerate(stills):
+        frames.append(still); durations.append(hold)
+        nxt = stills[(i + 1) % len(stills)]
+        if morph > 0 and len(stills) > 1:
+            for k in range(1, morph + 1):
+                frames.append(Image.blend(still, nxt, k / (morph + 1))); durations.append(80)
+    out = os.path.join(docs, f"hero-{mode}.webp")
+    # With hard cuts every frame is a keyframe (kmin/kmax=1): the encoder
+    # otherwise stores only the rectangle that changed, and the edge of that
+    # rectangle showed as a seam across the soft shadow. With cross-fades the
+    # in-between frames are gradual and the shadow never changes, so delta
+    # frames are clean and a third smaller. exact keeps the colour under
+    # transparency.
+    keyframes = dict(kmin=1, kmax=1) if morph == 0 else dict(kmin=9, kmax=17)
+    frames[0].save(out, save_all=True, append_images=frames[1:],
+                   duration=durations, loop=0, quality=80, method=6,
+                   lossless=False, exact=True, **keyframes)
+    print(f"{out}: {len(frames)} frames, {os.path.getsize(out)//1024} KB")
+EOF

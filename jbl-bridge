@@ -1,0 +1,525 @@
+#!/usr/bin/env python3
+"""Hold one BLE GATT link to the earbuds and mirror their listening mode.
+
+    jbl-bridge <ble-address> [fast-pair-model-id]
+
+Prints one JSON object per line, and reads one command per line:
+
+    stdout   {"modes": true, "mode": "ambient"}
+             {"modes": false, "error": "..."}
+    stdin    set off | set anc | set ambient | set talkthru
+
+Exit codes, which the shell-side service reads to decide what to do next:
+
+    0   clean stop: SIGTERM/SIGINT, or the widget closed the pipe
+    1   transient: the link never opened, was refused, closed under us, or
+        register-notify failed. Says nothing about the device, so the service
+        retries with a growing interval
+    3   linked but silent: connected, discovered, asked, heard nothing. The
+        miss is recorded in mode-support.json and the model is parked
+    4   setup failure: btgatt-client missing, or bad arguments. Nothing is
+        recorded, because this is about this machine, not about the earbuds
+
+Why a bridge at all: the mode lives on the earbuds' BLE side, and writes and
+notifications have to share one connection — a second connection is refused with
+"Device or resource busy". So one process owns the link, the widget talks to it
+through a pipe, and clicking a mode and hearing about a mode change from the
+earbud touch control are the same conversation. A second holder from the widget
+side is now prevented by the shell-side service, which runs a single bridge for
+every monitor's widget; the one collision left is tools/jbl-anc, which opens its
+own link and will be refused for as long as the widget's bridge is up.
+
+Why it wraps btgatt-client rather than speaking ATT: Python's socket module
+cannot open an LE ATT channel (no address type or CID for L2CAP), and BlueZ's
+D-Bus GATT API needs a device object, which does not exist for a resolvable
+private address until something scans for it. btgatt-client connects straight to
+the address, which is exactly what is needed, and it flushes after every
+notification, so nothing has to unbuffer it from the outside.
+
+Protocol, confirmed on a JBL TUNE230NC TWS — see PROTOCOL.md:
+
+    service 65786365-6c70-6f69-6e74-2e636f6d0000   ("excelpoint.com")
+    notify  value handle 0x000c
+    write   value handle 0x0010
+    frame   AA <cmd> <payload length> <payload...>
+    modes   cmd 0x91, opcode 0x10 set / 0x11 get / 0x12 report,
+            then slot/value pairs: 1 ANC, 2 Ambient Aware, 3 TalkThru
+"""
+import ctypes
+import json
+import os
+import re
+import select
+import shutil
+import signal
+import subprocess
+import sys
+import threading
+import time
+
+NOTIFY_HANDLE = "0x000c"
+WRITE_HANDLE = "0x0010"
+
+FRAME_NOTIFY_ON = "aa 9b 02 01 01"
+FRAME_GET = "aa 91 01 11"
+FRAME_SET = {
+    "off":      "aa 91 07 10 01 00 02 00 03 00",
+    "anc":      "aa 91 07 10 01 01 02 00 03 00",
+    "ambient":  "aa 91 07 10 01 00 02 01 03 00",
+    "talkthru": "aa 91 07 10 01 00 02 00 03 01",
+}
+
+# A mode report: aa 91 07 12 01 <anc> 02 <ambient> 03 <talkthru>
+REPORT = re.compile(
+    r"aa 91 07 12 01 ([0-9a-f]{2}) 02 ([0-9a-f]{2}) 03 ([0-9a-f]{2})")
+ANSI = re.compile(r"\x1b\[[0-9;]*m")
+
+# The one argument that reaches btgatt-client's command line. Anything that is
+# not a plain BLE address is a caller's mistake, and dialling it would put an
+# unchecked string in front of a program that expects an address.
+ADDRESS = re.compile(r"^([0-9A-Fa-f]{2}:){5}[0-9A-Fa-f]{2}$")
+
+USAGE = "usage: jbl-bridge <ble-address> [fast-pair-model-id]"
+
+# How long to wait for btgatt-client to open the link and walk the attribute
+# tree. It says so itself ("GATT discovery procedures complete"), so this is a
+# deadline on a stale address, not a guess at how long discovery takes.
+DISCOVERY_TIMEOUT = 15
+
+# How long to wait for the handler registration to be confirmed before sending
+# the frames anyway: a device that is slow to answer is still worth asking, and
+# a real refusal arrives as an error line rather than as silence.
+REGISTER_TIMEOUT = 5
+
+# Breathing space between the subscription and each frame. The earbuds drop a
+# frame that arrives too soon after the one before; two seconds is what
+# tools/jbl-anc was hand-tuned to on the hardware.
+FRAME_GAP = 2
+
+# How long to wait for the device to answer the first mode query before deciding
+# it does not speak this protocol. Generous: discovery is already done by now,
+# so this is a round trip and the earbuds' own thinking time.
+ANSWER_TIMEOUT = 12
+
+EXIT_TRANSIENT = 1
+EXIT_UNSUPPORTED = 3
+EXIT_SETUP = 4
+
+# prctl(PR_SET_PDEATHSIG, ...): if this process is killed outright the child has
+# to go with it, or btgatt-client keeps the ATT link and the next bridge is
+# refused by a corpse.
+PR_SET_PDEATHSIG = 1
+
+# Whether a model answers for its listening mode is worth remembering: the
+# alternative is opening a BLE link to a silent device after every reconnect and
+# every shell restart, to ask the same question. Keyed by Fast Pair model id,
+# which the Message Stream hands over free on every connect and which identifies
+# the model rather than the individual pair. The widget only reads this file.
+STATE_DIR = os.path.join(
+    os.environ.get("XDG_STATE_HOME") or os.path.expanduser("~/.local/state"),
+    "omaphones")
+SUPPORT_FILE = os.path.join(STATE_DIR, "mode-support.json")
+
+
+# A negative verdict is only written after this many probes that connected and
+# then heard nothing. One miss is not evidence: a stale BLE address makes
+# btgatt-client hang on "Connecting" with no error at all, and calling that
+# "unsupported" would disable the feature permanently for a device that works.
+MISSES_BEFORE_GIVING_UP = 3
+
+
+def read_support():
+    """The remembered verdicts, with every entry normalised to a dict.
+
+    The file is small enough to be hand-edited, and an early version of this
+    script wrote bare booleans, so an entry can be anything at all. Fixing the
+    shape once here means the callers below can just read entry.get(...).
+    """
+    try:
+        with open(SUPPORT_FILE) as handle:
+            known = json.load(handle)
+    except (OSError, ValueError):
+        return {}
+    if not isinstance(known, dict):
+        return {}
+    normalised = {}
+    for model_id, entry in known.items():
+        if isinstance(entry, dict):
+            normalised[model_id] = entry
+        elif isinstance(entry, bool):
+            normalised[model_id] = {"supported": entry}
+        else:
+            normalised[model_id] = {}
+    return normalised
+
+
+def write_support(known):
+    try:
+        os.makedirs(STATE_DIR, exist_ok=True)
+        # Per pid: two bridges racing on one temp name would hand each other a
+        # half-written file to rename into place.
+        temporary = SUPPORT_FILE + ".%d.tmp" % os.getpid()
+        with open(temporary, "w") as handle:
+            json.dump(known, handle, separators=(",", ":"), sort_keys=True)
+        os.replace(temporary, SUPPORT_FILE)
+    except OSError:
+        # A cache that cannot be written costs a probe, not correctness.
+        pass
+
+
+def remember_answered(model_id):
+    if not model_id:
+        return
+    known = read_support()
+    if known.get(model_id, {}).get("supported") is True:
+        return
+    known[model_id] = {"supported": True}
+    write_support(known)
+
+
+def record_miss(model_id):
+    """One probe connected and heard nothing. Only a run of these is a verdict."""
+    known = read_support()
+    entry = known.get(model_id, {})
+    if entry.get("supported") is True:
+        # It answered before, so this is a bad connection, not a silent device.
+        return
+    misses = int(entry.get("misses", 0)) + 1
+    entry["misses"] = misses
+    if misses >= MISSES_BEFORE_GIVING_UP:
+        entry["supported"] = False
+    known[model_id] = entry
+    write_support(known)
+
+
+def emit(payload):
+    try:
+        sys.stdout.write(json.dumps(payload, separators=(",", ":")) + "\n")
+        sys.stdout.flush()
+    except (BrokenPipeError, ValueError):
+        # The widget let go of the pipe. There is nobody left to talk to and no
+        # state worth saving, and unwinding would only print a second traceback
+        # onto the same dead stdout.
+        os._exit(0)
+
+
+def mode_name(anc, ambient, talkthru):
+    # Only 00 and 01 have ever been seen in a report, so anything else is read
+    # as "this slot is not the active one" and the mode falls through to off.
+    if anc == "01":
+        return "anc"
+    if ambient == "01":
+        return "ambient"
+    if talkthru == "01":
+        return "talkthru"
+    return "off"
+
+
+def die_with_parent():
+    """Run in the child between fork and exec."""
+    try:
+        ctypes.CDLL("libc.so.6", use_errno=True).prctl(
+            PR_SET_PDEATHSIG, signal.SIGTERM, 0, 0, 0)
+    except Exception:
+        # Not being able to arrange the child's death is not a reason to refuse
+        # to start it; the ordinary stop path still quits it politely.
+        pass
+
+
+def arm_parent_death_signal():
+    """Die with the shell that started us.
+
+    A crashed or SIGKILLed omarchy-shell cannot reap its children, and an
+    orphaned bridge holds the ATT link open, so every bridge started afterwards
+    is refused with "Device or resource busy" and the widget never shows a
+    listening mode again. Arming the child alone is not enough: the child dies
+    with this process, so this process has to die with the shell.
+    """
+    try:
+        ctypes.CDLL("libc.so.6", use_errno=True).prctl(
+            PR_SET_PDEATHSIG, signal.SIGTERM, 0, 0, 0)
+    except Exception:
+        return
+    # PR_SET_PDEATHSIG is lost if the parent died between fork and here, and
+    # then the signal never comes; getppid() is how that is noticed.
+    if os.getppid() == 1:
+        os._exit(0)
+
+
+class Bridge:
+    def __init__(self, address, model_id=""):
+        self.address = address
+        self.model_id = model_id
+        self.mode = None
+        # btgatt-client prints "Connecting to device... Done" when the link is
+        # up and "GATT discovery procedures complete" when it will take
+        # commands. Without the first, silence says nothing about the protocol.
+        self.linked = False
+        self.discovered = threading.Event()
+        self.registered = threading.Event()
+        self.answered = threading.Event()
+        self.failed = None
+        # Set once, by whoever decides the bridge is over; every wait below
+        # checks it, and the main loop exits with it.
+        self.exit_code = None
+        # Reentrant: SIGTERM is handled on the main thread, so it can land in
+        # the middle of this thread's own finish() and must not sit on a lock
+        # it already holds.
+        self.lock = threading.RLock()
+        # The main loop sleeps in select() on stdin, so the reader thread needs
+        # a file descriptor of its own to wake it with.
+        self.wake_read, self.wake_write = os.pipe()
+        os.set_blocking(self.wake_read, False)
+        os.set_blocking(self.wake_write, False)
+        self.client = subprocess.Popen(
+            ["btgatt-client", "-d", address, "-t", "random"],
+            stdin=subprocess.PIPE, stdout=subprocess.PIPE,
+            stderr=subprocess.STDOUT, text=True, bufsize=1,
+            preexec_fn=die_with_parent)
+        threading.Thread(target=self.read_client, daemon=True).start()
+
+    def finish(self, code, message=None):
+        """Decide how this run ends, from any thread, once.
+
+        Everything the main thread can be waiting on is released here, so a
+        child that dies mid-handshake ends the run instead of running out a
+        timeout with nothing on the other end of the link.
+        """
+        with self.lock:
+            if self.exit_code is not None:
+                return
+            self.exit_code = code
+        if message:
+            emit({"modes": False, "error": message})
+        self.discovered.set()
+        self.registered.set()
+        self.answered.set()
+        try:
+            os.write(self.wake_write, b"x")
+        except OSError:
+            pass
+
+    def send_frame(self, frame):
+        bytes_ = " ".join("0x" + b for b in frame.split())
+        self.tell("write-value %s %s" % (WRITE_HANDLE, bytes_))
+
+    def tell(self, line):
+        if self.client.poll() is not None:
+            return
+        try:
+            self.client.stdin.write(line + "\n")
+            self.client.stdin.flush()
+        except (BrokenPipeError, ValueError):
+            pass
+
+    def read_client(self):
+        while True:
+            try:
+                raw = self.client.stdout.readline()
+            except (OSError, ValueError):
+                raw = ""
+            if not raw:
+                break
+            try:
+                self.on_client_line(ANSI.sub("", raw).strip())
+            except Exception as error:
+                # A bridge that has stopped understanding its child is worse
+                # than no bridge: it would hold the link and report nothing.
+                self.finish(EXIT_TRANSIENT,
+                            "%s: %s" % (type(error).__name__, error))
+                return
+        # EOF on the child's stdout: btgatt-client is gone and the ATT link with
+        # it, whether it was told to quit or fell over.
+        self.finish(EXIT_TRANSIENT, "the BLE link closed")
+
+    def on_client_line(self, line):
+        if "Done" in line and "Connecting" in line:
+            self.linked = True
+        if "Failed to connect" in line:
+            self.failed = line.split("Failed to connect:")[-1].strip() or line
+            self.finish(EXIT_TRANSIENT,
+                        "cannot reach the earbuds over BLE: %s" % self.failed)
+            return
+        if "Device disconnected" in line:
+            self.finish(EXIT_TRANSIENT, "the BLE link closed")
+            return
+        if "GATT discovery procedures complete" in line:
+            self.linked = True
+            self.discovered.set()
+            return
+        if "GATT discovery procedures failed" in line:
+            self.finish(EXIT_TRANSIENT, "GATT discovery failed on this link")
+            return
+        if "Registered notify handler" in line:
+            self.registered.set()
+            return
+        if "Failed to register notify handler" in line or "GATT client not initialized" in line:
+            # The link is up but this client will not carry notifications, so
+            # there is nothing to listen for. This is about the connection, not
+            # about the device, so no miss is recorded against the model.
+            self.finish(EXIT_TRANSIENT, line)
+            return
+        match = REPORT.search(line)
+        if not match:
+            return
+        mode = mode_name(*match.groups())
+        # Under the lock: remember_miss() reads the same flag and writes the
+        # same file, and a report that lands as ANSWER_TIMEOUT expires must
+        # either be seen there or land after the miss has been written, never
+        # halfway through it.
+        with self.lock:
+            self.answered.set()
+            # Report every change, and the first reading whatever it is. The
+            # earbud touch control produces these unprompted, which is the whole
+            # point of holding the link open.
+            if mode != self.mode:
+                if self.mode is None:
+                    remember_answered(self.model_id)
+                self.mode = mode
+                emit({"modes": True, "mode": mode})
+
+    def remember_miss(self):
+        """Write down that this run heard nothing. True if the silence stands.
+
+        The check has to be made under the lock the reader thread takes, and
+        before finish() is told: finish() releases every waiter by setting the
+        same answered flag, so afterwards there is no way left to tell a silent
+        device from one whose report arrived a moment too late. A run that
+        something else has already ended is not this model's silence either.
+        """
+        with self.lock:
+            if self.answered.is_set() or self.exit_code is not None:
+                return False
+            if self.model_id:
+                record_miss(self.model_id)
+            return True
+
+    def start(self):
+        """Open the conversation. Returns an exit code, or None to carry on."""
+        # btgatt-client will not take a command until it has walked the
+        # attribute tree, and how long that takes is the device's business, not
+        # ours — so wait for it to say it is done rather than sleeping a number
+        # that was long enough on the day it was written.
+        if not self.discovered.wait(DISCOVERY_TIMEOUT):
+            if self.exit_code is not None:
+                return self.exit_code
+            # Never connected — a rotated address, most likely. Say so and let
+            # the widget try again with a fresh one; this is no evidence about
+            # what the device can do. Connected but still walking the tree after
+            # all that time is the same story from one step further along.
+            self.finish(EXIT_TRANSIENT, "the BLE link never finished discovery"
+                        if self.linked else "could not open the BLE link")
+            return self.exit_code
+        if self.exit_code is not None:
+            return self.exit_code
+
+        self.tell("register-notify " + NOTIFY_HANDLE)
+        self.registered.wait(REGISTER_TIMEOUT)
+        if self.exit_code is not None:
+            return self.exit_code
+        time.sleep(FRAME_GAP)
+        self.send_frame(FRAME_NOTIFY_ON)
+        time.sleep(FRAME_GAP)
+        self.send_frame(FRAME_GET)
+
+        if not self.answered.wait(ANSWER_TIMEOUT):
+            if self.exit_code is not None:
+                return self.exit_code
+            # Discovery finished, the handler is registered, the query went out
+            # and nothing came back: this device really does look silent. The
+            # miss is written first, because it is the last moment at which a
+            # report racing this timeout — or a child that died in the same
+            # instant, which makes it a dropped link — can still be noticed.
+            if self.remember_miss():
+                self.finish(EXIT_UNSUPPORTED,
+                            "the device did not answer the listening-mode query")
+                return self.exit_code
+            # The silence did not stand: a report landed in the same instant, or
+            # something else ended the run. Either way this is not a verdict on
+            # the model, and the checks below say how the run goes on.
+        if self.exit_code is not None:
+            return self.exit_code
+        return None
+
+    def run_commands(self):
+        """Mirror the link until stdin closes or the child takes it away."""
+        pending = ""
+        while self.exit_code is None:
+            try:
+                ready, _, _ = select.select(
+                    [sys.stdin.fileno(), self.wake_read], [], [])
+            except (OSError, ValueError):
+                break
+            if self.wake_read in ready:
+                break
+            try:
+                chunk = os.read(sys.stdin.fileno(), 4096)
+            except OSError:
+                break
+            if not chunk:
+                # The widget closed the pipe: a clean stop, not a failure.
+                break
+            pending += chunk.decode("utf-8", "replace")
+            while "\n" in pending:
+                line, pending = pending.split("\n", 1)
+                self.run_command(line)
+        # Claim the ending before stop() quits the child, or the reader thread
+        # would meet the EOF it caused and call it a dropped link.
+        self.finish(0)
+        return self.exit_code
+
+    def run_command(self, line):
+        parts = line.strip().split()
+        if len(parts) > 1 and parts[0] == "set" and parts[1] in FRAME_SET:
+            # No read-back: a set is answered with a report of its own.
+            self.send_frame(FRAME_SET[parts[1]])
+
+    def stop(self):
+        self.tell("quit")
+        try:
+            self.client.wait(timeout=3)
+        except subprocess.TimeoutExpired:
+            self.client.kill()
+
+
+def main():
+    arm_parent_death_signal()
+    if len(sys.argv) > 1 and sys.argv[1] in ("-h", "--help"):
+        # Asked about rather than asked for: print the line a person wants and
+        # go, instead of treating "--help" as an address and dialling it.
+        sys.stdout.write(USAGE + "\n")
+        sys.exit(0)
+    address = sys.argv[1].strip() if len(sys.argv) > 1 else ""
+    if not ADDRESS.match(address):
+        emit({"modes": False,
+              "error": "%s (not a BLE address: %r)" % (USAGE, address)})
+        sys.exit(EXIT_SETUP)
+    if shutil.which("btgatt-client") is None:
+        emit({"modes": False,
+              "error": "btgatt-client is missing; install bluez-utils"})
+        sys.exit(EXIT_SETUP)
+
+    try:
+        bridge = Bridge(address, sys.argv[2] if len(sys.argv) > 2 else "")
+    except OSError as error:
+        emit({"modes": False, "error": "cannot start btgatt-client: %s" % error})
+        sys.exit(EXIT_SETUP)
+
+    def stop(*_args):
+        # Being asked to go is the one ending that is not a failure. It is only
+        # honoured if nothing has already decided otherwise, so a child that
+        # died first still reports its own exit code.
+        bridge.finish(0)
+
+    signal.signal(signal.SIGTERM, stop)
+    signal.signal(signal.SIGINT, stop)
+
+    code = bridge.start()
+    if code is None:
+        code = bridge.run_commands()
+    bridge.stop()
+    sys.exit(code)
+
+
+if __name__ == "__main__":
+    main()

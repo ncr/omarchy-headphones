@@ -1,0 +1,113 @@
+#!/usr/bin/env python3
+"""Draw the bar mark large, at chosen levels, for README's legend.
+
+    tools/mark-legend [--out docs/mark-legend]
+
+Writes docs/mark-legend-earbuds.png (left 40, right 75),
+docs/mark-legend-headset.png (one battery at 60) and docs/mark-legend-low.png
+(12 and 8, in the urgent colour). Same geometry as the widget's
+HeadphonesMark in Panel.qml — stroke 9%, cups 30% wide and 46% tall, the band
+a ring clipped above the cups — with the dim copy at half brightness underneath
+and the bright copy filled from the bottom in two halves: left half = left
+earbud, right half = right earbud; a headset's one battery fills both. A set
+that reports a left and a right is drawn as a pair of earbuds, a headset as
+headphones. The case is a row in the panel, not part of the icon. A real screenshot at 100% explains
+nothing, which is why these are drawn.
+"""
+import os
+import sys
+
+from PIL import Image, ImageDraw
+
+BG = (5, 24, 46, 255)          # the bar's background, sampled
+FG = (247, 221, 172, 255)      # the bar's foreground, sampled
+URGENT = (255, 83, 69, 255)    # the theme's `red`, which the shell uses as urgent
+DIM = 0.5                      # Panel.qml: the dim copy's opacity
+
+
+def mark(size, scale=4, fg=FG):
+    """The full bright mark, RGBA, drawn at `size` logical px times `scale`."""
+    S = size * scale
+    stroke = max(1, round(size * 0.09)) * scale
+    cup_w = max(3, round(size * 0.30)) * scale
+    cup_h = max(4, round(size * 0.46)) * scale
+    radius = max(1, round(cup_w / scale * 0.35)) * scale
+    im = Image.new("RGBA", (S, S), (0, 0, 0, 0))
+    d = ImageDraw.Draw(im)
+    # The band: a ring of diameter S, clipped to y < S - cup_h + stroke.
+    ring = Image.new("RGBA", (S, S), (0, 0, 0, 0))
+    ImageDraw.Draw(ring).ellipse((0, 0, S - 1, S - 1), outline=fg, width=stroke)
+    clip = Image.new("L", (S, S), 0)
+    ImageDraw.Draw(clip).rectangle((0, 0, S, S - cup_h + stroke), fill=255)
+    im.paste(ring, (0, 0), clip)
+    d.rounded_rectangle((0, S - cup_h, cup_w - 1, S - 1), radius, fill=fg)
+    d.rounded_rectangle((S - cup_w, S - cup_h, S - 1, S - 1), radius, fill=fg)
+    return im, cup_w, cup_h
+
+
+def earbuds(size, scale=4, fg=FG):
+    """The full bright earbuds mark: two capsules with a stem each, as in
+    Panel.qml's EarbudsMark — body 36% wide, 64% tall, stem 16% wide hanging
+    from the inner-bottom corner to the bottom edge."""
+    S = size * scale
+    body_w = max(3, round(size * 0.36)) * scale
+    body_h = max(5, round(size * 0.64)) * scale
+    stem_w = max(1, round(size * 0.16)) * scale
+    inset = round(size * 0.04) * scale
+    im = Image.new("RGBA", (S, S), (0, 0, 0, 0))
+    d = ImageDraw.Draw(im)
+    for x in (inset, S - inset - body_w):
+        d.rounded_rectangle((x, 0, x + body_w - 1, body_h - 1), body_w // 2, fill=fg)
+    d.rounded_rectangle((inset + body_w - stem_w, body_h - stem_w, inset + body_w - 1, S - 1), stem_w // 2, fill=fg)
+    d.rounded_rectangle((S - inset - body_w, body_h - stem_w, S - inset - body_w + stem_w - 1, S - 1), stem_w // 2, fill=fg)
+    return im
+
+
+def meter(size, left, right, scale=4, fg=FG, buds=False):
+    """The mark as the bar shows it: dim underneath, bright regions on top."""
+    full, cup_w, cup_h = mark(size, scale, fg)
+    if buds:
+        full = earbuds(size, scale, fg)
+    S = size * scale
+    out = Image.new("RGBA", (S, S), (0, 0, 0, 0))
+    dim = full.copy()
+    dim.putalpha(dim.getchannel("A").point(lambda a: int(a * DIM)))
+    out.alpha_composite(dim)
+    half = round(S / 2)
+    regions = [  # (x, y, w, h, level)
+        (0, 0, half, S, left),
+        (half, 0, S - half, S, right),
+    ]
+    for x, y, w, h, level in regions:
+        if level <= 0:
+            continue
+        rows = max(1, round(h * level / 100))
+        mask = Image.new("L", (S, S), 0)
+        ImageDraw.Draw(mask).rectangle((x, y + h - rows, x + w - 1, y + h - 1), fill=255)
+        out.paste(full, (0, 0), mask)
+    return out
+
+
+def tile(levels, size=16, scale=12, pad=10, fg=FG, buds=False):
+    m = meter(size, *levels, scale=scale, fg=fg, buds=buds)
+    canvas = Image.new("RGBA", (m.width + 2 * pad * scale // 2, m.height + 2 * pad * scale // 2), BG)
+    canvas.alpha_composite(m, (pad * scale // 2, pad * scale // 2))
+    return canvas
+
+
+def main():
+    out = "docs/mark-legend"
+    if len(sys.argv) > 2 and sys.argv[1] == "--out":
+        out = sys.argv[2]
+    here = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..")
+    base = os.path.join(here, out)
+    os.makedirs(os.path.dirname(base), exist_ok=True)
+    tile((40, 75), buds=True).save(base + "-earbuds.png")
+    tile((60, 60)).save(base + "-headset.png")
+    # Below the threshold the whole mark takes the theme's urgent colour.
+    tile((12, 8), fg=URGENT, buds=True).save(base + "-low.png")
+    print(base + "-earbuds.png", base + "-headset.png")
+
+
+if __name__ == "__main__":
+    main()

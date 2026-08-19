@@ -1,0 +1,771 @@
+#!/usr/bin/env python3
+"""Hold one Sony MDR v2 RFCOMM link and mirror the headset's listening mode.
+
+    sony-bridge <classic-address>
+
+Prints one JSON object per line, and reads one command per line:
+
+    stdout   {"modes": true, "mode": "ambient", "available": ["off","anc","ambient"],
+              "level": 10, "voice": false}
+             {"modes": false, "error": "..."}
+    stdin    set off | set anc | set ambient | level <0-20> | voice on|off
+
+Exit codes, which the shell-side service reads to decide what to do next:
+
+    0   clean stop: SIGTERM/SIGINT, or the widget closed the pipe
+    1   transient: the profile never connected, the handshake went unanswered,
+        or the channel closed under us. Says nothing about the headset, so the
+        service retries with a growing pause
+    3   linked but silent: the handshake worked and every candidate NC/ASM
+        variant was asked and none answered. This headset speaks the protocol
+        but not this part of it, so the service parks the address
+    4   setup failure: bad arguments, or python-dbus/PyGObject missing. About
+        this machine, not about the headset
+
+Why a bridge at all, and why one per device: the mode lives behind Sony's own
+RFCOMM service (UUID 956c7b26-…, "MDR protocol v2"), the same channel carries
+our commands and the headset's unsolicited notifications, and BlueZ hands the
+socket to whoever registered the org.bluez.Profile1 for that UUID — one holder,
+like the Fast Pair reader. So one process owns the channel, the widget talks to
+it through a pipe, and pressing the NC/AMB button on the headset and clicking a
+mode in the panel are the same conversation.
+
+This is the sibling of jbl-bridge, which does the same job for JBL earbuds over
+BLE GATT. Both write the same line shape, so the service does not care which one
+is running; the backend is picked from the device's SDP UUIDs.
+
+Protocol, confirmed on a WH-CH720N — see PROTOCOL.md and the reference probe in
+tools/sony_probe.py, which is what these frames were read off:
+
+    frame    3E <type> <seq> <len u32be> <payload> <cksum> 3C, everything
+             between the markers byte-stuffed with 3D (3C/3D/3E -> 3D, b & EF)
+    type     0x0C command, 0x01 ACK
+    seq      one toggling bit. An ACK carries 1 - seq, never seq. Our own seq
+             is whatever the last ACK told us, and only one command may be
+             outstanding at a time
+    init     payload 00 00, answered with 01 …; an 8-byte answer means v2
+    modes    payload 66 <t> GET, 67 <t> RET, 68 <t> SET, 69 <t> NTFY, where <t>
+             is the "inquired type" that decides the layout of the block
+
+The two things that only the hardware tells you, both handled below:
+
+  * Which inquired type this model uses is not knowable in advance (the two
+    open implementations disagree about the CH720N), so the candidates 0x17,
+    0x15 and 0x22 are asked in turn and the one that answers wins. A wrong one
+    is ACKed and then ignored, which is why each gets a deadline rather than an
+    error.
+  * A SET is ACKed immediately but does not take effect immediately: a GET sent
+    straight after still returns the old state, and about a third of a second
+    later the headset sends the NTFY with the new one. So the NTFY is the
+    source of truth and nothing is read back after a set.
+"""
+import ctypes
+import json
+import os
+import re
+import signal
+import struct
+import sys
+
+# python-dbus and python-gobject are not guaranteed on a stock Omarchy install:
+# python-dbus arrives with uwsm, python-gobject may not arrive at all. Say so on
+# stdout in the shape the widget already reads, so the panel can print the
+# reason instead of sitting there with nothing to show.
+try:
+    import dbus
+    import dbus.mainloop.glib
+    import dbus.service
+    from gi.repository import GLib
+except ImportError as error:
+    sys.stdout.write(json.dumps({
+        "modes": False,
+        "error": "missing python dependency %s — install it with: "
+                 "sudo pacman -S --needed python-dbus python-gobject"
+                 % (getattr(error, "name", None) or error),
+    }) + "\n")
+    sys.stdout.flush()
+    sys.exit(4)
+
+# GLib.unix_signal_add is deprecated in newer PyGObject, and its warning would
+# land in omarchy-shell's log every time the bridge starts.
+try:
+    from gi.repository import GLibUnix
+    unix_signal_add = GLibUnix.signal_add
+except ImportError:
+    unix_signal_add = GLib.unix_signal_add
+
+UUID = "956c7b26-d49a-4ba8-b03f-b17d393cb6e2"
+PROFILE_PATH = "/io/github/ncr/omaphones/sony"
+
+# Framing. HDR and TRL are never escaped, which is what makes "scan to the next
+# 0x3C" a correct framer.
+HDR, TRL, ESC, MASK = 0x3E, 0x3C, 0x3D, 0xEF
+DATA_MDR, DATA_MDR_NO2, ACK = 0x0C, 0x0E, 0x01
+
+CONNECT_RET_PROTOCOL_INFO = 0x01
+NCASM_GET, NCASM_RET, NCASM_SET, NCASM_NTFY = 0x66, 0x67, 0x68, 0x69
+
+# The NC/ASM variants worth asking a headset about, in the order they are asked.
+# 0x17 first because it is the one the CH720N answers; 0x15 is what Gadgetbridge
+# believes that model uses; 0x22 covers the ambient-only models. Anything else
+# in Sony's table either does not exist on a headset with these three modes or
+# is a superset we would decode wrongly.
+CANDIDATES = (0x17, 0x15, 0x22)
+
+# What each variant can actually do, which is what the panel draws buttons for.
+# 0x22 (ASM_SEAMLESS) is an ambient-only control: its master switch turns the
+# ambient pass-through on and off, and there is no noise cancelling to select.
+AVAILABLE = {
+    0x17: ["off", "anc", "ambient"],
+    0x15: ["off", "anc", "ambient"],
+    0x22: ["off", "ambient"],
+}
+
+# NcValue, the field only the 0x15 layout carries. 0x02 is ON_DUAL, the value a
+# two-microphone headset reports; it is only ever a fallback, because the value
+# the device itself last reported is preferred.
+NC_VALUE_DEFAULT = 0x02
+
+MAX_LEVEL = 20
+
+ADDRESS = re.compile(r"^([0-9A-Fa-f]{2}:){5}[0-9A-Fa-f]{2}$")
+
+USAGE = "usage: sony-bridge <classic-address>"
+
+EXIT_TRANSIENT = 1
+EXIT_UNSUPPORTED = 3
+EXIT_SETUP = 4
+
+# Every synchronous call into bluetoothd runs on the main loop, so its reply
+# timeout is also how long a wedged bluetoothd can sit on our SIGTERM. Five
+# seconds is longer than a healthy answer takes and short enough to stay out of
+# the way of a shutdown. ConnectProfile is the exception: it is made
+# asynchronously (see connect()), so it may have the long timeout BlueZ needs to
+# bring up a page-scanning headset.
+REPLY_TIMEOUT = 5
+CONNECT_TIMEOUT = 30
+
+# How long to leave the registration in place before asking BlueZ to connect the
+# profile: the registration has to be visible to bluetoothd before the connect,
+# and the headset's ACL link wants a moment to settle after it comes up.
+CONNECT_DELAY = 500
+
+# The first ConnectProfile after the headset connects usually fails with
+# br-connection-busy — bluetoothd is still doing its own SDP and profile setup —
+# and the next one works. Retrying is the normal path, not the error path, so it
+# is patient: nine more tries at 1.5 s covers a headset that takes its time
+# waking up without leaving the widget in "pending" for a minute.
+CONNECT_RETRY = 1500
+CONNECT_ATTEMPTS = 10
+
+# The channel is silent until we send the handshake, and sometimes silent after
+# it too — Gadgetbridge sends the init up to three times before giving up, for
+# exactly this. Two seconds is several round trips on RFCOMM.
+INIT_TIMEOUT = 2000
+INIT_ATTEMPTS = 3
+
+# How long a candidate inquired type gets to answer before the next one is
+# tried. A wrong type is ACKed and then silently dropped, so this deadline is
+# the only thing that distinguishes "not this variant" from "not answering".
+CANDIDATE_TIMEOUT = 3000
+
+# One command may be outstanding at a time, and the next one is sent when the
+# ACK for the last arrives. If an ACK is lost the queue would stall forever, so
+# a command that has gone unacknowledged for this long is written off and the
+# queue moves on. Ordinary ACKs come back in single-digit milliseconds.
+ACK_TIMEOUT = 3000
+
+
+def emit(payload):
+    try:
+        sys.stdout.write(json.dumps(payload, separators=(",", ":")) + "\n")
+        sys.stdout.flush()
+    except (BrokenPipeError, ValueError):
+        # The widget let go of the pipe. There is nobody left to talk to, and
+        # dropping the bus connection is what releases the profile
+        # registration — process exit does that on its own.
+        os._exit(0)
+
+
+def arm_parent_death_signal():
+    """Die with the shell that started us.
+
+    A crashed or SIGKILLed omarchy-shell cannot reap its children, and an
+    orphaned bridge keeps both the Profile1 registration and the RFCOMM channel,
+    so every bridge started afterwards is handed nothing and the widget never
+    shows a listening mode again. PR_SET_PDEATHSIG makes the kernel do the
+    tidying that the dead parent cannot.
+    """
+    try:
+        libc = ctypes.CDLL("libc.so.6", use_errno=True)
+        libc.prctl(1, signal.SIGTERM)  # PR_SET_PDEATHSIG
+    except Exception:
+        return
+    # PR_SET_PDEATHSIG is lost if the parent died between fork and here, and
+    # then the signal never comes; getppid() is how that is noticed.
+    if os.getppid() == 1:
+        os._exit(0)
+
+
+def escape(data):
+    out = bytearray()
+    for byte in data:
+        if byte in (HDR, TRL, ESC):
+            out += bytes([ESC, byte & MASK])
+        else:
+            out.append(byte)
+    return bytes(out)
+
+
+def unescape(data):
+    out, index = bytearray(), 0
+    while index < len(data):
+        if data[index] == ESC:
+            index += 1
+            if index >= len(data):
+                break
+            out.append(data[index] | 0x10)
+        else:
+            out.append(data[index])
+        index += 1
+    return bytes(out)
+
+
+def encode(dtype, seq, payload=b""):
+    """One frame, checksummed over the unescaped bytes and then stuffed."""
+    body = bytes([dtype, seq]) + struct.pack(">I", len(payload)) + payload
+    return bytes([HDR]) + escape(body + bytes([sum(body) & 0xFF])) + bytes([TRL])
+
+
+def decode(frame):
+    """(dtype, seq, payload) for a frame including its markers, or None.
+
+    A frame that does not add up is dropped rather than guessed at: the only way
+    to get one on this link is a bug on one side or the other, and acting on
+    half a payload would move the headset to a mode nobody asked for.
+    """
+    if len(frame) < 9 or frame[0] != HDR or frame[-1] != TRL:
+        return None
+    message = unescape(frame[1:-1])
+    if len(message) < 7:
+        return None
+    dtype, seq = message[0], message[1]
+    length = struct.unpack(">I", message[2:6])[0]
+    if len(message) != 6 + length + 1:
+        return None
+    payload, checksum = message[6:6 + length], message[6 + length]
+    if checksum != sum(message[:6 + length]) & 0xFF:
+        return None
+    return dtype, seq, payload
+
+
+def parse_ncasm(payload):
+    """The listening-mode state carried by a RET (0x67) or NTFY (0x69).
+
+    Focus-on-voice and the ambient level are the last two bytes of every one of
+    the three layouts, which is why they are read from the tail rather than from
+    an index that depends on the variant.
+    """
+    if len(payload) < 6 or payload[0] not in (NCASM_RET, NCASM_NTFY):
+        return None
+    inquired = payload[1]
+    if inquired not in CANDIDATES:
+        return None
+    on = payload[3] == 0x01
+    # On 0x22 the master switch *is* the ambient switch; the other two layouts
+    # carry the NC-versus-ambient choice in the byte after it.
+    ambient = True if inquired == 0x22 else (len(payload) > 4 and payload[4] == 0x01)
+    return {
+        "inquired": inquired,
+        "mode": "off" if not on else ("ambient" if ambient else "anc"),
+        "voice": payload[-2] == 0x01,
+        "level": payload[-1],
+        # Only the 0x15 layout has it, at the index the ambient fields follow.
+        "ncValue": payload[5] if inquired == 0x15 and len(payload) > 7 else None,
+    }
+
+
+def find_device_path(bus, address):
+    wanted = address.upper()
+    objects = dbus.Interface(bus.get_object("org.bluez", "/"),
+                             "org.freedesktop.DBus.ObjectManager").GetManagedObjects()
+    for path, interfaces in objects.items():
+        device = interfaces.get("org.bluez.Device1")
+        if device and str(device.get("Address", "")).upper() == wanted:
+            return str(path)
+    return None
+
+
+class Bridge:
+    """The whole conversation: registration, handshake, probe, then mirroring."""
+
+    def __init__(self, bus, address, loop):
+        self.bus = bus
+        self.address = address
+        self.loop = loop
+        self.exit_code = None
+        self.device = None
+        self.manager = None
+        self.registered = False
+
+        # The channel.
+        self.fd = None
+        self.watch = None
+        self.buffer = bytearray()
+
+        # Flow control: our outgoing sequence bit, whether a command is waiting
+        # for its ACK, and the commands that have not been sent yet. One
+        # outstanding command at a time is what both reference implementations
+        # do, and what the headset expects.
+        self.seq = 0
+        self.waiting = False
+        self.sent = 0            # serial number of the outstanding command
+        self.queue = []
+
+        # What the headset told us. `inquired` is None until something answers,
+        # and until then there is no state to report and no SET we could build.
+        self.inquired = None
+        self.mode = ""
+        self.level = 0
+        self.voice = False
+        self.nc_value = NC_VALUE_DEFAULT
+        self.last_line = None
+
+        self.protocol_seen = False
+        self.candidate = 0
+
+        # Whatever of a stdin line has arrived without its newline yet.
+        self.pending = ""
+
+
+    # -- endings ----------------------------------------------------------
+
+    def finish(self, code, message=None):
+        """Decide how this run ends, once, from wherever noticed it."""
+        if self.exit_code is not None:
+            return False
+        self.exit_code = code
+        if message:
+            emit({"modes": False, "error": message})
+        self.loop.quit()
+        return False
+
+    def unregister(self):
+        """Give the UUID back, on every exit path.
+
+        Leaving it registered would make BlueZ hold the channel open with nobody
+        reading it, and the next bridge would be told the profile is taken.
+        """
+        if self.watch is not None:
+            try:
+                GLib.source_remove(self.watch)
+            except Exception:
+                pass
+            self.watch = None
+        if self.fd is not None:
+            try:
+                os.close(self.fd)
+            except OSError:
+                pass
+            self.fd = None
+        if self.manager is not None and self.registered:
+            try:
+                self.manager.UnregisterProfile(PROFILE_PATH, timeout=REPLY_TIMEOUT)
+            except dbus.DBusException:
+                pass
+            self.registered = False
+
+    # -- setup ------------------------------------------------------------
+
+    def register(self):
+        """Hand BlueZ our Profile1 and ask it to connect the channel."""
+        try:
+            device_path = find_device_path(self.bus, self.address)
+        except dbus.DBusException as error:
+            return self.finish(EXIT_TRANSIENT,
+                               "cannot reach BlueZ: %s" % error.get_dbus_message())
+        if not device_path:
+            return self.finish(EXIT_TRANSIENT,
+                               "no paired device with address %s" % self.address)
+        self.device = dbus.Interface(
+            self.bus.get_object("org.bluez", device_path), "org.bluez.Device1")
+        self.manager = dbus.Interface(
+            self.bus.get_object("org.bluez", "/org/bluez"), "org.bluez.ProfileManager1")
+        try:
+            self.manager.RegisterProfile(PROFILE_PATH, UUID, {
+                "Name": "Omaphones Sony",
+                "Role": "client",
+                "RequireAuthentication": dbus.Boolean(False),
+                "RequireAuthorization": dbus.Boolean(False),
+            }, timeout=REPLY_TIMEOUT)
+        except dbus.DBusException as error:
+            # Taken means another holder — a second copy of this bridge, or the
+            # probe in tools/ — and there is nothing to do but come back later.
+            return self.finish(EXIT_TRANSIENT,
+                               "cannot register the Sony profile: %s"
+                               % error.get_dbus_message())
+        self.registered = True
+        GLib.timeout_add(CONNECT_DELAY, self.connect, 0)
+        return False
+
+    def connect(self, attempt):
+        """Ask BlueZ to open the channel. Asynchronous, and that is not optional.
+
+        A blocking ConnectProfile stalls the GLib loop, and NewConnection is
+        delivered on that same loop — so the call would sit there waiting for a
+        connection whose arrival it is itself blocking. The first attempt
+        commonly fails with br-connection-busy while bluetoothd finishes its own
+        setup; a retry a moment later is the normal path.
+        """
+        if self.exit_code is not None or self.fd is not None:
+            return False
+
+        def failed(error):
+            if self.exit_code is not None or self.fd is not None:
+                return
+            if attempt + 1 < CONNECT_ATTEMPTS:
+                GLib.timeout_add(CONNECT_RETRY, self.connect, attempt + 1)
+                return
+            self.finish(EXIT_TRANSIENT, "cannot open the Sony channel: %s"
+                        % error.get_dbus_message())
+
+        try:
+            self.device.ConnectProfile(UUID, reply_handler=lambda: None,
+                                       error_handler=failed, timeout=CONNECT_TIMEOUT)
+        except dbus.DBusException as error:
+            failed(error)
+        return False
+
+    def opened(self, fd):
+        """BlueZ handed us the socket."""
+        if self.fd is not None:
+            # A second channel for the same UUID should not happen, and holding
+            # two would double every notification. Keep the first.
+            try:
+                os.close(fd)
+            except OSError:
+                pass
+            return
+        self.fd = fd
+        self.watch = GLib.io_add_watch(fd, GLib.PRIORITY_DEFAULT,
+                                       GLib.IO_IN | GLib.IO_HUP | GLib.IO_ERR,
+                                       self.on_io)
+        self.send_init(1)
+
+    # -- handshake and probe ----------------------------------------------
+
+    def send_init(self, attempt):
+        """CONNECT_GET_PROTOCOL_INFO, retried while the headset ignores it."""
+        if self.exit_code is not None or self.protocol_seen:
+            return False
+        if attempt > INIT_ATTEMPTS:
+            return self.finish(EXIT_TRANSIENT,
+                               "the Sony headset did not answer the handshake")
+        # Straight out rather than through the queue: this is the first frame on
+        # the channel, and a retry has to go out whether or not the last attempt
+        # was ever acknowledged.
+        self.waiting = False
+        self.queue = []
+        self.write(encode(DATA_MDR, self.seq, b"\x00\x00"))
+        GLib.timeout_add(INIT_TIMEOUT, self.send_init, attempt + 1)
+        return False
+
+    def probe(self, candidate):
+        """Ask the next candidate inquired type, or give up on this headset."""
+        if self.exit_code is not None or self.inquired is not None:
+            return False
+        if candidate >= len(CANDIDATES):
+            return self.finish(EXIT_UNSUPPORTED,
+                               "the headset did not answer the listening-mode query")
+        self.candidate = candidate
+        self.push(bytes([NCASM_GET, CANDIDATES[candidate]]))
+        GLib.timeout_add(CANDIDATE_TIMEOUT, self.next_candidate, candidate)
+        return False
+
+    def next_candidate(self, candidate):
+        # Only if nothing answered in the meantime and we are still on the same
+        # question: a late ACK or an unsolicited notification may have settled
+        # it already.
+        if self.inquired is None and self.candidate == candidate:
+            self.probe(candidate + 1)
+        return False
+
+    # -- the wire ---------------------------------------------------------
+
+    def write(self, frame):
+        if self.fd is None:
+            return
+        try:
+            written = 0
+            while written < len(frame):
+                written += os.write(self.fd, frame[written:])
+        except OSError as error:
+            self.finish(EXIT_TRANSIENT, "the Sony channel closed: %s" % error)
+
+    def push(self, payload):
+        """Queue one command; it goes out when the link is free."""
+        self.queue.append(payload)
+        self.pump()
+
+    def pump(self):
+        if self.waiting or not self.queue or self.fd is None:
+            return False
+        payload = self.queue.pop(0)
+        self.waiting = True
+        self.sent += 1
+        self.write(encode(DATA_MDR, self.seq, payload))
+        GLib.timeout_add(ACK_TIMEOUT, self.on_ack_timeout, self.sent)
+        return False
+
+    def on_ack_timeout(self, serial):
+        # The ACK for that command never came. Nothing can be concluded from
+        # that on its own — the headset drops the odd frame — so the queue moves
+        # on rather than the run ending.
+        if self.waiting and self.sent == serial:
+            self.waiting = False
+            self.pump()
+        return False
+
+    def on_io(self, _fd, condition):
+        if condition & (GLib.IO_HUP | GLib.IO_ERR):
+            self.finish(EXIT_TRANSIENT, "the Sony channel closed")
+            return False
+        try:
+            data = os.read(self.fd, 4096)
+        except OSError as error:
+            self.finish(EXIT_TRANSIENT, "the Sony channel closed: %s" % error)
+            return False
+        if not data:
+            self.finish(EXIT_TRANSIENT, "the Sony channel closed")
+            return False
+        self.buffer += data
+        # One read is not one frame: several can arrive together and one can be
+        # split across two reads. 0x3C cannot occur inside a stuffed body, so
+        # "from the next 0x3E to the first 0x3C after it" is exact.
+        while True:
+            start = self.buffer.find(HDR)
+            if start < 0:
+                self.buffer.clear()
+                break
+            end = self.buffer.find(TRL, start + 1)
+            if end < 0:
+                del self.buffer[:start]
+                break
+            frame = bytes(self.buffer[start:end + 1])
+            del self.buffer[:end + 1]
+            self.on_frame(frame)
+            if self.exit_code is not None:
+                return False
+        return True
+
+    def on_frame(self, frame):
+        decoded = decode(frame)
+        if decoded is None:
+            return
+        dtype, seq, payload = decoded
+        if dtype == ACK:
+            # The ACK carries the sequence number our next command must use, and
+            # it is the only thing that advances ours: a device-initiated frame
+            # does not move it.
+            self.seq = seq
+            self.waiting = False
+            self.pump()
+            return
+        if dtype in (DATA_MDR, DATA_MDR_NO2):
+            # First thing, before acting on it, and for unsolicited frames too.
+            # An unacknowledged frame is retransmitted and then the headset goes
+            # quiet.
+            self.write(encode(ACK, 1 - seq))
+        if not payload:
+            return
+        if payload[0] == CONNECT_RET_PROTOCOL_INFO:
+            if not self.protocol_seen:
+                self.protocol_seen = True
+                # The length is the protocol generation (8 bytes is v2). We ask
+                # the same questions either way, so it is not worth refusing a
+                # headset over — what settles the layout is the RET below.
+                self.probe(0)
+            return
+        state = parse_ncasm(payload)
+        if state is not None:
+            self.on_state(state)
+
+    def on_state(self, state):
+        """A RET or an NTFY: the headset's own account of its listening mode."""
+        first = self.inquired is None
+        self.inquired = state["inquired"]
+        self.mode = state["mode"]
+        self.level = state["level"]
+        self.voice = state["voice"]
+        if state["ncValue"] is not None:
+            # Whatever the headset reports here is what a SET must echo back;
+            # inventing a value is how the 0x15 layout gets rejected.
+            self.nc_value = state["ncValue"]
+        line = {
+            "modes": True,
+            "mode": self.mode,
+            "available": AVAILABLE.get(self.inquired, ["off", "anc", "ambient"]),
+            "level": self.level,
+            "voice": self.voice,
+        }
+        if first or line != self.last_line:
+            self.last_line = line
+            emit(line)
+
+    # -- commands ---------------------------------------------------------
+
+    def set_frame(self, mode, level, voice):
+        """The SET block for the variant this headset answered with.
+
+        The ambient level and the focus-on-voice flag are carried in every mode,
+        and the headset stores them and only applies them in ambient — so a
+        change of mode has to repeat the stored values rather than send zeroes.
+        """
+        on = 1 if mode != "off" else 0
+        ambient = 1 if mode == "ambient" else 0
+        level = max(0, min(MAX_LEVEL, int(level)))
+        voice = 1 if voice else 0
+        if self.inquired == 0x15:
+            return bytes([NCASM_SET, 0x15, 0x01, on, ambient,
+                          self.nc_value, voice, level])
+        if self.inquired == 0x22:
+            # Ambient-only: the master switch is the ambient switch, so "anc"
+            # never reaches here (it is not in this variant's available list).
+            return bytes([NCASM_SET, 0x22, 0x01, on, voice, level])
+        return bytes([NCASM_SET, 0x17, 0x01, on, ambient, voice, level])
+
+    def command(self, line):
+        """One line from the widget. Unknown or impossible ones are ignored.
+
+        Nothing is echoed back and nothing is read back: the headset answers a
+        SET with a notification of its own about a third of a second later, and
+        that notification — not our optimism — is what the panel is shown.
+        """
+        parts = line.strip().split()
+        if not parts or self.inquired is None:
+            return
+        available = AVAILABLE.get(self.inquired, ["off", "anc", "ambient"])
+        if parts[0] == "set" and len(parts) > 1:
+            if parts[1] not in available:
+                return
+            self.push(self.set_frame(parts[1], self.level, self.voice))
+        elif parts[0] == "level" and len(parts) > 1:
+            try:
+                level = int(parts[1])
+            except ValueError:
+                return
+            if "ambient" not in available:
+                return
+            # The stored level only moves when an ambient SET carries it, so
+            # asking for a level is also asking for ambient.
+            self.push(self.set_frame("ambient", level, self.voice))
+        elif parts[0] == "voice" and len(parts) > 1 and parts[1] in ("on", "off"):
+            # Focus on voice belongs to the ambient mode, but it is a stored
+            # setting like the level, so it is sent in whatever mode is current
+            # rather than dragging the headset into ambient behind the user's
+            # back. Sent while off or in NC it may not stick, which the next
+            # notification will say.
+            self.push(self.set_frame(self.mode or "ambient", self.level,
+                                     parts[1] == "on"))
+
+    def on_stdin(self, _fd, condition):
+        if condition & (GLib.IO_HUP | GLib.IO_ERR):
+            # The widget let go of the pipe: a clean stop, not a failure.
+            self.finish(0)
+            return False
+        try:
+            chunk = os.read(0, 4096)
+        except OSError:
+            self.finish(0)
+            return False
+        if not chunk:
+            self.finish(0)
+            return False
+        self.pending += chunk.decode("utf-8", "replace")
+        while "\n" in self.pending:
+            line, self.pending = self.pending.split("\n", 1)
+            self.command(line)
+        return True
+
+    def listen_to_stdin(self):
+        GLib.io_add_watch(0, GLib.PRIORITY_DEFAULT,
+                          GLib.IO_IN | GLib.IO_HUP | GLib.IO_ERR, self.on_stdin)
+
+
+def main():
+    argv = sys.argv[1:]
+    address = argv[0].strip() if argv else ""
+    if argv and argv[0] in ("-h", "--help"):
+        # A person asking for the usage gets plain text and a clean exit, the
+        # same as jbl-bridge; everything else below is for the widget.
+        print(USAGE)
+        return 0
+    if not argv or not ADDRESS.match(address):
+        # There is no other interactive use of this program: the widget is the
+        # only caller, so anything that is not an address is a setup failure,
+        # reported in the shape the panel reads and with the exit code that
+        # parks it rather than retrying.
+        emit({"modes": False,
+              "error": "%s (not a Bluetooth address: %r)" % (USAGE, address)})
+        sys.exit(EXIT_SETUP)
+
+    dbus.mainloop.glib.DBusGMainLoop(set_as_default=True)
+    try:
+        bus = dbus.SystemBus()
+    except dbus.DBusException as error:
+        emit({"modes": False, "error": "no system bus: %s" % error.get_dbus_message()})
+        sys.exit(EXIT_TRANSIENT)
+
+    loop = GLib.MainLoop()
+    bridge = Bridge(bus, address, loop)
+
+    class Profile(dbus.service.Object):
+        @dbus.service.method("org.bluez.Profile1", in_signature="", out_signature="")
+        def Release(self):
+            # BlueZ has taken the registration away; without it no channel can
+            # be handed over, so this run is finished.
+            bridge.finish(EXIT_TRANSIENT, "BlueZ released the Sony profile")
+
+        @dbus.service.method("org.bluez.Profile1", in_signature="oha{sv}",
+                             out_signature="")
+        def NewConnection(self, path, fd, properties):
+            bridge.opened(fd.take())
+
+        @dbus.service.method("org.bluez.Profile1", in_signature="o", out_signature="")
+        def RequestDisconnection(self, path):
+            bridge.finish(EXIT_TRANSIENT, "the Sony channel closed")
+
+    Profile(bus, PROFILE_PATH)
+    bridge.listen_to_stdin()
+    bridge.register()
+
+    def stop(*_args):
+        # Being asked to go is the one ending that is not a failure, and only if
+        # nothing has already decided otherwise.
+        bridge.finish(0)
+        return False
+
+    unix_signal_add(GLib.PRIORITY_DEFAULT, signal.SIGTERM, stop)
+    unix_signal_add(GLib.PRIORITY_DEFAULT, signal.SIGINT, stop)
+
+    try:
+        if bridge.exit_code is None:
+            loop.run()
+    finally:
+        bridge.unregister()
+    sys.exit(bridge.exit_code or 0)
+
+
+if __name__ == "__main__":
+    arm_parent_death_signal()
+    try:
+        main()
+    except SystemExit:
+        raise
+    except KeyboardInterrupt:
+        pass
+    except BaseException as error:
+        # Anything unforeseen leaves as a line the panel can show, instead of a
+        # traceback on a stderr nobody reads.
+        emit({"modes": False, "error": "%s: %s" % (type(error).__name__, error)})
+        sys.exit(EXIT_TRANSIENT)

@@ -1,0 +1,971 @@
+#!/usr/bin/env python3
+"""Read per-earbud battery from Bluetooth devices over Google Fast Pair.
+
+    gfps-reader [bluetooth-address ...]
+
+One process for every device, not one process per device: BlueZ allows a single
+org.bluez.Profile1 registration per UUID for the whole system, so a second
+reader is told the UUID is taken and the second headset on the desk never gets
+a channel. This registers the profile once and keeps a channel, a state and a
+supervisor per followed device; the socket BlueZ hands over names the device it
+belongs to, which is where each line's `address` comes from.
+
+Prints one JSON object per line on stdout, and nothing else:
+
+    {"address": "A0:11:22:33:44:55", "stream": true, "left": 10,
+     "leftCharging": false, "right": 10, "rightCharging": false, "case": 34,
+     "caseCharging": true, "modelId": "71f20a",
+     "bleAddress": "50:C2:E8:11:22:33", "firmware": "1.0.5"}
+    {"address": "B0:11:22:33:44:55", "stream": true, "battery": 100,
+     "batteryCharging": false, "single": true, "left": -1,
+     "leftCharging": false, "right": -1, "rightCharging": false, "case": -1,
+     "caseCharging": false, "modelId": "0e4c0a",
+     "bleAddress": "50:C2:E8:11:22:33"}
+    {"address": "A0:11:22:33:44:55", "stream": false, "error": "..."}
+    {"stream": false, "error": "..."}
+
+Every line carries the whole reading for one device, so a consumer can keep the
+last line per address and throw the rest away. The keys:
+
+    address       which device the line is about, uppercase colon-separated.
+                  A line without one is about the reader itself rather than
+                  about a device — a missing dependency, no system bus, a
+                  registration refused — and every device it serves is down
+                  with it
+    stream        true while that device's channel is up; the error line is the
+                  only place it is false, and that line carries `address` and
+                  `error` and nothing else, so the identifying keys below
+                  survive it
+    single        true when the device reports one battery for the whole set
+    battery       that single level, 0-100 or -1; sent only when single
+    batteryCharging                            true while that set charges
+    left, right, case                          0-100, or -1 (see below)
+    leftCharging, rightCharging, caseCharging  true while that part charges
+    modelId       Fast Pair model id, hex; sent once per connection and then
+                  repeated in every later line
+    bleAddress    the earbuds' current BLE address, uppercase colon-separated;
+                  also one-shot and sticky. It rotates (resolvable private
+                  address), and this channel is the only place it is published
+    firmware      firmware version string, one-shot and sticky like modelId
+
+Commands, one per line on stdin, so the set of devices can change without the
+process going down and taking the other devices' channels with it:
+
+    follow <address>     keep that device's channel open from now on. The
+                         addresses on the command line are followed at start,
+                         and following one that is already followed does
+                         nothing
+    unfollow <address>   let the channel go and say nothing further about that
+                         device — the caller stopped listening, so a parting
+                         error line would only be noise
+    refresh <address>    drop the channel and open it again, which is the only
+                         way to ask for a reading the device thinks you have
+
+Closing stdin ends the process cleanly, the same as SIGTERM. A process with no
+device followed is idle rather than finished: the caller may start it before it
+knows what to follow.
+
+A single-battery set carries `battery` and leaves left, right and case at -1:
+a headset with one battery has no left earbud, and naming one would be an
+invention the consumer cannot tell from a measurement. A set with three
+batteries carries left/right/case and `single` false.
+
+A level of -1 means the component reported nothing: both 0x7F and 0xFF (0x7F
+with the charging bit set) are the protocol's "no reading" byte, sent by a bud
+asleep in the case and by a case that does not measure itself.
+
+How it works: `df21fe2c-2515-4fdb-8886-f12c4d67927c` is the RFCOMM UUID of the
+Google Fast Pair Message Stream, a documented Google spec that earbuds
+implement for Android's battery UI. Registering an org.bluez.Profile1 for that
+UUID makes BlueZ do the SDP lookup, connect the channel and hand over the
+socket. The device then sends its device-information messages, battery among
+them, and pushes a new battery message whenever a level changes.
+
+Frame: [group u8][code u8][length u16 big-endian][payload]. Group 3 is device
+information, code 3 is battery: one byte per component, high bit charging, low
+seven bits the percentage, 0x7F for "no reading".
+
+Spec: https://developers.google.com/nearby/fast-pair/specifications/extensions/messagestream
+"""
+import ctypes
+import json
+import os
+import re
+import signal
+import struct
+import sys
+
+# python-dbus and python-gobject are not guaranteed on a stock Omarchy install:
+# python-dbus arrives with uwsm, python-gobject may not arrive at all. Say so on
+# stdout in the shape the widget already reads, so the panel can print the reason
+# instead of sitting there with nothing to show.
+try:
+    import dbus
+    import dbus.mainloop.glib
+    import dbus.service
+    from gi.repository import GLib
+except ImportError as error:
+    sys.stdout.write(json.dumps({
+        "stream": False,
+        "error": "missing python dependency %s — install it with: "
+                 "sudo pacman -S --needed python-dbus python-gobject"
+                 % (getattr(error, "name", None) or error),
+    }) + "\n")
+    sys.stdout.flush()
+    sys.exit(1)
+
+# GLib.unix_signal_add is deprecated in newer PyGObject, and its warning would
+# land in omarchy-shell's log every time the reader starts.
+try:
+    from gi.repository import GLibUnix
+    unix_signal_add = GLibUnix.signal_add
+except ImportError:
+    unix_signal_add = GLib.unix_signal_add
+
+UUID = "df21fe2c-2515-4fdb-8886-f12c4d67927c"
+PROFILE_PATH = "/io/github/ncr/omaphones/gfps"
+
+GROUP_DEVICE_INFO = 0x03
+CODE_MODEL_ID = 0x01
+CODE_BLE_ADDRESS = 0x02
+CODE_BATTERY = 0x03
+CODE_FIRMWARE = 0x09
+
+NO_READING = 0x7F
+
+ADDRESS = re.compile(r"^([0-9A-Fa-f]{2}:){5}[0-9A-Fa-f]{2}$")
+
+# BlueZ names a device object after its address:
+# /org/bluez/hci0/dev_78_5E_A2_76_7F_20. That is the whole reason one process
+# can serve several devices — the path that arrives with a socket says which
+# device the socket belongs to, with no bookkeeping of our own to get wrong.
+DEVICE_PATH = re.compile(r"/dev_([0-9A-Fa-f]{2}(?:_[0-9A-Fa-f]{2}){5})(?:/|$)")
+
+USAGE = "usage: gfps-reader [bluetooth-address ...]"
+
+# The lookups and the registration are synchronous and run on the main loop, so
+# their reply timeout is also how long a wedged bluetoothd can sit on our
+# SIGTERM. D-Bus defaults to 25 s, which is long enough for the shell to give up
+# on the process and for the user to watch a dead widget; five seconds is longer
+# than a healthy answer takes and short enough to stay out of the way of a
+# shutdown.
+REPLY_TIMEOUT = 5
+
+# Opening and dropping a channel are asked for asynchronously instead, and this
+# is only how long an answer that never comes is waited for.
+#
+# They have to be asynchronous, because bluetoothd calls *us* while it works on
+# them: NewConnection to hand over the socket it just opened, RequestDisconnection
+# to ask for one back. A process sitting in a synchronous call cannot answer, so
+# bluetoothd waits on us while we wait on it, the call fails with NoReply five
+# seconds later and the socket it was asking about arrives immediately
+# afterwards. With a process per device that was five seconds of one device
+# stalling; with one process for every device it is five seconds of nobody's
+# socket being read.
+CALL_TIMEOUT = 20
+
+# ConnectProfile answers with one of these when the channel is already up. It is
+# not a failure — the supervisor's drop-then-connect is what turns it into a
+# socket — but the names and the texts have to be matched exactly: BlueZ reports
+# the same situation four different ways depending on where it noticed, and a
+# loose test would swallow real errors.
+ALREADY_CONNECTED_NAMES = (
+    "org.bluez.Error.AlreadyConnected",
+    "org.bluez.Error.InProgress",
+)
+ALREADY_CONNECTED_TEXTS = (
+    "br-connection-already-connected",
+    "Already Connected",
+)
+
+# BlueZ allows one Profile1 registration per UUID. Both names below mean the
+# registration is taken; which one arrives depends on the BlueZ version.
+REGISTRATION_TAKEN_NAMES = (
+    "org.bluez.Error.NotPermitted",
+    "org.bluez.Error.AlreadyExists",
+)
+
+
+def emit(payload):
+    try:
+        sys.stdout.write(json.dumps(payload, separators=(",", ":")) + "\n")
+        sys.stdout.flush()
+    except BrokenPipeError:
+        # Nobody is reading any more, so there is nothing left to report and
+        # nothing to tidy: dropping the bus connection is what releases the
+        # profile registration, and process exit does that on its own.
+        os._exit(0)
+
+
+def fail(message):
+    """A failure of the reader itself, which no device survives.
+
+    No address: this is not one device's channel going down but the process
+    saying it cannot do the job for any of them, and the line is the last thing
+    it writes.
+    """
+    emit({"stream": False, "error": message})
+    sys.exit(1)
+
+
+def arm_parent_death_signal():
+    """Die with the shell that started us.
+
+    A crashed or SIGKILLed omarchy-shell cannot reap its children, and an
+    orphaned reader keeps the Profile1 registration alive on the system bus, so
+    every reader started afterwards fails with 'UUID already registered' and the
+    widget never shows a level again. PR_SET_PDEATHSIG makes the kernel do the
+    tidying that the dead parent cannot.
+    """
+    try:
+        libc = ctypes.CDLL("libc.so.6", use_errno=True)
+        libc.prctl(1, signal.SIGTERM)  # PR_SET_PDEATHSIG
+    except Exception:
+        return
+    # PR_SET_PDEATHSIG is lost if the parent died between fork and here, and
+    # then the signal never comes; getppid() is how that is noticed.
+    if os.getppid() == 1:
+        os._exit(0)
+
+
+def already_connected(error):
+    return (error.get_dbus_name() in ALREADY_CONNECTED_NAMES
+            or error.get_dbus_message().strip() in ALREADY_CONNECTED_TEXTS)
+
+
+def registration_error(error):
+    """What RegisterProfile's failure means, in words the panel can show."""
+    text = error.get_dbus_message()
+    if error.get_dbus_name() in REGISTRATION_TAKEN_NAMES:
+        return ("cannot register the Fast Pair profile: another program (or a "
+                "second copy of this widget) already holds it — %s" % text)
+    return "cannot register the Fast Pair profile: %s" % text
+
+
+def component(byte):
+    """(level, charging) for one battery byte; level -1 when unreported."""
+    if (byte & NO_READING) == NO_READING:
+        return -1, False
+    return byte & 0x7F, bool(byte & 0x80)
+
+
+def address_from_path(path):
+    """The device an object path is about, or None for anything else."""
+    found = DEVICE_PATH.search(str(path))
+    return found.group(1).replace("_", ":").upper() if found else None
+
+
+class State:
+    """One device's last reading, resent in full whenever any part changes."""
+
+    def __init__(self, address):
+        # Stamped on every line this device writes. It is what lets one stream
+        # carry several devices, so it goes first in the object for anyone
+        # reading the raw output.
+        self.address = address
+        self.values = {
+            "stream": True,
+            "single": False,
+            "battery": -1, "batteryCharging": False,
+            "left": -1, "leftCharging": False,
+            "right": -1, "rightCharging": False,
+            "case": -1, "caseCharging": False,
+        }
+        # The last reason already on stdout, so a fault that is rechecked every
+        # twenty seconds is reported once instead of filling the log.
+        self.last_error = None
+        # Armed by a refresh; see announce_again below.
+        self.repeat = False
+        # Set while the channel is being cycled on purpose. The consumer asked
+        # for the drop, so reporting it back as an outage would have the panel
+        # show a fault for the second a refresh takes.
+        self.quiet = False
+
+    def announce_again(self):
+        """Say the next reading out loud even if it is the one already sent.
+
+        A refresh asks the device to announce itself again, and what it
+        announces is usually word for word what it announced before — which
+        `update` below would swallow, since it only speaks when something
+        changed. Restarting the whole process used to get around that by
+        starting with nothing; this arms the next battery message instead, so
+        the levels are not blanked and refilled on the way — the model id and
+        the BLE address are re-announced first, and a state that had forgotten
+        them would publish a reading with no levels in it before the levels
+        arrived a moment later.
+        """
+        self.repeat = True
+
+    def write(self, payload):
+        if self.quiet:
+            return
+        line = {"address": self.address}
+        line.update(payload)
+        emit(line)
+
+    def reset_error(self):
+        """Forget the last reason, so the next fault is reported even if the
+        words are the same as the one before it."""
+        self.last_error = None
+
+    def stream_up(self):
+        """The channel is back. Without this the reading kept from before the
+        outage still says stream: false, and every line of the new stream would
+        carry that lie until a battery message happened to overwrite it. The
+        `error` goes too — it belongs to the line that reported the outage, and
+        a reading that carried it would look like a failure that is still on."""
+        self.values["stream"] = True
+        self.values.pop("error", None)
+        self.reset_error()
+
+    def update(self, changes, reading=False):
+        """`reading` marks a battery message, the only thing a refresh asked
+        for and so the only thing that spends what announce_again armed."""
+        forced = reading and self.repeat
+        if reading:
+            self.repeat = False
+        if not forced and all(self.values.get(k) == v for k, v in changes.items()):
+            return
+        self.values.update(changes)
+        self.reset_error()
+        self.write(dict(self.values))
+
+    def stream_down(self, reason):
+        self.values["stream"] = False
+        if self.quiet or reason == self.last_error:
+            return
+        self.last_error = reason
+        self.write({"stream": False, "error": reason})
+
+
+class Reader:
+    """One connected Message Stream socket."""
+
+    def __init__(self, fd, state, on_close=None):
+        self.fd = fd
+        self.state = state
+        self.on_close = on_close
+        self.alive = True
+        self.buffer = b""
+        # Non-blocking because the socket is read until it runs dry, both on a
+        # normal wake-up and once more when the peer hangs up.
+        os.set_blocking(fd, False)
+        state.stream_up()
+        self.watch = GLib.io_add_watch(
+            fd, GLib.PRIORITY_DEFAULT,
+            GLib.IO_IN | GLib.IO_HUP | GLib.IO_ERR, self.on_io)
+
+    def on_io(self, fd, condition):
+        # Read before believing the hang-up: bytes already in the socket stay
+        # readable after the peer is gone, and the last thing the earbuds send
+        # before dropping the channel is often a battery message.
+        kept, reason = self.pump()
+        if condition & (GLib.IO_HUP | GLib.IO_ERR):
+            self.close("message stream closed by the device")
+            return False
+        if not kept:
+            self.close(reason)
+            return False
+        return True
+
+    def pump(self):
+        """Read until the socket runs dry. (still open, reason if not)."""
+        while True:
+            try:
+                data = os.read(self.fd, 4096)
+            except BlockingIOError:
+                return True, None
+            except OSError as error:
+                return False, "read failed: %s" % error
+            if not data:
+                return False, "message stream ended"
+            self.buffer += data
+            self.drain()
+
+    # A single read can carry several frames, and a frame can be split across
+    # reads, so frames come off the buffer only once fully arrived.
+    def drain(self):
+        while len(self.buffer) >= 4:
+            length = struct.unpack(">H", self.buffer[2:4])[0]
+            if len(self.buffer) < 4 + length:
+                return
+            group, code = self.buffer[0], self.buffer[1]
+            payload = self.buffer[4:4 + length]
+            self.buffer = self.buffer[4 + length:]
+            self.handle(group, code, payload)
+
+    def handle(self, group, code, payload):
+        if group != GROUP_DEVICE_INFO:
+            return
+        if code == CODE_MODEL_ID:
+            self.state.update({"modelId": payload.hex()})
+        elif code == CODE_BLE_ADDRESS and len(payload) == 6:
+            # The earbuds' BLE side uses a resolvable private address, which
+            # rotates, so nothing can hard-code it. This channel is the only
+            # place it is published — and the GATT control protocol lives there.
+            self.state.update({
+                "bleAddress": ":".join("%02X" % b for b in payload),
+            })
+        elif code == CODE_FIRMWARE:
+            self.state.update({"firmware": payload.decode("utf-8", "replace")})
+        elif code == CODE_BATTERY:
+            self.battery(payload)
+
+    # Three bytes is left/right/case. One byte is a set with one battery for the
+    # whole thing — an over-ear headset, mostly — and that goes out as `battery`
+    # with `single` set, with the three component keys left at -1: the reader has
+    # no left earbud to report, and putting the figure in `left` would be a
+    # number nobody measured, indistinguishable downstream from one that was.
+    def battery(self, payload):
+        if len(payload) not in (1, 3):
+            return
+        if len(payload) == 1:
+            level, charging = component(payload[0])
+            self.state.update({
+                "stream": True,
+                "single": True,
+                "battery": level, "batteryCharging": charging,
+                "left": -1, "leftCharging": False,
+                "right": -1, "rightCharging": False,
+                "case": -1, "caseCharging": False,
+            }, reading=True)
+            return
+        left, left_charging = component(payload[0])
+        right, right_charging = component(payload[1])
+        case, case_charging = component(payload[2])
+        self.state.update({
+            "stream": True,
+            "single": False,
+            "battery": -1, "batteryCharging": False,
+            "left": left, "leftCharging": left_charging,
+            "right": right, "rightCharging": right_charging,
+            "case": case, "caseCharging": case_charging,
+        }, reading=True)
+
+    # Close is reached from the watch itself, from BlueZ asking for the channel
+    # back and from the supervisor, so it has to survive being called twice. The
+    # watch goes first: a watch left on a closed fd wakes on POLLNVAL as fast as
+    # the loop can spin — a full core at 95% — and once the fd number is handed
+    # out again the stale watch reads the new socket's bytes.
+    def close(self, reason):
+        if not self.alive:
+            return
+        if self.watch is not None:
+            GLib.source_remove(self.watch)
+            self.watch = None
+        try:
+            os.close(self.fd)
+        except OSError:
+            pass
+        self.alive = False
+        self.state.stream_down(reason)
+        if self.on_close:
+            self.on_close()
+
+
+def find_device_path(bus, address):
+    wanted = address.upper()
+    objects = dbus.Interface(bus.get_object("org.bluez", "/"),
+                             "org.freedesktop.DBus.ObjectManager").GetManagedObjects()
+    for path, interfaces in objects.items():
+        device = interfaces.get("org.bluez.Device1")
+        if device and str(device.get("Address", "")).upper() == wanted:
+            return str(path)
+    return None
+
+
+class Follower:
+    """One followed device: its state, its channel and its supervisor.
+
+    Everything that is about a single set of earbuds lives here, so that the one
+    registration above can be shared and a device that goes wrong — unpaired,
+    out of range, refusing the channel — takes down its own lines and nobody
+    else's.
+    """
+
+    def __init__(self, bus, address):
+        self.bus = bus
+        self.address = address
+        self.state = State(address)
+        self.reader = None
+        self.device = None
+        # Unfollowed: the timers already scheduled must find nothing to do.
+        self.dropped = False
+        # How many tries the *current* outage has taken; a channel that comes up
+        # clears it, so an evening of ordinary reconnects never adds up to an
+        # error banner.
+        self.attempts = 0
+        self.retrying = False
+        self.retries = 0
+        # A ConnectProfile or DisconnectProfile is out and its answer has not
+        # come back. One at a time per device: the supervisor is a timer, and a
+        # timer that fires while bluetoothd is still thinking would ask again
+        # for what it is already doing.
+        self.calling = False
+
+    # -- the device object -------------------------------------------------
+
+    def attach(self, initial):
+        """Look the device up and start keeping its channel open.
+
+        Called again whenever bluetoothd reappears on the bus: a restarted
+        bluetoothd has forgotten the device objects and the channel, and a
+        follower that does not notice is one that never streams again.
+
+        Only a call that somebody asked for may complain at once: `initial` is
+        the start-up and a `follow` command, where an address BlueZ has never
+        heard of is worth saying immediately, while a lookup right after a
+        bluetoothd restart is a device that is not enumerated *yet*.
+        """
+        if self.dropped:
+            return False
+        try:
+            path = find_device_path(self.bus, self.address)
+        except dbus.DBusException as error:
+            return self.retry_attach(
+                "cannot reach BlueZ: %s" % error.get_dbus_message(), initial)
+        if not path:
+            return self.retry_attach(
+                "no paired device with address %s" % self.address, initial)
+        self.device = dbus.Interface(self.bus.get_object("org.bluez", path),
+                                     "org.bluez.Device1")
+        self.retries = 0
+        self.attempts = 0
+        GLib.timeout_add(300, self.supervise)
+        return False
+
+    def retry_attach(self, reason, initial):
+        """Come back to this device in a moment, once only.
+
+        Quiet for the first few tries unless the caller just asked: a bluetoothd
+        that has restarted needs a moment to bring the adapter and its device
+        objects back, and an error banner for that would be gone before it could
+        be read.
+        """
+        self.retries += 1
+        if initial or self.retries >= 3:
+            self.state.stream_down(reason)
+        if self.retrying:
+            return False
+        self.retrying = True
+
+        def again():
+            self.retrying = False
+            self.attach(False)
+            return False
+
+        GLib.timeout_add_seconds(5, again)
+        return False
+
+    def forget(self):
+        """bluetoothd went away, and everything it lent us went with it."""
+        self.close_reader("bluetoothd went away")
+        self.device = None
+        self.calling = False
+
+    def drop(self):
+        """Unfollowed. Let the channel go and say nothing further.
+
+        The consumer stopped listening for this address before sending the
+        command, so a parting error line would be a fault reported to nobody —
+        or worse, to whoever follows the address next.
+        """
+        self.dropped = True
+        self.state.quiet = True
+        self.disconnect_profile()
+        self.close_reader("unfollowed")
+
+    # -- the channel -------------------------------------------------------
+    #
+    # Both calls hand bluetoothd a pair of handlers and come straight back. See
+    # CALL_TIMEOUT above for why waiting for the answer here would be waiting
+    # for a socket that cannot arrive until we stop waiting.
+
+    def disconnect_profile(self, then=None):
+        """Ask BlueZ to drop the channel, and do `then` once it has.
+
+        Reply and failure land in the same place: a disconnect that BlueZ
+        refuses (there was nothing to drop, most often) leaves the channel in
+        the state the caller wanted it in, so there is nothing to say and
+        nothing to do differently.
+        """
+        if self.device is None:
+            return
+        self.calling = True
+
+        def done(*_args):
+            self.calling = False
+            if then is not None:
+                then()
+
+        self.device.DisconnectProfile(UUID, timeout=CALL_TIMEOUT,
+                                      reply_handler=done, error_handler=done)
+
+    def connect_profile(self):
+        """Ask BlueZ to open the channel. The socket arrives at NewConnection,
+        not here: this only learns whether the asking was refused."""
+        if self.device is None:
+            return
+        self.calling = True
+        self.device.ConnectProfile(UUID, timeout=CALL_TIMEOUT,
+                                   reply_handler=self.on_connected,
+                                   error_handler=self.on_connect_failed)
+
+    def on_connected(self):
+        self.calling = False
+        self.check_soon()
+
+    def on_connect_failed(self, error):
+        self.calling = False
+        if not already_connected(error) and self.attempts >= 4:
+            self.state.stream_down("cannot connect the message stream: %s"
+                                   % error.get_dbus_message())
+        self.check_soon()
+
+    def check_soon(self):
+        """Look again in a moment, for the first few attempts.
+
+        An answer is not a socket, and neither a happy one nor a refusal means
+        the channel is up: BlueZ hands a socket over only when it *opens* a
+        channel, and one it considers open already is answered rather than
+        opened. That is the ordinary case for a device followed after the
+        profile was registered — BlueZ opened a channel for it the moment the
+        registration landed, this process refused it because nobody was
+        following the device yet, and "already connected" is all it will say
+        until that channel is dropped. The next attempt begins with the drop, so
+        it is worth having in two seconds rather than at the next steady check
+        twenty seconds later, which is a device sitting blank for twenty seconds
+        after it connects.
+        """
+        if self.attempts < 4:
+            GLib.timeout_add_seconds(2, self.supervise)
+
+    def take_socket(self, fd):
+        # A second socket for a device that already has a live one should not
+        # happen, but a watch left on the old fd would spin a core, so the old
+        # one goes first — quietly, because the stream is not going down.
+        if self.reader is not None and self.reader.alive:
+            self.state.quiet = True
+            self.close_reader("replaced by a new channel")
+            self.state.quiet = False
+        self.attempts = 0
+        self.reader = Reader(fd, self.state, on_close=self.schedule_supervisor)
+
+    def close_reader(self, reason):
+        reader = self.reader
+        self.reader = None
+        if reader is not None:
+            reader.close(reason)
+
+    def refresh(self):
+        """Ask the earbuds for a reading they think we already have.
+
+        The device pushes when a level changes and never answers a question, so
+        dropping the channel and letting it re-announce is the whole mechanism.
+        This is what restarting the process used to do, minus the registration
+        that every other device is now sharing.
+        """
+        if self.dropped or self.device is None or self.calling:
+            return
+        self.state.quiet = True
+        self.close_reader("refreshing")
+        self.state.announce_again()
+        self.state.quiet = False
+        # Not one attempt of an outage: nothing is wrong, and a refresh that
+        # takes a moment must not count towards the error the fourth failed
+        # attempt reports.
+        self.attempts = 0
+        self.disconnect_profile(then=self.connect_profile)
+
+    # -- keeping it up -----------------------------------------------------
+
+    def supervise(self):
+        """Keeping a channel up needs a supervisor, not one hopeful connect:
+
+         - BlueZ hands over a socket only when it *opens* the channel. If the
+           channel is already up — an earlier reader registered the profile and
+           died, say — ConnectProfile answers "already connected" and no
+           NewConnection ever arrives, so a follower that only calls it once
+           sits there with nothing to read. Dropping the profile first makes
+           BlueZ open it again, which is the only way to be handed the socket.
+         - The earbuds close the channel on their own when they feel like it. A
+           follower that just notices is a follower that stays dead.
+        """
+        if self.dropped:
+            return False
+        if self.reader is not None and self.reader.alive:
+            self.attempts = 0
+            return False
+        if self.device is None or self.calling:
+            return False
+
+        # Every attempt after the first drops the channel before asking for it,
+        # so BlueZ has one to open rather than one to report — and waits for the
+        # drop to be done rather than asking over the top of it, which is what
+        # br-connection-busy means.
+        self.attempts += 1
+        if self.attempts > 1:
+            self.disconnect_profile(then=self.connect_profile)
+        else:
+            self.connect_profile()
+        return False
+
+    def schedule_supervisor(self):
+        GLib.timeout_add_seconds(4, self.supervise)
+
+
+def main():
+    argv = sys.argv[1:]
+    if argv and argv[0] in ("-h", "--help"):
+        # Someone asked for the usage: plain text and success, rather than an
+        # error line in a stream nobody is parsing.
+        sys.stdout.write(USAGE + "\n")
+        sys.exit(0)
+    for given in argv:
+        if not ADDRESS.match(given):
+            # Nobody asked, so this is the widget getting it wrong, and that has
+            # to arrive as JSON like every other failure.
+            fail("not a Bluetooth address: %s — %s" % (given, USAGE))
+
+    dbus.mainloop.glib.DBusGMainLoop(set_as_default=True)
+    try:
+        bus = dbus.SystemBus()
+    except dbus.DBusException as error:
+        fail("no system bus: %s" % error.get_dbus_message())
+
+    loop = GLib.MainLoop()
+
+    # Every device this process serves, by address. A dict rather than a bare
+    # name so the D-Bus methods, the stdin commands and the supervisor tick can
+    # share it without `global`.
+    followers = {}
+
+    def follower_for(path):
+        address = address_from_path(path)
+        return followers.get(address) if address else None
+
+    class Profile(dbus.service.Object):
+        @dbus.service.method("org.bluez.Profile1", in_signature="", out_signature="")
+        def Release(self):
+            pass
+
+        @dbus.service.method("org.bluez.Profile1", in_signature="oha{sv}", out_signature="")
+        def NewConnection(self, path, fd, properties):
+            follower = follower_for(path)
+            if follower is None:
+                # A channel for a device nobody is following. The registration
+                # is for the whole system, so BlueZ may well open one; taking
+                # the fd and closing it is how it is refused without leaking it.
+                try:
+                    os.close(fd.take())
+                except OSError:
+                    pass
+                return
+            follower.take_socket(fd.take())
+
+        @dbus.service.method("org.bluez.Profile1", in_signature="o", out_signature="")
+        def RequestDisconnection(self, path):
+            follower = follower_for(path)
+            if follower is not None:
+                follower.close_reader("BlueZ asked for the channel back")
+
+    Profile(bus, PROFILE_PATH)
+
+    # The one registration, and what is known about whose it is. `reported` is
+    # the last process-wide reason already on stdout, so a bluetoothd that stays
+    # away is complained about once rather than every five seconds.
+    registration = {"manager": None, "owner": None, "live": False,
+                    "retrying": False, "retries": 0, "reported": None}
+
+    def current_owner():
+        try:
+            return str(bus.get_name_owner("org.bluez"))
+        except dbus.DBusException:
+            return None
+
+    def retry_registration(reason):
+        """Come back to bluetoothd in a moment, once only.
+
+        Quiet for the first few tries, and without an address when it does
+        speak: a registration that will not take is not one device's problem.
+        """
+        registration["retries"] += 1
+        if registration["retries"] >= 3 and registration["reported"] != reason:
+            registration["reported"] = reason
+            emit({"stream": False, "error": reason})
+        if registration["retrying"]:
+            return False
+        registration["retrying"] = True
+
+        def again():
+            registration["retrying"] = False
+            register(False)
+            return False
+
+        GLib.timeout_add_seconds(5, again)
+        return False
+
+    def register(initial):
+        """Hand BlueZ our Profile1, once for every device this process serves.
+
+        Called again whenever bluetoothd reappears on the bus: a restarted
+        bluetoothd has forgotten the registration, and every follower has to be
+        attached again behind it. Idempotent — if the registration did somehow
+        survive, BlueZ says it is taken and that is the answer we wanted anyway.
+        """
+        # Whose registration this is. Read before registering, so that a
+        # bluetoothd that restarts in the middle of this leaves a stale owner
+        # here and the watch below registers again rather than believing it is
+        # already done.
+        registration["owner"] = current_owner()
+        manager = dbus.Interface(bus.get_object("org.bluez", "/org/bluez"),
+                                 "org.bluez.ProfileManager1")
+        registration["manager"] = manager
+        try:
+            manager.RegisterProfile(PROFILE_PATH, UUID, {
+                "Name": "Omaphones",
+                "Role": "client",
+                "RequireAuthentication": dbus.Boolean(False),
+                "RequireAuthorization": dbus.Boolean(False),
+                "AutoConnect": dbus.Boolean(True),
+            })
+        except dbus.DBusException as error:
+            if initial:
+                fail(registration_error(error))
+            if error.get_dbus_name() not in REGISTRATION_TAKEN_NAMES:
+                return retry_registration(registration_error(error))
+
+        registration["live"] = True
+        registration["retries"] = 0
+        if registration["reported"] is not None:
+            # The last thing said about the reader itself was a failure and it
+            # is over. Nothing else would ever say so, and a consumer showing
+            # that line has no way of its own to tell it has gone stale.
+            registration["reported"] = None
+            emit({"stream": True})
+        for follower in list(followers.values()):
+            follower.attach(initial)
+        return False
+
+    def follow(address):
+        """Start serving one more device. Idempotent, because the caller is a
+        widget syncing a list and not a person typing."""
+        if address in followers:
+            return
+        follower = Follower(bus, address)
+        followers[address] = follower
+        # With no registration there is nothing to attach to yet; register()
+        # attaches every follower as soon as bluetoothd takes the profile.
+        if registration["live"]:
+            follower.attach(True)
+
+    def unfollow(address):
+        follower = followers.pop(address, None)
+        if follower is not None:
+            follower.drop()
+
+    for given in argv:
+        followers[given.upper()] = Follower(bus, given.upper())
+
+    register(True)
+
+    def on_bluez_owner(owner):
+        # Fires once with the current owner as soon as the watch is set up, then
+        # on every start and stop of bluetoothd.
+        if not owner:
+            for follower in list(followers.values()):
+                follower.forget()
+            registration["manager"] = None
+            registration["owner"] = None
+            registration["live"] = False
+            return
+        if owner == registration["owner"]:
+            return
+        register(False)
+
+    registration["watch"] = bus.watch_name_owner("org.bluez", on_bluez_owner)
+
+    # A steady check costs one D-Bus round trip per device and covers every way
+    # a channel can go away without the socket telling us.
+    def tick():
+        for follower in list(followers.values()):
+            follower.supervise()
+        return True
+
+    GLib.timeout_add_seconds(20, tick)
+
+    # -- commands from the widget ------------------------------------------
+
+    pending = {"text": ""}
+
+    def command(line):
+        """One line from the widget. Unknown or malformed ones are ignored."""
+        parts = line.strip().split()
+        if len(parts) != 2:
+            return
+        verb, address = parts[0], parts[1].upper()
+        if not ADDRESS.match(address):
+            return
+        if verb == "follow":
+            follow(address)
+        elif verb == "unfollow":
+            unfollow(address)
+        elif verb == "refresh":
+            follower = followers.get(address)
+            if follower is not None:
+                follower.refresh()
+
+    def on_stdin(_fd, condition):
+        if condition & (GLib.IO_HUP | GLib.IO_ERR):
+            # The widget let go of the pipe: a clean stop, not a failure.
+            loop.quit()
+            return False
+        try:
+            chunk = os.read(0, 4096)
+        except OSError:
+            loop.quit()
+            return False
+        if not chunk:
+            loop.quit()
+            return False
+        pending["text"] += chunk.decode("utf-8", "replace")
+        while "\n" in pending["text"]:
+            line, pending["text"] = pending["text"].split("\n", 1)
+            command(line)
+        return True
+
+    GLib.io_add_watch(0, GLib.PRIORITY_DEFAULT,
+                      GLib.IO_IN | GLib.IO_HUP | GLib.IO_ERR, on_stdin)
+
+    def stop(*_args):
+        loop.quit()
+        return False
+
+    unix_signal_add(GLib.PRIORITY_DEFAULT, signal.SIGTERM, stop)
+    unix_signal_add(GLib.PRIORITY_DEFAULT, signal.SIGINT, stop)
+
+    try:
+        loop.run()
+    finally:
+        manager = registration.get("manager")
+        if manager is not None:
+            try:
+                manager.UnregisterProfile(PROFILE_PATH, timeout=REPLY_TIMEOUT)
+            except dbus.DBusException:
+                pass
+
+
+if __name__ == "__main__":
+    arm_parent_death_signal()
+    try:
+        main()
+    except SystemExit:
+        raise
+    except KeyboardInterrupt:
+        pass
+    except BaseException as error:
+        # Anything unforeseen — a bluetoothd that restarts mid-lookup is the one
+        # that has actually happened — leaves as a line the panel can show,
+        # instead of a traceback on a stderr nobody reads.
+        emit({"stream": False, "error": "%s: %s" % (type(error).__name__, error)})
+        sys.exit(1)

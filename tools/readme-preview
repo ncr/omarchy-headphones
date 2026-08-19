@@ -1,0 +1,125 @@
+#!/usr/bin/env python3
+"""Preview README.md the way github.com renders it, locally, with live reload.
+
+    tools/readme-preview [README.md] [--port 8765] [--once OUT.html]
+
+Renders the markdown through GitHub's own API (`gh api markdown` — `gh auth
+login` once), wraps it in github-markdown-css light and dark with a toggle in
+the corner, inlines the images, fixes the anchors that github.com's page
+script would otherwise resolve, and serves it on http://127.0.0.1:PORT/ — the
+tab reloads itself when README.md or anything under docs/ changes, keeping its
+scroll position. --once writes a single self-contained HTML file instead.
+
+The same job is done, more generally, by grip (`pipx install grip`, then
+`grip --browser`); this one adds the dark/light toggle that also swaps
+<picture> sources, and the <blockquote> [!TIP] alerts the API does not render.
+"""
+import base64, http.server, json, mimetypes, os, re, subprocess, sys, time, urllib.request
+
+CSS = {
+    "light": "https://cdn.jsdelivr.net/npm/github-markdown-css@5/github-markdown-light.css",
+    "dark": "https://cdn.jsdelivr.net/npm/github-markdown-css@5/github-markdown-dark.css",
+}
+CACHE = os.path.join(os.environ.get("XDG_CACHE_HOME") or os.path.expanduser("~/.cache"), "readme-preview")
+
+def css(mode):
+    os.makedirs(CACHE, exist_ok=True)
+    path = os.path.join(CACHE, f"github-markdown-{mode}.css")
+    if not os.path.exists(path):
+        urllib.request.urlretrieve(CSS[mode], path)
+    return open(path, encoding="utf-8").read()
+
+def render(md_path):
+    text = open(md_path, encoding="utf-8").read()
+    env = dict(os.environ, MISE_QUIET="1")  # mise's shim announces the tool on the way through
+    body = subprocess.run(["gh", "api", "markdown", "--input", "-"], input=json.dumps({"text": text, "mode": "markdown"}),
+                          capture_output=True, text=True, check=True, env=env).stdout
+    body = body[body.find("<"):] if "<" in body else body  # and anything else chatty before the markup
+    base = os.path.dirname(os.path.abspath(md_path))
+    def inl(m):
+        attr, path = m.group(1), m.group(2)
+        p = os.path.join(base, path)
+        if not os.path.exists(p):
+            return m.group(0)
+        mt = mimetypes.guess_type(p)[0] or "application/octet-stream"
+        return f'{attr}="data:{mt};base64,{base64.b64encode(open(p, "rb").read()).decode()}"'
+    body = re.sub(r'(srcset|src)="((?!https?:|data:)[^"]+)"', inl, body)
+    body = body.replace('id="user-content-', 'id="')
+    body = re.sub(r'<h([1-6])([^>]*)>(.*?)</h\1>\s*<a id="([^"]+)" class="anchor"',
+                  lambda m: f'<h{m.group(1)} id="{m.group(4)}"{m.group(2)}>{m.group(3)}</h{m.group(1)}><a class="anchor"', body, flags=re.S)
+    titles = {"note": "Note", "tip": "Tip", "important": "Important", "warning": "Warning", "caution": "Caution"}
+    body = re.sub(r'<blockquote>\s*<p>\[!(NOTE|TIP|IMPORTANT|WARNING|CAUTION)\]\s*(.*?)</p>\s*</blockquote>',
+                  lambda m: f'<div class="markdown-alert markdown-alert-{m.group(1).lower()}"><p class="markdown-alert-title">{titles[m.group(1).lower()]}</p><p>{m.group(2)}</p></div>',
+                  body, flags=re.S)
+    light = css("light").replace(".markdown-body", "html.light .markdown-body")
+    dark = css("dark").replace(".markdown-body", "html.dark .markdown-body")
+    return f"""<!doctype html><html class="dark"><head><meta charset="utf-8"><title>README preview</title>
+<style>{light}</style><style>{dark}</style>
+<style>
+html.light {{ background:#ffffff; }} html.dark {{ background:#0d1117; }} html {{ scroll-behavior:smooth; }}
+body {{ margin:0; }}
+.markdown-body {{ box-sizing:border-box; min-width:200px; max-width:1012px; margin:0 auto; padding:45px; }}
+.markdown-body h1, .markdown-body h2, .markdown-body h3 {{ scroll-margin-top:28px; }}
+@media (max-width:767px) {{ .markdown-body {{ padding:15px; }} }}
+#toggle {{ position:fixed; top:12px; right:12px; z-index:9; font:13px system-ui; padding:6px 10px; border-radius:6px; border:1px solid #8884; background:#8882; cursor:pointer; }}
+html.dark #toggle {{ color:#e6edf3; }} html.light #toggle {{ color:#1f2328; }}
+</style></head><body>
+<button id="toggle" onclick="setTheme(!document.documentElement.classList.contains('dark'))">☀ light</button>
+<script>
+function setTheme(d){{var h=document.documentElement;h.classList.toggle('dark',d);h.classList.toggle('light',!d);
+document.getElementById('toggle').textContent=d?'☀ light':'☾ dark';
+document.querySelectorAll('picture').forEach(function(p){{var s=p.querySelector('source[data-dark]'),i=p.querySelector('img');if(!s||!i)return;i.src=d?s.dataset.dark:i.dataset.light;}});}}
+document.addEventListener('DOMContentLoaded',function(){{document.querySelectorAll('picture').forEach(function(p){{var s=p.querySelector('source[media*=dark]'),i=p.querySelector('img');if(!s||!i)return;s.dataset.dark=s.srcset;i.dataset.light=i.src;s.removeAttribute('media');s.removeAttribute('srcset');}});setTheme(true);}});
+</script>
+<article class="markdown-body">{body}</article>
+</body></html>"""
+
+LIVE = """<script>
+(function(){var last=null;
+window.addEventListener('load',function(){var y=sessionStorage.getItem('preview-scroll');if(y){window.scrollTo(0,parseInt(y));sessionStorage.removeItem('preview-scroll');}});
+setInterval(function(){fetch('/mtime').then(function(r){return r.text()}).then(function(t){if(last===null){last=t;return;}if(t!==last){sessionStorage.setItem('preview-scroll',window.scrollY);location.reload();}}).catch(function(){});},1000);})();
+</script></body>"""
+
+def newest(md_path):
+    base = os.path.dirname(os.path.abspath(md_path))
+    stamps = [os.path.getmtime(md_path)]
+    for root, _, files in os.walk(os.path.join(base, "docs")):
+        stamps += [os.path.getmtime(os.path.join(root, f)) for f in files]
+    return max(stamps)
+
+def serve(md_path, port):
+    state = {"stamp": None, "html": None}
+    def current():
+        stamp = newest(md_path)
+        if stamp != state["stamp"]:
+            state["html"] = render(md_path).replace("</body>", LIVE, 1)
+            state["stamp"] = stamp
+        return state["stamp"], state["html"]
+    class H(http.server.BaseHTTPRequestHandler):
+        def log_message(self, *a): pass
+        def do_GET(self):
+            stamp, html = current()
+            if self.path.startswith("/mtime"):
+                body = str(stamp).encode(); ctype = "text/plain"
+            else:
+                body = html.encode("utf-8"); ctype = "text/html; charset=utf-8"
+            self.send_response(200); self.send_header("Content-Type", ctype); self.send_header("Cache-Control", "no-store")
+            self.send_header("Content-Length", str(len(body))); self.end_headers(); self.wfile.write(body)
+    print(f"http://127.0.0.1:{port}/  (Ctrl-C to stop)")
+    http.server.ThreadingHTTPServer(("127.0.0.1", port), H).serve_forever()
+
+def main():
+    args = sys.argv[1:]
+    md = "README.md"; port = 8765; once = None
+    while args:
+        a = args.pop(0)
+        if a == "--port": port = int(args.pop(0))
+        elif a == "--once": once = args.pop(0)
+        elif a in ("-h", "--help"): print(__doc__); return
+        else: md = a
+    if once:
+        open(once, "w", encoding="utf-8").write(render(md)); print(once); return
+    serve(md, port)
+
+if __name__ == "__main__":
+    main()

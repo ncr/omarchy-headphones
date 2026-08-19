@@ -1,0 +1,285 @@
+#!/bin/bash
+# Read, set and watch the listening mode of a JBL TUNE230NC TWS from Linux.
+#
+#   jbl-anc get [MAC]                  print the current mode
+#   jbl-anc set off|anc|ambient|talkthru [MAC]
+#   jbl-anc watch [seconds] [MAC]      print changes as they happen, including
+#                                      the ones made with the earbud touch control
+#                                      (seconds defaults to 60, so `watch MAC`
+#                                      alone is a fine way to say it)
+#
+# MAC is the earbuds' *Classic* address, the one `bluetoothctl devices` prints;
+# JBL_MAC in the environment does the same job as the trailing argument. Neither
+# is needed while the Omaphones widget runs: get and set are answered by the
+# widget, and when they are not, the direct path still borrows the BLE address
+# the widget publishes. Without a widget and without an address there is nothing
+# to open, and jbl-anc says so instead of guessing.
+#
+#   jbl-anc get AA:BB:CC:DD:EE:FF
+#   JBL_MAC=AA:BB:CC:DD:EE:FF jbl-anc set anc
+#
+# watch has no widget equivalent, so it always opens its own ATT link — and the
+# earbuds accept exactly one. Turn the widget's mode control off first
+# (useModeControl=false in the widget settings), or the link is refused and
+# btgatt-client reports "Failed to connect".
+#
+# How it works, all of it confirmed on hardware — see PROTOCOL.md:
+#
+#   The earbuds carry JBL's control protocol on their *BLE* side, not on any of
+#   the RFCOMM channels their Classic side advertises. The BLE address is a
+#   resolvable private address and rotates, so it cannot be written down; it is
+#   read here from the Fast Pair Message Stream (device information group 3,
+#   code 2), which the Classic link serves.
+#
+#   GATT service 65786365-6c70-6f69-6e74-2e636f6d0000 — ASCII "excelpoint.com"
+#     value handle 0x000c  …6d0001  notify + read   the device talks here
+#     value handle 0x0010  …6d0002  write           commands go here
+#
+#   Frame: AA <cmd> <payload length> <payload…>. No sequence byte, no checksum
+#   on this transport. Mode frames use command 0x91 with an opcode and then
+#   slot/value pairs: slot 1 ANC, slot 2 Ambient Aware, slot 3 TalkThru.
+#     0x10 set, 0x11 get, 0x12 report
+#
+# Needs: btgatt-client (bluez-utils) and python-dbus + python-gobject for the
+# address lookup. No root.
+set -o pipefail
+
+NOTIFY_HANDLE="0x000c"
+MAC_RE='^([0-9A-Fa-f]{2}:){5}[0-9A-Fa-f]{2}$'
+WRITE_HANDLE="0x0010"
+HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+
+# The Classic address nobody has named yet. A trailing argument fills it in;
+# JBL_MAC is the standing default for a shell that always talks to one set.
+CLASSIC_MAC="${JBL_MAC:-}"
+
+FRAME_GET="aa 91 01 11"
+FRAME_NOTIFY_ON="aa 9b 02 01 01"
+declare -A FRAME_SET=(
+  [off]="aa 91 07 10 01 00 02 00 03 00"
+  [anc]="aa 91 07 10 01 01 02 00 03 00"
+  [ambient]="aa 91 07 10 01 00 02 01 03 00"
+  [talkthru]="aa 91 07 10 01 00 02 00 03 01"
+)
+
+# The header down to the internals, which are of no use to someone who only
+# wants the calling convention.
+usage() {
+  sed -n '2,/^# How it works/p' "${BASH_SOURCE[0]}" | head -n -1 | sed 's/^# \{0,1\}//'
+  exit "${1:-0}"
+}
+
+note() { echo "jbl-anc: $*" >&2; }
+fail() { note "$*"; exit 1; }
+
+# A trailing address argument, checked here so that a typo does not travel all
+# the way down to btgatt-client as a mystery failure.
+take_mac() {
+  [[ -n ${1:-} ]] || return 0
+  [[ $1 =~ $MAC_RE ]] || fail "not a Bluetooth address: $1"
+  CLASSIC_MAC="${1^^}"
+}
+
+is_mode() {
+  case "${1:-}" in off | anc | ambient | talkthru) return 0 ;; *) return 1 ;; esac
+}
+
+# How long to keep asking a widget that answers "pending" or "busy". Its bridge
+# takes a few seconds to connect and subscribe, and going to the air meanwhile
+# would only be refused: the earbuds accept one ATT link, and the widget is
+# about to be holding it.
+BRIDGE_WAIT=15
+
+# One IPC call to the running widget. Empty output and a nonzero status mean
+# there is no shell to ask, which is the signal to fall back to the air.
+widget() {
+  omarchy-shell omaphones "$@" 2>/dev/null | tr -d '\r'
+}
+
+# The earbuds' current BLE address. The Omaphones widget already holds the Message
+# Stream and publishes the address it sees, so ask it first: BlueZ allows one
+# holder per profile UUID, and a second reader would simply be refused.
+ble_address() {
+  local addr
+  addr=$(widget bleAddress)
+  if [[ $addr =~ $MAC_RE ]]; then
+    echo "${addr^^}"
+    return 0
+  fi
+  if [[ -z $CLASSIC_MAC ]]; then
+    note "no BLE address from the widget — pass the earbuds' Classic address: jbl-anc ${command:-get} AA:BB:CC:DD:EE:FF (or JBL_MAC=...)"
+    return 1
+  fi
+  # Nothing on the IPC: read the address off the Message Stream ourselves.
+  local hex
+  hex=$(timeout 15 python3 "$HERE/gfps_probe.py" "$CLASSIC_MAC" 6 2>/dev/null |
+    grep -oP 'code=0x02 len=6 payload=\K[0-9a-f]{12}' | head -1)
+  if [[ -z $hex ]]; then
+    note "could not read the BLE address of $CLASSIC_MAC; are the earbuds connected?"
+    return 1
+  fi
+  echo "$hex" | sed 's/\(..\)/\1:/g; s/:$//' | tr 'a-f' 'A-F'
+}
+
+# Name the mode from a report triple: the ANC, Ambient Aware and TalkThru bytes
+# of "aa 91 07 12 01 x 02 y 03 z", in that order.
+mode_name() {
+  local anc=$1 ambient=$2 talkthru=$3
+  if [[ $anc == 01 ]]; then echo "anc"
+  elif [[ $ambient == 01 ]]; then echo "ambient"
+  elif [[ $talkthru == 01 ]]; then echo "talkthru"
+  else echo "off"; fi
+}
+
+# btgatt-client is line driven: feed it a subscription, then the frames.
+run_gatt() {
+  local address=$1 listen=$2
+  shift 2
+
+  {
+    sleep 5
+    echo "register-notify $NOTIFY_HANDLE"
+    sleep 2
+    echo "write-value $WRITE_HANDLE $(printf '0x%s ' $FRAME_NOTIFY_ON)"
+    sleep 2
+    local frame
+    for frame in "$@"; do
+      echo "write-value $WRITE_HANDLE $(printf '0x%s ' $frame)"
+      sleep 2
+    done
+    sleep "$listen"
+    echo "quit"
+  } | timeout $((listen + 45)) btgatt-client -d "$address" -t random 2>&1 |
+    sed -u 's/\x1b\[[0-9;]*m//g' |
+    grep --line-buffered -E "Not/Ind|Failed to connect"
+}
+
+# Raw notification lines in, one "<anc> <ambient> <talkthru>" triple out per
+# report frame; every other frame is dropped.
+report_triples() {
+  awk '
+    /Failed to connect/ {
+      print "jbl-anc: " $0 > "/dev/stderr"
+      print "jbl-anc: the earbuds accept one ATT link — if the widget bridge holds it, set useModeControl=false" > "/dev/stderr"
+      fflush("/dev/stderr")
+      next
+    }
+    # aa 91 07 12 01 <anc> 02 <ambient> 03 <talkthru>
+    /aa 91 07 12/ {
+      for (i = 1; i <= NF; i++) if ($i == "12" && $(i-1) == "07") { base = i; break }
+      if (!base) next
+      print $(base + 2), $(base + 4), $(base + 6)
+      fflush()
+      base = 0
+    }'
+}
+
+# One shot over the air: the device answers a get, and reports the new state
+# after a set, so the same short listen covers both. Prints nothing and returns
+# 1 when no report arrived.
+direct_mode() {
+  local address=$1
+  shift
+  local triple
+  triple=$(run_gatt "$address" 4 "$@" | report_triples | tail -1)
+  [[ -n $triple ]] || return 1
+  # Deliberately unquoted: the triple is three fields.
+  # shellcheck disable=SC2086
+  mode_name $triple
+}
+
+command="${1:-}"
+case "$command" in
+get)
+  (( $# <= 2 )) || usage 1
+  take_mac "${2:-}"
+  # The widget knows the mode already, and asking it costs no radio time.
+  # "pending" means its bridge is still coming up, so wait it out rather than
+  # racing it for the one ATT link the earbuds allow.
+  mode=$(widget mode)
+  deadline=$((SECONDS + BRIDGE_WAIT))
+  while [[ $mode == pending ]] && ((SECONDS < deadline)); do
+    sleep 0.5
+    mode=$(widget mode)
+  done
+  if is_mode "$mode"; then
+    echo "$mode"
+    exit 0
+  fi
+  [[ $mode != pending ]] || fail "the widget's bridge is starting and has no mode yet — try again in a moment"
+  # Only "unsupported" and an unreachable shell are left, and both mean we have
+  # to go and look ourselves.
+  [[ $mode != unsupported ]] ||
+    note "the widget found no JBL protocol on these earbuds, so the direct probe may find nothing either"
+  address=$(ble_address) || exit 1
+  mode=$(direct_mode "$address" "$FRAME_GET") || fail "the earbuds reported no mode"
+  echo "$mode"
+  ;;
+set)
+  mode="${2:-}"
+  [[ -n $mode && -n ${FRAME_SET[$mode]:-} ]] || fail "mode must be one of: ${!FRAME_SET[*]}"
+  (( $# <= 3 )) || usage 1
+  take_mac "${3:-}"
+  # "busy" is the widget saying its bridge is still connecting, not that it
+  # cannot write, so keep offering the same set until it takes one way or the
+  # other. Opening our own link here would be refused anyway.
+  answer=$(widget setMode "$mode")
+  deadline=$((SECONDS + BRIDGE_WAIT))
+  while [[ $answer == busy ]] && ((SECONDS < deadline)); do
+    sleep 0.5
+    answer=$(widget setMode "$mode")
+  done
+  [[ $answer != busy ]] || fail "the widget's bridge is starting and has not taken $mode — try again in a moment"
+  if [[ $answer == ok ]]; then
+    # The widget wrote the frame over its own bridge, so the earbuds' report
+    # comes back there and not to us. Poll the widget for it; the device takes
+    # a moment to answer, and a set that is not confirmed did not happen.
+    reported=""
+    for _ in {1..12}; do
+      sleep 0.25
+      answer=$(widget mode)
+      if is_mode "$answer"; then
+        reported=$answer
+        [[ $reported == "$mode" ]] && break
+      fi
+    done
+    [[ -n $reported ]] || fail "the widget took $mode but reported no mode back"
+  else
+    # No widget, or it will not write ("unsupported", "unavailable"): do it here.
+    [[ $answer != unsupported ]] ||
+      note "the widget found no JBL protocol on these earbuds, so the direct probe may find nothing either"
+    address=$(ble_address) || exit 1
+    reported=$(direct_mode "$address" "${FRAME_SET[$mode]}") || fail "the earbuds reported no mode"
+  fi
+  echo "$reported"
+  [[ $reported == "$mode" ]] || fail "the earbuds report $reported, not $mode"
+  ;;
+watch)
+  # `watch MAC` is the common shape — the default minute is what most people
+  # want — so an address in the seconds slot is read as the address.
+  seconds=60
+  if [[ ${2:-} =~ $MAC_RE ]]; then
+    (( $# <= 2 )) || usage 1
+    take_mac "$2"
+  else
+    seconds="${2:-60}"
+    [[ $seconds =~ ^[0-9]+$ ]] || fail "watch takes a number of seconds: jbl-anc watch 60 [MAC]"
+    (( $# <= 3 )) || usage 1
+    take_mac "${3:-}"
+  fi
+  address=$(ble_address) || exit 1
+  # The handshake — connect, subscribe, enable notifications, ask once — takes
+  # about 11 seconds before the window below even starts.
+  echo "# watching for $seconds seconds, after ~11 s of handshake — press the earbud control" >&2
+  # The device reports a mode only when it changes, so ask once to establish
+  # where we are; everything after that line is a real change.
+  run_gatt "$address" "$seconds" "$FRAME_GET" | report_triples |
+    while read -r anc ambient talkthru; do mode_name "$anc" "$ambient" "$talkthru"; done
+  ;;
+-h | --help | help | "")
+  usage
+  ;;
+*)
+  fail "unknown command: $command"
+  ;;
+esac

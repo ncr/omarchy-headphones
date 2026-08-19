@@ -1,0 +1,164 @@
+#!/bin/bash
+# Take the gallery screenshot of one device's panel, the same way every time.
+#
+#   tools/gallery-shot <which> [--mode off|anc|ambient|talkthru] [--out FILE] [--frame WxH] [--rect FILE] [--closed FILE] [--anchor panel|right]
+#
+# <which> is a piece of the device's name or address, as the widget's IPC takes
+# it ("sony", "jbl", "A0:11"). The picture is a fixed frame — 560x420 logical
+# pixels, rendered at scale 2 so it is 1120x840 on every monitor — with the bar
+# along the top and the open panel centred under it, on an empty workspace so
+# nothing of yours is in the background. --mode switches the listening mode
+# first (Ambient shows the Sony dial) and switches it back after. The default
+# output is docs/gallery/<device-name-slug>.png next to this repo's README.
+# --frame WxH (logical pixels) is for the README's wide hero shot; the gallery
+# keeps the default so every entry lines up. --rect FILE also writes where the
+# panel card landed inside the picture, in picture pixels, as "x y w h" — for
+# tools that crop a piece of it afterwards. --closed FILE also saves the same
+# frame with the panel closed — the bar and the wallpaper — for a before/after.
+# --anchor right pins the frame to the screen's right edge instead of centring
+# it on the panel, so a series of shots across themes does not jump when the
+# panel sits close to the edge and the centred frame has to be clamped.
+#
+# Needs the widget running (omarchy-shell omaphones status answers), grim, and a
+# Hyprland that takes `hyprctl dispatch 'hl.dsp.focus({ workspace = "N" })'` —
+# Omarchy 4.0 does; older builds take `hyprctl dispatch workspace N`, which is
+# tried second.
+set -euo pipefail
+
+FRAME_W=560
+FRAME_H=420
+SCALE=2
+IPC=omaphones
+
+which_="" mode="" out="" rect_out="" closed_out="" anchor=panel
+while (($#)); do
+  case "$1" in
+    --mode) mode="$2"; shift 2 ;;
+    --out) out="$2"; shift 2 ;;
+    --frame) FRAME_W=${2%x*}; FRAME_H=${2#*x}; shift 2 ;;
+    --rect) rect_out="$2"; shift 2 ;;
+    --closed) closed_out="$2"; shift 2 ;;
+    --anchor) anchor="$2"; shift 2 ;;
+    -h|--help) sed -n '2,25p' "${BASH_SOURCE[0]}" | sed 's/^# \{0,1\}//'; exit 0 ;;
+    *) if [[ -z $which_ ]]; then which_="$1"; shift; else echo "gallery-shot: unexpected argument: $1" >&2; exit 2; fi ;;
+  esac
+done
+[[ -n $which_ ]] || { echo "usage: tools/gallery-shot <which> [--mode m] [--out FILE]" >&2; exit 2; }
+
+for bin in grim hyprctl omarchy-shell python3; do
+  command -v "$bin" >/dev/null || { echo "gallery-shot: $bin is missing" >&2; exit 1; }
+done
+
+ipc() { omarchy-shell "$IPC" "$@"; }
+
+status=$(ipc statusFor "$which_" 2>/dev/null || true)
+case "$status" in
+  ""|"no device matching"*) echo "gallery-shot: the widget follows no device matching '$which_' (is it connected?)" >&2; exit 1 ;;
+esac
+name=${status%% · *}
+slug=$(printf '%s' "$name" | tr '[:upper:]' '[:lower:]' | sed 's/[^a-z0-9]\+/-/g; s/^-//; s/-$//')
+# A Sony calls itself "WH-CH720N": when the word you matched on is not in the
+# name, it is the brand, and the file name gets it in front.
+needle=$(printf '%s' "$which_" | tr '[:upper:]' '[:lower:]' | sed 's/[^a-z0-9]\+/-/g; s/^-//; s/-$//')
+[[ -n $needle && $slug != *"$needle"* ]] && slug="$needle-$slug"
+here=$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)
+[[ -n $out ]] || out="$here/docs/gallery/$slug.png"
+mkdir -p "$(dirname "$out")"
+
+# Where we are, and an empty workspace to go to. A fullscreen window on the
+# current workspace means someone is watching or playing something: switching
+# away for a screenshot would be rude, and the shot would likely catch the game
+# anyway. Refuse unless told otherwise.
+read -r was_ws was_full <<<"$(hyprctl activeworkspace -j | python3 -c 'import json,sys; w=json.load(sys.stdin); print(w["id"], 1 if w.get("hasfullscreen") else 0)')"
+if (( was_full )) && [[ -z ${GALLERY_SHOT_FORCE:-} ]]; then
+  echo "gallery-shot: the current workspace has a fullscreen window; not switching away from it (set GALLERY_SHOT_FORCE=1 to override)" >&2
+  exit 1
+fi
+empty_ws=$(hyprctl workspaces -j | python3 -c '
+import json,sys
+used={w["id"] for w in json.load(sys.stdin) if w["windows"]>0}
+print(next(i for i in range(1,100) if i not in used))')
+focus_ws() {
+  hyprctl dispatch "hl.dsp.focus({ workspace = \"$1\" })" >/dev/null 2>&1 \
+    || hyprctl dispatch workspace "$1" >/dev/null 2>&1
+}
+
+was_mode=""
+cleanup() {
+  ipc close >/dev/null 2>&1 || true
+  if [[ -n $mode && -n $was_mode && $was_mode != "$mode" ]]; then
+    ipc setModeFor "$was_mode" "$which_" >/dev/null 2>&1 || true
+  fi
+  focus_ws "$was_ws"
+}
+trap cleanup EXIT
+
+if [[ -n $mode ]]; then
+  was_mode=$(ipc modeFor "$which_" 2>/dev/null || true)
+  case "$was_mode" in off|anc|ambient|talkthru) ;; *) was_mode="" ;; esac
+  ipc setModeFor "$mode" "$which_" >/dev/null
+  sleep 1.5
+fi
+
+# The mode row takes a moment after the bridge (re)starts — and writing the
+# previous screenshot into the plugin directory restarts every helper, because
+# the shell reloads the plugin on any change there. Wait for the device to say
+# what it is, so the panel is complete when it is shot.
+for _ in $(seq 1 30); do
+  m=$(ipc modeFor "$which_" 2>/dev/null || true)
+  [[ $m == pending || -z $m ]] || break
+  sleep 1
+done
+
+focus_ws "$empty_ws"
+sleep 1.2
+read -r now_ws now_windows <<<"$(hyprctl activeworkspace -j | python3 -c 'import json,sys; w=json.load(sys.stdin); print(w["id"], w["windows"])')"
+if [[ $now_ws != "$empty_ws" ]]; then
+  echo "gallery-shot: could not switch to empty workspace $empty_ws (on $now_ws); not shooting" >&2
+  exit 1
+fi
+if (( now_windows > 0 )); then
+  echo "gallery-shot: workspace $empty_ws has a window on it now; not shooting" >&2
+  exit 1
+fi
+ipc close >/dev/null 2>&1 || true
+ipc openFor "$which_" >/dev/null
+sleep 1.8
+
+rect=$(ipc panelRect)
+[[ -n $rect ]] || { echo "gallery-shot: the panel did not open (panelRect is empty)" >&2; exit 1; }
+read -r px py pw ph <<<"$rect"
+
+# The card's coordinates are monitor-local; grim wants global logical ones.
+read -r mx my mw <<<"$(hyprctl monitors -j | python3 -c '
+import json,sys
+ms=json.load(sys.stdin)
+m=next((m for m in ms if m.get("focused")), ms[0])
+print(m["x"], m["y"], int(m["width"]/m["scale"]))')"
+if [[ $anchor == right ]]; then
+  x=$(( mw - FRAME_W ))
+else
+  x=$(( px + pw / 2 - FRAME_W / 2 ))
+fi
+(( x < 0 )) && x=0
+(( x + FRAME_W > mw )) && x=$(( mw - FRAME_W ))
+# Shoot into a temporary file and move it in at the very end: a write inside
+# the plugin directory makes the shell reload the plugin, and that would tear
+# the panel down under the camera.
+tmp=$(mktemp --suffix=.png)
+region="$(( mx + x )),$(( my )) ${FRAME_W}x${FRAME_H}"
+if [[ -n $closed_out ]]; then
+  # Same region, panel closed: close, let the fade finish, shoot, open again.
+  ipc close >/dev/null 2>&1 || true
+  sleep 0.6
+  ctmp=$(mktemp --suffix=.png)
+  grim -s "$SCALE" -g "$region" "$ctmp"
+  ipc openFor "$which_" >/dev/null
+  sleep 1.2
+fi
+grim -s "$SCALE" -g "$region" "$tmp"
+ipc close >/dev/null 2>&1 || true
+mv "$tmp" "$out"
+[[ -n $closed_out ]] && mv "$ctmp" "$closed_out"
+[[ -n $rect_out ]] && echo "$(( (px - x) * SCALE )) $(( py * SCALE )) $(( pw * SCALE )) $(( ph * SCALE ))" > "$rect_out"
+echo "$out"
