@@ -993,6 +993,16 @@ Panel {
       }
     }
 
+    // The neighbouring glyphs are font icons: OpticalGlyph centres their line
+    // box, but an icon paints only above the baseline, so its visual centre
+    // sits half the font's descent above the slot's geometric centre. The mark
+    // takes the same correction, or it hangs a pixel or two below the row.
+    FontMetrics {
+      id: markMetrics
+      font.family: root.fontFamily
+      font.pixelSize: Math.max(1, Math.round(Style.bar.iconFont))
+    }
+
     // Rounded the same way the bar rounds its open-panel mark: both are centred
     // on this slot with Math.round, so the two are concentric to the pixel.
     Item {
@@ -1006,7 +1016,12 @@ Panel {
       width: slot.markExtent
       height: slot.markExtent
       x: Math.round((slot.width - width) / 2)
-      y: Math.round((slot.height - height) / 2)
+      // Half of that again, and deliberately not rounded: the icon-font glyphs
+      // sit a quarter of the descent above the slot's centre (they overhang the
+      // baseline a little, so it is not the full half), and their own position
+      // is fractional too — snapping the mark to a whole logical pixel is what
+      // put it a physical pixel off the row in the first place.
+      y: (slot.height - height - markMetrics.descent / 2) / 2
 
       // The dim copy. The headband deliberately overlaps the cups by a stroke
       // width so the join is clean, and a translucent tint would composite that
