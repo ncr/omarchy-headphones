@@ -5,7 +5,7 @@
   "version": "1.0.1",
   "author": "Jacek Becela",
   "license": "MIT",
-  "description": "Battery for wireless headphones over the Google Fast Pair Message Stream — left, right and case for earbuds, one figure for a headset — plus noise control (Off / ANC / Ambient / TalkThru) on JBL earbuds and Sony MDR v2 headsets. One icon per connected set.",
+  "description": "Battery and noise control for wireless headphones in the bar. Earbuds show left, right and case levels; ANC / Ambient switching works on JBL and Sony. One icon per connected set.",
   "kinds": [
     "service",
     "bar-widget"
@@ -17,7 +17,7 @@
   },
   "barWidget": {
     "displayName": "Omaphones",
-    "description": "Battery for wireless headphones over the Google Fast Pair Message Stream — left, right and case for earbuds, one figure for a headset — plus noise control (Off / ANC / Ambient / TalkThru) on JBL earbuds and Sony MDR v2 headsets. One icon per connected set.",
+    "description": "Battery and noise control for wireless headphones in the bar. Earbuds show left, right and case levels; ANC / Ambient switching works on JBL and Sony. One icon per connected set.",
     "category": "Audio",
     "aliases": [
       "headphones",
