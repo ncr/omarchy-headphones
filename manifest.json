@@ -52,14 +52,14 @@
         "type": "boolean",
         "label": "Read battery over Google Fast Pair",
         "defaultValue": true,
-        "description": "Opens the Fast Pair Message Stream channel on the headphones for their levels — left, right and case on earbuds, one figure on a headset. Turn off to use only the single figure BlueZ reports — that also turns off noise control on JBL earbuds, which are reached at a BLE address announced only on this channel. Sony headsets serve their own channel and are unaffected."
+        "description": "Left, right and case levels over the Fast Pair channel. Off: BlueZ's single figure only, and no JBL noise control — its BLE address is announced on this channel. Sony is unaffected."
       },
       {
         "key": "useModeControl",
         "type": "boolean",
         "label": "Noise control (ANC / Ambient)",
         "defaultValue": true,
-        "description": "Holds one link to the headphones so the panel can switch Noise Cancelling, Ambient and Off, and so it hears changes made on the device itself. Sony headsets that speak the MDR protocol v2 (WH/WF, e.g. WH-CH720N) are controlled over their own RFCOMM channel and need no Fast Pair. JBL earbuds are reached over BLE at an address announced only on the Message Stream, so they need Fast Pair above, and only some models answer. The row is hidden for a device that answers for neither."
+        "description": "The MODE row: Off / ANC / Ambient, following changes made on the device too. Works on Sony MDR v2 headsets and some JBL earbuds (JBL needs Fast Pair above). Hidden when the device answers for neither."
       },
       {
         "key": "lowBatteryThreshold",
@@ -75,7 +75,7 @@
         "type": "boolean",
         "label": "Show a percentage instead of the drawn meters",
         "defaultValue": false,
-        "description": "On writes the lower earbud's percentage next to the headphones glyph and takes a second bar slot whenever there is a level to write. Off fills the left and right halves of one drawn headphones mark, in a single icon slot. A vertical bar always draws the mark."
+        "description": "On: the lower earbud's percentage next to the glyph, taking a second bar slot. Off: the levels fill the two halves of one drawn mark. A vertical bar always draws the mark."
       },
       {
         "key": "hideWhenDisconnected",
