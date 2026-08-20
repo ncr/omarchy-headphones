@@ -101,26 +101,30 @@ Item {
   readonly property string modelId: String(reading.modelId || "")
   readonly property string bleAddress: String(reading.bleAddress || "")
 
-  // ---- Listening mode. Two devices, two protocols, one piece of state: the
+  // ---- Listening mode. Three devices, three protocols, one piece of state: the
   //      panel shows a mode and writes a mode, and which helper carries it is
   //      decided per device from the UUIDs in its SDP record.
   //
-  //        sony-bridge  Sony's MDR protocol v2, over an RFCOMM channel the
-  //                     headset itself serves. Deterministic: a device that
-  //                     advertises the UUID speaks the protocol, so this path
-  //                     needs no Fast Pair, no rotating address and no cache of
-  //                     which models answered.
-  //        jbl-bridge   JBL's BLE GATT service, on the earbuds' BLE side at an
-  //                     address that rotates and is announced only on the
-  //                     Message Stream — so that path needs the reader, and is
-  //                     unreachable without it.
+  //        sony-bridge    Sony's MDR protocol v2, over an RFCOMM channel the
+  //                       headset itself serves. Deterministic: a device that
+  //                       advertises the UUID speaks the protocol, so this path
+  //                       needs no Fast Pair, no rotating address and no cache of
+  //                       which models answered.
+  //        xiaomi-bridge  Compact GAIA on standard SPP. The CSR GAIA UUID in
+  //                       the SDP record is the claim; the socket is SPP. Same
+  //                       lifecycle as Sony: Classic address, no Fast Pair.
+  //        jbl-bridge     JBL's BLE GATT service, on the earbuds' BLE side at an
+  //                       address that rotates and is announced only on the
+  //                       Message Stream - so that path needs the reader, and is
+  //                       unreachable without it.
   //
   //      Either way exactly one process owns the link, because writes and the
   //      device's own notifications (a mode changed by touching the earbud) must
   //      share one connection; this follower talks to it through its stdin, and
-  //      both bridges report on the same contract into the same state.
+  //      the bridges report on the same contract into the same state.
   readonly property string jblBridgePath: Qt.resolvedUrl("jbl-bridge").toString().replace(/^file:\/\//, "")
   readonly property string sonyBridgePath: Qt.resolvedUrl("sony-bridge").toString().replace(/^file:\/\//, "")
+  readonly property string xiaomiBridgePath: Qt.resolvedUrl("xiaomi-bridge").toString().replace(/^file:\/\//, "")
   property var ancState: ({})
   property bool ancEnabled: true
   readonly property bool jblWanted: useModeControl && useFastPair && ancEnabled && connected
@@ -138,6 +142,7 @@ Item {
   property string ancRunError: ""
   property string ancErrorRaw: ""
   property bool sonyEnabled: true
+  property bool xiaomiEnabled: true
 
   // What this device serves, read once per connection with `bluetoothctl info`.
   // Empty while it is not connected, or while the probe is still out.
@@ -163,7 +168,7 @@ Item {
 
   // Whichever bridge this device calls for. They are exclusive — the backend is
   // one string — so this is "the bridge", not "either of two links".
-  readonly property bool bridgeRunning: ancBridge.running || sonyBridge.running
+  readonly property bool bridgeRunning: ancBridge.running || sonyBridge.running || xiaomiBridge.running
   // The bridge is up and the device has answered on it, which is the only state
   // in which a write has somewhere to land.
   readonly property bool ancLive: bridgeRunning && ancAnswered
@@ -171,9 +176,10 @@ Item {
   // switched off, because that needs no explaining.
   readonly property string ancError: {
     if (!useModeControl) return ""
-    // Only the JBL path goes through the Message Stream. A Sony headset serves
-    // its own channel and does not care whether Fast Pair is on.
-    if (controlBackend !== "sony" && !useFastPair) return "needs Fast Pair for the BLE address"
+    // Only the JBL path goes through the Message Stream. Sony and Xiaomi serve
+    // their own Classic channels and do not care whether Fast Pair is on.
+    if (controlBackend !== "sony" && controlBackend !== "xiaomi" && !useFastPair)
+      return "needs Fast Pair for the BLE address"
     return ancErrorRaw
   }
 
@@ -182,11 +188,13 @@ Item {
   // session, and how long to wait before asking again.
   readonly property int modeSupportKnown: Model.supportVerdict(service ? service.modeSupport : ({}), modelId)
   readonly property bool ancModelParked: service ? service.ancParked[modelId] === true : false
-  readonly property bool sonyAddressParked: service ? service.sonyParked[address] === true : false
+  readonly property bool addressParked: service ? service.sonyParked[address] === true : false
+  readonly property bool sonyAddressParked: addressParked
   // How long to wait before the next attempt, keyed by whatever identifies the
-  // device for the backend in play — the Fast Pair model for the JBL bridge, the
-  // Classic address for the Sony one.
-  readonly property string ancBackoffKey: controlBackend === "sony" ? address : modelId
+  // device for the backend in play - the Fast Pair model for the JBL bridge, the
+  // Classic address for Sony and Xiaomi.
+  readonly property string ancBackoffKey: (controlBackend === "sony" || controlBackend === "xiaomi")
+    ? address : modelId
 
   readonly property int bluezLevel: Model.batteryLevel(device)
   // The bar carries one number: the headset's own figure where there is only
@@ -335,6 +343,7 @@ Item {
     }
     if (ancRestart.running) { ancRestart.stop(); ancEnabled = true }
     if (sonyRestart.running) { sonyRestart.stop(); sonyEnabled = true }
+    if (xiaomiRestart.running) { xiaomiRestart.stop(); xiaomiEnabled = true }
     if (!useFastPair || !service) return
     // The service cycles this device's channel and leaves every other device's
     // alone; it says whether the request went out at all, because a reader that
@@ -365,6 +374,7 @@ Item {
     if (!ancSupported || !ancLive) return false
     if (modesAvailable.indexOf(String(mode)) === -1) return false
     if (sonyBridge.running) sonyBridge.write("set " + mode + "\n")
+    else if (xiaomiBridge.running) xiaomiBridge.write("set " + mode + "\n")
     else ancBridge.write("set " + mode + "\n")
     return true
   }
@@ -658,6 +668,56 @@ Item {
     onTriggered: follower.sonyEnabled = true
   }
 
+  // Lives only while Xiaomi / QCC buds that advertise CSR GAIA are connected.
+  // Same gates as Sony: the channel is Classic SPP, so there is no BLE address
+  // to wait for and no Fast Pair to depend on. An address that already failed
+  // for good this session is parked on the same map Sony uses.
+  Process {
+    id: xiaomiBridge
+    running: follower.useModeControl && follower.xiaomiEnabled && follower.connected
+      && follower.controlBackend === "xiaomi"
+      && !follower.addressParked
+    command: [follower.xiaomiBridgePath, follower.address]
+    stdinEnabled: true
+    stdout: SplitParser {
+      onRead: function(line) { follower.applyAncLine(line) }
+    }
+    stderr: StdioCollector { id: xiaomiStderr; waitForEnd: true }
+    onRunningChanged: {
+      if (running) {
+        follower.ancRunError = ""
+        follower.ancErrorRaw = ""
+      }
+      follower.ancState = ({})
+      follower.ancAnswered = false
+    }
+    onExited: function(exitCode, exitStatus) {
+      if (exitCode === 3 && follower.service)
+        follower.service.parkAddress(follower.address)
+      if (exitCode === 3) {
+        follower.ancRunError = ""
+        follower.ancErrorRaw = ""
+      } else if (exitCode !== 0 && follower.ancRunError === "") {
+        follower.ancErrorRaw = Model.shortError(xiaomiStderr.text, exitCode === 4
+          ? "the listening-mode bridge could not start"
+          : "the listening-mode link dropped (exit " + exitCode + ")")
+      }
+
+      follower.xiaomiEnabled = false
+      xiaomiRestart.interval = follower.service
+        ? follower.service.ancBackoffFor(follower.address) : 10000
+      if ((exitCode === 1 || exitCode === 4) && follower.service)
+        follower.service.bumpAncBackoff(follower.address)
+      xiaomiRestart.restart()
+    }
+  }
+
+  Timer {
+    id: xiaomiRestart
+    repeat: false
+    onTriggered: follower.xiaomiEnabled = true
+  }
+
   // Reads the device's SDP UUIDs, which is how the backend is chosen. Started by
   // probeUuids() rather than by a `running` binding: this process exits as soon
   // as it has printed, and a binding that is still true at that moment is an
@@ -667,7 +727,7 @@ Item {
     stdout: StdioCollector { id: uuidProbeOut; waitForEnd: true }
     onExited: function(exitCode, exitStatus) {
       // A probe that failed says nothing about the device, and an empty list is
-      // exactly that: no Sony UUID seen, so a Fast Pair BLE address decides.
+      // exactly that: no Sony or GAIA UUID seen, so a Fast Pair BLE address decides.
       follower.deviceUuids = exitCode === 0
         ? Model.uuidsFromBluetoothctl(uuidProbeOut.text)
         : []

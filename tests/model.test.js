@@ -212,9 +212,12 @@ Deno.test("findByWhich answers for the device an IPC caller named", () => {
   const followed = [
     { name: "JBL TUNE230NC TWS", address: "AA:BB:CC:DD:EE:FF" },
     { name: "WH-CH720N", address: "B0:11:22:33:44:55", controlBackend: "sony" },
+    { name: "Xiaomi Buds 5 Pro", address: "64:8F:DB:87:06:CB", controlBackend: "xiaomi" },
   ];
   // The brand is often only in the backend: a Sony calls itself "WH-CH720N".
   assertEquals(Model.findByWhich(followed, "sony"), 1);
+  assertEquals(Model.findByWhich(followed, "xiaomi"), 2);
+  assertEquals(Model.findByWhich(followed, "buds 5"), 2);
   // Nothing named is the first device, which is what a no-argument call means.
   assertEquals(Model.findByWhich(followed, ""), 0);
   assertEquals(Model.findByWhich(followed, "  "), 0);
@@ -585,7 +588,21 @@ Deno.test("controlBackend picks the protocol the device advertises", () => {
   assertEquals(Model.controlBackend(sony, "48:B4:41:00:00:01"), "sony");
   // bluetoothctl prints them lowercase, but nothing guarantees it.
   assertEquals(Model.controlBackend([Model.SONY_MDR_V2_UUID.toUpperCase()], ""), "sony");
-  // No Sony UUID: the BLE address from the Message Stream is what is left.
+  // CSR GAIA in the SDP record is Xiaomi / QCC on SPP, and beats a BLE address
+  // the same way Sony does: the UUID is the device's own claim.
+  const xiaomi = [
+    "00001101-0000-1000-8000-00805f9b34fb",
+    Model.CSR_GAIA_UUID,
+  ];
+  assertEquals(Model.controlBackend(xiaomi, ""), "xiaomi");
+  assertEquals(Model.controlBackend(xiaomi, "48:B4:41:00:00:01"), "xiaomi");
+  assertEquals(Model.controlBackend([Model.CSR_GAIA_UUID.toUpperCase()], ""), "xiaomi");
+  // Sony still wins when both vendor UUIDs are listed.
+  assertEquals(
+    Model.controlBackend([Model.CSR_GAIA_UUID, Model.SONY_MDR_V2_UUID], ""),
+    "sony",
+  );
+  // No Sony or GAIA UUID: the BLE address from the Message Stream is what is left.
   assertEquals(Model.controlBackend([], "48:B4:41:00:00:01"), "jbl");
   assertEquals(Model.controlBackend(null, "48:B4:41:00:00:01"), "jbl");
   // Nothing to reach the device with.

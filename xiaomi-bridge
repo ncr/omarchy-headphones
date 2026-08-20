@@ -1,0 +1,500 @@
+#!/usr/bin/env python3
+"""Hold one SPP/RFCOMM link to Xiaomi Buds 5 Pro and mirror the listening mode.
+
+    xiaomi-bridge <classic-address>
+
+Prints one JSON object per line, and reads one command per line:
+
+    stdout   {"modes": true, "mode": "anc", "available": ["off","anc","ambient"]}
+             {"modes": false, "error": "..."}
+    stdin    set off | set anc | set ambient
+
+Exit codes, which the shell-side service reads to decide what to do next:
+
+    0   clean stop: SIGTERM/SIGINT, or the widget closed the pipe
+    1   transient: the profile never connected, the handshake went unanswered,
+        or the channel closed under us. Says nothing about the buds, so the
+        service retries with a growing pause
+    3   linked but silent: handshake worked, the listening-mode GET did not.
+        This device speaks Compact GAIA but not this part of it, so the
+        service parks the address
+    4   setup failure: bad arguments, or python-dbus/PyGObject missing. About
+        this machine, not about the buds
+
+Sibling of sony-bridge: same stdout/stdin/exit-code contract, a different
+channel. Sony serves its own UUID; these buds speak Compact GAIA on standard
+SPP (`00001101-…`). Detection is the CSR GAIA UUID in the SDP record
+(`00001100-d102-…`), which they advertise even though that RFCOMM channel
+itself refuses ConnectProfile.
+
+Protocol, confirmed on Xiaomi Buds 5 Pro (QCC-7228) — see PROTOCOL.md:
+
+    frame    FF <ver> <flags=00> <len> <vendor u16be> <cmd u16be> <payload>
+    init     vendor 0x000A cmd 0x0300, answered 0x8300; this device uses ver 3
+    get      vendor 0x001D cmd 0x1003 empty, answered 0x1103, 5-byte payload
+    set      vendor 0x001D cmd 0x1004, one byte; 5-byte copies of GET are
+             rejected (0x1184 payload 05). 0x1104 empty is the SET ack
+
+SET/GET byte, and the name the panel uses. Off and ANC were confirmed on the
+buds. Ambient is 0x02 (same extra flags as 0x03/0x04, and SET 0x02 did not
+drop the link). 0x04 is Moondrop's transparency byte on this vendor - on
+these buds it reboots them, and must never be sent.
+
+    0x00 off     GET 00 01 00 00 00
+    0x01 anc     GET 01 01 01 00 00
+    0x02 ambient GET 02 01 00 01 00
+
+0x03 is accepted and not offered. 0x04 is forbidden.
+"""
+import ctypes
+import json
+import os
+import re
+import signal
+import struct
+import sys
+
+try:
+    import dbus
+    import dbus.mainloop.glib
+    import dbus.service
+    from gi.repository import GLib
+except ImportError as error:
+    sys.stdout.write(json.dumps({
+        "modes": False,
+        "error": "missing python dependency %s - install it with: "
+                 "sudo pacman -S --needed python-dbus python-gobject"
+                 % (getattr(error, "name", None) or error),
+    }) + "\n")
+    sys.stdout.flush()
+    sys.exit(4)
+
+try:
+    from gi.repository import GLibUnix
+    unix_signal_add = GLibUnix.signal_add
+except ImportError:
+    unix_signal_add = GLib.unix_signal_add
+
+# Standard SPP. The CSR GAIA UUID is how the widget picks this backend; this
+# is the channel that actually answers.
+UUID = "00001101-0000-1000-8000-00805f9b34fb"
+PROFILE_PATH = "/io/github/ncr/omaphones/xiaomi"
+
+GAIA_VENDOR = 0x000A
+DEVICE_VENDOR = 0x001D
+HANDSHAKE, HANDSHAKE_RET = 0x0300, 0x8300
+GET_MODE, RET_MODE, SET_MODE, ACK_MODE = 0x1003, 0x1103, 0x1004, 0x1104
+
+# Names the panel already draws. Bytes the buds accepted that have no name yet
+# are not in this table: a GET of one of those leaves `mode` blank so no
+# button pretends to be selected.
+MODE_FROM_BYTE = {0x00: "off", 0x01: "anc", 0x02: "ambient"}
+BYTE_FROM_MODE = {name: byte for byte, name in MODE_FROM_BYTE.items()}
+AVAILABLE = ["off", "anc", "ambient"]
+
+# SET 0x04 reboots Xiaomi Buds 5 Pro. Refused even if a table above drifts.
+FORBIDDEN_SET = frozenset({0x04})
+
+ADDRESS = re.compile(r"^([0-9A-Fa-f]{2}:){5}[0-9A-Fa-f]{2}$")
+
+USAGE = "usage: xiaomi-bridge <classic-address>"
+
+EXIT_TRANSIENT = 1
+EXIT_UNSUPPORTED = 3
+EXIT_SETUP = 4
+
+REPLY_TIMEOUT = 5
+CONNECT_TIMEOUT = 30
+CONNECT_DELAY = 500
+CONNECT_RETRY = 1500
+CONNECT_ATTEMPTS = 10
+INIT_TIMEOUT = 2000
+INIT_ATTEMPTS = 3
+GET_TIMEOUT = 3000
+# Touch-control changes do not notify on this channel (nothing unsolicited
+# arrived while probing). A light GET is how the panel follows a press on the
+# bud. Two and a half seconds is slower than a person tapping and cheap on
+# RFCOMM.
+POLL_INTERVAL = 2500
+
+
+def emit(payload):
+    try:
+        sys.stdout.write(json.dumps(payload, separators=(",", ":")) + "\n")
+        sys.stdout.flush()
+    except (BrokenPipeError, ValueError):
+        os._exit(0)
+
+
+def arm_parent_death_signal():
+    """Die with the shell that started us.
+
+    Same reason as sony-bridge: an orphaned holder keeps the SPP registration
+    and every later start is handed nothing.
+    """
+    try:
+        libc = ctypes.CDLL("libc.so.6", use_errno=True)
+        libc.prctl(1, signal.SIGTERM)
+    except Exception:
+        return
+    if os.getppid() == 1:
+        os._exit(0)
+
+
+def frame(version, vendor, command, payload=b""):
+    return bytes([0xFF, version & 0xFF, 0x00, len(payload)]) + struct.pack(
+        ">HH", vendor, command) + payload
+
+
+def take_frames(buffer):
+    """Whole Compact GAIA frames from a byte buffer, leftover bytes kept."""
+    data = bytes(buffer)
+    frames = []
+    index = 0
+    while index < len(data):
+        if data[index] != 0xFF:
+            index += 1
+            continue
+        if index + 8 > len(data):
+            break
+        flags = data[index + 2]
+        # This device answered flags=0, compact length. Anything else is not
+        # a frame we can trust, so skip the 0xFF rather than guess.
+        if flags != 0:
+            index += 1
+            continue
+        length = data[index + 3]
+        need = 8 + length
+        if index + need > len(data):
+            break
+        version = data[index + 1]
+        vendor, command = struct.unpack(">HH", data[index + 4:index + 8])
+        payload = data[index + 8:index + need]
+        frames.append((version, vendor, command, payload))
+        index += need
+    return frames, bytearray(data[index:])
+
+
+def find_device_path(bus, address):
+    wanted = address.upper()
+    objects = dbus.Interface(bus.get_object("org.bluez", "/"),
+                             "org.freedesktop.DBus.ObjectManager").GetManagedObjects()
+    for path, interfaces in objects.items():
+        device = interfaces.get("org.bluez.Device1")
+        if device and str(device.get("Address", "")).upper() == wanted:
+            return str(path)
+    return None
+
+
+class Bridge:
+    def __init__(self, bus, address, loop):
+        self.bus = bus
+        self.address = address
+        self.loop = loop
+        self.exit_code = None
+        self.device = None
+        self.manager = None
+        self.registered = False
+
+        self.fd = None
+        self.watch = None
+        self.buffer = bytearray()
+
+        self.version = 3
+        self.handshake_seen = False
+        self.mode_seen = False
+        self.mode = ""
+        self.last_line = None
+        self.poll = None
+
+        self.pending = ""
+
+    def finish(self, code, message=None):
+        if self.exit_code is not None:
+            return False
+        self.exit_code = code
+        if message:
+            emit({"modes": False, "error": message})
+        self.loop.quit()
+        return False
+
+    def unregister(self):
+        if self.poll is not None:
+            try:
+                GLib.source_remove(self.poll)
+            except Exception:
+                pass
+            self.poll = None
+        if self.watch is not None:
+            try:
+                GLib.source_remove(self.watch)
+            except Exception:
+                pass
+            self.watch = None
+        if self.fd is not None:
+            try:
+                os.close(self.fd)
+            except OSError:
+                pass
+            self.fd = None
+        if self.manager is not None and self.registered:
+            try:
+                self.manager.UnregisterProfile(PROFILE_PATH, timeout=REPLY_TIMEOUT)
+            except dbus.DBusException:
+                pass
+            self.registered = False
+
+    def register(self):
+        try:
+            device_path = find_device_path(self.bus, self.address)
+        except dbus.DBusException as error:
+            return self.finish(EXIT_TRANSIENT,
+                               "cannot reach BlueZ: %s" % error.get_dbus_message())
+        if not device_path:
+            return self.finish(EXIT_TRANSIENT,
+                               "no paired device with address %s" % self.address)
+        self.device = dbus.Interface(
+            self.bus.get_object("org.bluez", device_path), "org.bluez.Device1")
+        self.manager = dbus.Interface(
+            self.bus.get_object("org.bluez", "/org/bluez"), "org.bluez.ProfileManager1")
+        try:
+            self.manager.RegisterProfile(PROFILE_PATH, UUID, {
+                "Name": "Omaphones Xiaomi",
+                "Role": "client",
+                "Channel": dbus.UInt16(0),
+                "RequireAuthentication": dbus.Boolean(False),
+                "RequireAuthorization": dbus.Boolean(False),
+                "AutoConnect": dbus.Boolean(False),
+            }, timeout=REPLY_TIMEOUT)
+        except dbus.DBusException as error:
+            return self.finish(EXIT_TRANSIENT,
+                               "cannot register the Xiaomi profile: %s"
+                               % error.get_dbus_message())
+        self.registered = True
+        GLib.timeout_add(CONNECT_DELAY, self.connect, 0)
+        return False
+
+    def connect(self, attempt):
+        if self.exit_code is not None or self.fd is not None:
+            return False
+
+        def failed(error):
+            if self.exit_code is not None or self.fd is not None:
+                return
+            if attempt + 1 < CONNECT_ATTEMPTS:
+                GLib.timeout_add(CONNECT_RETRY, self.connect, attempt + 1)
+                return
+            self.finish(EXIT_TRANSIENT, "cannot open the Xiaomi channel: %s"
+                        % error.get_dbus_message())
+
+        try:
+            self.device.ConnectProfile(UUID, reply_handler=lambda: None,
+                                       error_handler=failed, timeout=CONNECT_TIMEOUT)
+        except dbus.DBusException as error:
+            failed(error)
+        return False
+
+    def opened(self, fd):
+        if self.fd is not None:
+            try:
+                os.close(fd)
+            except OSError:
+                pass
+            return
+        self.fd = fd
+        self.watch = GLib.io_add_watch(fd, GLib.PRIORITY_DEFAULT,
+                                       GLib.IO_IN | GLib.IO_HUP | GLib.IO_ERR,
+                                       self.on_io)
+        self.send_handshake(1)
+
+    def write(self, payload):
+        if self.fd is None:
+            return
+        try:
+            written = 0
+            while written < len(payload):
+                written += os.write(self.fd, payload[written:])
+        except OSError as error:
+            self.finish(EXIT_TRANSIENT, "the Xiaomi channel closed: %s" % error)
+
+    def send_handshake(self, attempt):
+        if self.exit_code is not None or self.handshake_seen:
+            return False
+        if attempt > INIT_ATTEMPTS:
+            return self.finish(EXIT_TRANSIENT,
+                               "the Xiaomi buds did not answer the handshake")
+        self.write(frame(self.version, GAIA_VENDOR, HANDSHAKE))
+        GLib.timeout_add(INIT_TIMEOUT, self.send_handshake, attempt + 1)
+        return False
+
+    def ask_mode(self):
+        if self.exit_code is not None or self.fd is None:
+            return False
+        self.write(frame(self.version, DEVICE_VENDOR, GET_MODE))
+        return True
+
+    def on_get_timeout(self):
+        if self.exit_code is not None or self.mode_seen:
+            return False
+        return self.finish(EXIT_UNSUPPORTED,
+                           "the buds did not answer the listening-mode query")
+
+    def start_poll(self):
+        if self.poll is not None:
+            return
+        self.poll = GLib.timeout_add(POLL_INTERVAL, self.ask_mode)
+
+    def on_io(self, _fd, condition):
+        if condition & (GLib.IO_HUP | GLib.IO_ERR):
+            self.finish(EXIT_TRANSIENT, "the Xiaomi channel closed")
+            return False
+        try:
+            data = os.read(self.fd, 4096)
+        except OSError as error:
+            self.finish(EXIT_TRANSIENT, "the Xiaomi channel closed: %s" % error)
+            return False
+        if not data:
+            self.finish(EXIT_TRANSIENT, "the Xiaomi channel closed")
+            return False
+        self.buffer += data
+        frames, self.buffer = take_frames(self.buffer)
+        for parsed in frames:
+            self.on_frame(*parsed)
+            if self.exit_code is not None:
+                return False
+        return True
+
+    def on_frame(self, version, vendor, command, payload):
+        if 1 <= version <= 4:
+            self.version = version
+        if vendor == GAIA_VENDOR and command == HANDSHAKE_RET:
+            if not self.handshake_seen:
+                self.handshake_seen = True
+                self.ask_mode()
+                GLib.timeout_add(GET_TIMEOUT, self.on_get_timeout)
+            return
+        if vendor != DEVICE_VENDOR:
+            return
+        if command == RET_MODE:
+            self.on_mode(payload)
+            return
+        if command == ACK_MODE:
+            # SET landed; GET is what names it. A GET already in flight from
+            # the poll is enough, and one extra now is cheap.
+            self.ask_mode()
+
+    def on_mode(self, payload):
+        if not payload:
+            return
+        first = not self.mode_seen
+        self.mode_seen = True
+        self.mode = MODE_FROM_BYTE.get(payload[0], "")
+        line = {
+            "modes": True,
+            "mode": self.mode,
+            "available": AVAILABLE,
+        }
+        if first or line != self.last_line:
+            self.last_line = line
+            emit(line)
+        if first:
+            self.start_poll()
+
+    def command(self, line):
+        parts = line.strip().split()
+        if not parts or not self.mode_seen:
+            return
+        if parts[0] == "set" and len(parts) > 1:
+            byte = BYTE_FROM_MODE.get(parts[1])
+            if byte is None or byte in FORBIDDEN_SET:
+                return
+            self.write(frame(self.version, DEVICE_VENDOR, SET_MODE, bytes([byte])))
+
+    def on_stdin(self, _fd, condition):
+        if condition & (GLib.IO_HUP | GLib.IO_ERR):
+            self.finish(0)
+            return False
+        try:
+            chunk = os.read(0, 4096)
+        except OSError:
+            self.finish(0)
+            return False
+        if not chunk:
+            self.finish(0)
+            return False
+        self.pending += chunk.decode("utf-8", "replace")
+        while "\n" in self.pending:
+            line, self.pending = self.pending.split("\n", 1)
+            self.command(line)
+        return True
+
+    def listen_to_stdin(self):
+        GLib.io_add_watch(0, GLib.PRIORITY_DEFAULT,
+                          GLib.IO_IN | GLib.IO_HUP | GLib.IO_ERR, self.on_stdin)
+
+
+def main():
+    argv = sys.argv[1:]
+    address = argv[0].strip() if argv else ""
+    if argv and argv[0] in ("-h", "--help"):
+        print(USAGE)
+        return 0
+    if not argv or not ADDRESS.match(address):
+        emit({"modes": False,
+              "error": "%s (not a Bluetooth address: %r)" % (USAGE, address)})
+        sys.exit(EXIT_SETUP)
+
+    dbus.mainloop.glib.DBusGMainLoop(set_as_default=True)
+    try:
+        bus = dbus.SystemBus()
+    except dbus.DBusException as error:
+        emit({"modes": False, "error": "no system bus: %s" % error.get_dbus_message()})
+        sys.exit(EXIT_TRANSIENT)
+
+    loop = GLib.MainLoop()
+    bridge = Bridge(bus, address, loop)
+
+    class Profile(dbus.service.Object):
+        @dbus.service.method("org.bluez.Profile1", in_signature="", out_signature="")
+        def Release(self):
+            bridge.finish(EXIT_TRANSIENT, "BlueZ released the Xiaomi profile")
+
+        @dbus.service.method("org.bluez.Profile1", in_signature="oha{sv}",
+                             out_signature="")
+        def NewConnection(self, path, fd, properties):
+            bridge.opened(fd.take())
+
+        @dbus.service.method("org.bluez.Profile1", in_signature="o", out_signature="")
+        def RequestDisconnection(self, path):
+            bridge.finish(EXIT_TRANSIENT, "the Xiaomi channel closed")
+
+    Profile(bus, PROFILE_PATH)
+    bridge.listen_to_stdin()
+    bridge.register()
+
+    def stop(*_args):
+        bridge.finish(0)
+        return False
+
+    unix_signal_add(GLib.PRIORITY_DEFAULT, signal.SIGTERM, stop)
+    unix_signal_add(GLib.PRIORITY_DEFAULT, signal.SIGINT, stop)
+
+    try:
+        if bridge.exit_code is None:
+            loop.run()
+    finally:
+        bridge.unregister()
+    sys.exit(bridge.exit_code or 0)
+
+
+if __name__ == "__main__":
+    arm_parent_death_signal()
+    try:
+        main()
+    except SystemExit:
+        raise
+    except KeyboardInterrupt:
+        pass
+    except BaseException as error:
+        emit({"modes": False, "error": "%s: %s" % (type(error).__name__, error)})
+        sys.exit(EXIT_TRANSIENT)

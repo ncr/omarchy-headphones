@@ -12,8 +12,8 @@
 - **The bar icon is the meter** — earbuds are drawn as a pair, a headset as
   headphones, filling up as they charge. Readable from the bar without opening
   anything.
-- **Noise control** — Off / ANC / Ambient / TalkThru, from the panel or a key.
-  JBL and Sony today; built to learn your brand.
+- **Noise control** - Off / ANC / Ambient / TalkThru, from the panel or a key.
+  JBL, Sony and Xiaomi Buds 5 Pro today; built to learn your brand.
 - **Several headphones at once** — one icon per connected set, each with its own
   panel.
 - **Low-battery notification** that names the earbud.
@@ -53,17 +53,19 @@ again — along with its settings, so note them first if you changed any.
 |:----------------------------|:----------------------------------------------------------------------|:------------------------------------------------------------------------------------------------|:-------------------------------|
 | JBL TUNE230NC TWS (earbuds) | <img src="docs/icons/yes.svg" width="14" alt="yes"> left, right, case | <img src="docs/icons/yes.svg" width="14" alt="yes"> Off · ANC · Ambient · TalkThru              | [@ncr](https://github.com/ncr) |
 | Sony WH-CH720N (over-ear)   | <img src="docs/icons/yes.svg" width="14" alt="yes"> one figure        | <img src="docs/icons/yes.svg" width="14" alt="yes"> Off · ANC · Ambient (level, Focus on Voice) | [@ncr](https://github.com/ncr) |
+| Xiaomi Buds 5 Pro (earbuds) | <img src="docs/icons/yes.svg" width="14" alt="yes"> one figure        | <img src="docs/icons/yes.svg" width="14" alt="yes"> Off · ANC · Ambient                          | —                              |
 | other Fast Pair headphones  | <img src="docs/icons/yes.svg" width="14" alt="yes"> expected          | <img src="docs/icons/unknown.svg" width="14" alt="untested">                                    | —                              |
 
 Battery works on anything that serves the Google Fast Pair Message Stream
 (`bluetoothctl info <address>` lists `df21fe2c-…`) — most headphones do — and
 falls back to BlueZ's single figure otherwise. Noise control needs the
-vendor's own channel: Sony MDR v2 (`956c7b26-…`) and JBL are spoken today.
+vendor's own channel: Sony MDR v2 (`956c7b26-…`), Compact GAIA on SPP for
+Xiaomi Buds 5 Pro (`00001100-d102-…` in the SDP record), and JBL over BLE.
 
 ## Add your own headphones
 
 Paste the text below into your AI coding agent (Claude Code, Codex, OpenCode…).
-It adds support for your headphones and opens a pull request here. How the two
+It adds support for your headphones and opens a pull request here. How the
 existing protocols were found is written down in [PROTOCOL.md](PROTOCOL.md).
 
 ```text
