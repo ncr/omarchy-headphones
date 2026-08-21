@@ -2,10 +2,10 @@
   "schemaVersion": 1,
   "id": "io.github.ncr.omaphones",
   "name": "Omaphones",
-  "version": "1.0.1",
+  "version": "1.0.2",
   "author": "Jacek Becela",
   "license": "MIT",
-  "description": "Battery and noise control for wireless headphones in the bar. Earbuds show left, right and case levels; ANC / Ambient switching works on JBL and Sony. One icon per connected set.",
+  "description": "Battery and noise control for wireless headphones in the bar. Works with: JBL, Sony, and other headphones that support Google Fast Pair or standard Bluetooth battery reporting. Earbuds show left, right and case levels; ANC / Ambient switching. One icon per connected set.",
   "kinds": [
     "service",
     "bar-widget"
@@ -17,7 +17,7 @@
   },
   "barWidget": {
     "displayName": "Omaphones",
-    "description": "Battery and noise control for wireless headphones in the bar. Earbuds show left, right and case levels; ANC / Ambient switching works on JBL and Sony. One icon per connected set.",
+    "description": "Battery and noise control for wireless headphones in the bar. Works with: JBL, Sony, and other headphones that support Google Fast Pair or standard Bluetooth battery reporting. Earbuds show left, right and case levels; ANC / Ambient switching. One icon per connected set.",
     "category": "Audio",
     "aliases": [
       "headphones",
