@@ -466,7 +466,6 @@ def main():
 
     # Keep the loop alive with a dummy timeout
     GLib.timeout_add(1000, lambda: True)
-
     try:
         if bridge.exit_code is None:
             loop.run()

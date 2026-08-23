@@ -148,6 +148,11 @@ Panel {
   // them are offered is not.
   readonly property var allAncOptions: [
     { value: "off", key: "o", label: "Off", tooltip: "No noise control" },
+    { value: "high", key: "h", label: "High", tooltip: "High Noise Cancelling" },
+    { value: "mid", key: "m", label: "Mid", tooltip: "Mid Noise Cancelling" },
+    { value: "low", key: "l", label: "Low", tooltip: "Low Noise Cancelling" },
+    { value: "adaptive", key: "d", label: "Adaptive", tooltip: "Adaptive Noise Cancelling" },
+    { value: "transparency", key: "x", label: "Transparency", tooltip: "Transparency Mode" },
     { value: "anc", key: "n", label: "ANC", tooltip: "Noise Cancelling" },
     { value: "ambient", key: "a", label: "Ambient", tooltip: "Ambient Aware" },
     { value: "talkthru", key: "t", label: "TalkThru", tooltip: "TalkThru" }

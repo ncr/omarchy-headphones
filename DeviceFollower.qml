@@ -139,11 +139,10 @@ Item {
     && !nothingAddressParked
   property bool nothingArmed: false
   onNothingWantedChanged: {
-    console.log("nothingWanted changed:", nothingWanted, "useModeControl:", useModeControl, "nothingEnabled:", nothingEnabled, "connected:", connected, "controlBackend:", controlBackend, "nothingAddressParked:", nothingAddressParked)
     if (!nothingWanted) { nothingArmed = false; return }
     Qt.callLater(function () { nothingArmed = follower.nothingWanted })
   }
-  onNothingArmedChanged: console.log("nothingArmed changed:", nothingArmed)
+  onNothingArmedChanged: {}
   property bool ancRestartWanted: false
   property bool ancAnswered: false
   property string ancRunError: ""
@@ -753,7 +752,6 @@ Item {
     command: ["bluetoothctl", "info", follower.address]
     stdout: StdioCollector { id: uuidProbeOut; waitForEnd: true }
     onExited: function(exitCode, exitStatus) {
-      console.log("uuidProbe exited:", exitCode, "stdout:", uuidProbeOut.text)
       // A probe that failed says nothing about the device, and an empty list is
       // exactly that: no Sony UUID seen, so a Fast Pair BLE address decides.
       follower.deviceUuids = exitCode === 0
