@@ -1,0 +1,487 @@
+#!/usr/bin/env python3
+"""Hold one Nothing RFCOMM link and mirror the earbuds' ANC mode.
+
+    nothing-bridge <classic-address>
+
+Prints one JSON object per line, and reads one command per line:
+
+    stdout   {"modes": true, "mode": "transparency", "available": ["off","high","mid","low","adaptive","transparency"]}
+              {"modes": false, "error": "..."}
+    stdin    set off | set high | set mid | set low | set adaptive | set transparency
+
+Exit codes, which the shell-side service reads to decide what to do next:
+
+    0   clean stop: SIGTERM/SIGINT, or the widget closed the pipe
+    1   transient: the profile never connected, the handshake went unanswered,
+        or the channel closed under us. Says nothing about the earbuds, so the
+        service retries with a growing pause
+    3   linked but silent: the handshake worked and the ANC query was asked
+        but nothing answered. This earbud speaks the protocol but not this
+        part of it, so the service parks the address
+    4   setup failure: bad arguments, or python-dbus/PyGObject missing. About
+        this machine, not about the earbuds
+
+Why a bridge at all: the ANC mode lives behind Nothing's NT Link RFCOMM service
+(UUID aeac4a03-dff5-498f-843a-34487cf133eb), the same channel carries our
+commands and the earbuds' unsolicited notifications, and BlueZ hands the socket
+to whoever registered the org.bluez.Profile1 for that UUID — one holder, like
+the Fast Pair reader. So one process owns the channel, the widget talks to it
+through a pipe, and pressing the ANC button on the earbud and clicking a mode
+in the panel are the same conversation.
+
+Protocol, confirmed on Nothing Ear (a) — see earctl and nothing-linux projects:
+
+    frame    55 60 01 <cmd u16 LE> <len u8> 00 <op_id u8> <payload...> <crc u16 LE>
+    CRC      CRC16/ARC (init=0xFFFF, poly=0xA001) over all bytes before CRC
+    commands REQUEST_ANC=0xC01E, CMD_SET_ANC=0xF00F
+    responses ANC_PRIMARY=0xE003, ANC_SECONDARY=0x401E
+    ANC mode byte 1 of payload: 7=transparency, 5=off, 4=adaptive, 3=low, 2=mid, 1=high
+"""
+import ctypes
+import json
+import os
+import re
+import signal
+import struct
+import sys
+
+try:
+    import dbus
+    import dbus.mainloop.glib
+    import dbus.service
+    from gi.repository import GLib
+except ImportError as error:
+    sys.stdout.write(json.dumps({
+        "modes": False,
+        "error": "missing python dependency %s — install it with: "
+                 "sudo pacman -S --needed python-dbus python-gobject"
+                 % (getattr(error, "name", None) or error),
+    }) + "\n")
+    sys.stdout.flush()
+    sys.exit(4)
+
+try:
+    from gi.repository import GLibUnix
+    unix_signal_add = GLibUnix.signal_add
+except ImportError:
+    unix_signal_add = GLib.unix_signal_add
+
+UUID = "aeac4a03-dff5-498f-843a-34487cf133eb"
+PROFILE_PATH = "/io/github/ncr/omaphones/nothing"
+
+# Nothing wire protocol constants
+HDR_MAGIC = bytes([0x55, 0x60, 0x01])
+REQUEST_ANC = 0xC01E
+CMD_SET_ANC = 0xF00F
+ANC_PRIMARY = 0xE003
+ANC_SECONDARY = 0x401E
+
+# ANC modes (device values)
+ANC_MODES = {
+    "off": 0x05,
+    "high": 0x01,
+    "mid": 0x02,
+    "low": 0x03,
+    "adaptive": 0x04,
+    "transparency": 0x07,
+}
+
+# Reverse mapping for reporting
+ANC_MODE_NAMES = {v: k for k, v in ANC_MODES.items()}
+
+# What the panel draws buttons for, in order
+MODE_ORDER = ["off", "high", "mid", "low", "adaptive", "transparency"]
+
+ADDRESS = re.compile(r"^([0-9A-Fa-f]{2}:){5}[0-9A-Fa-f]{2}$")
+
+USAGE = "usage: nothing-bridge <classic-address>"
+
+EXIT_TRANSIENT = 1
+EXIT_UNSUPPORTED = 3
+EXIT_SETUP = 4
+
+REPLY_TIMEOUT = 5
+CONNECT_TIMEOUT = 30
+CONNECT_DELAY = 500
+CONNECT_RETRY = 1500
+CONNECT_ATTEMPTS = 10
+ANSWER_TIMEOUT = 5000
+POLL_INTERVAL = 3000
+
+def crc16(data):
+    crc = 0xFFFF
+    for byte in data:
+        crc ^= byte
+        for _ in range(8):
+            if crc & 1:
+                crc = (crc >> 1) ^ 0xA001
+            else:
+                crc >>= 1
+    return crc
+
+def build_frame(cmd, payload=b"", op_id=1):
+    """Build a Nothing protocol frame with CRC."""
+    frame = bytearray(HDR_MAGIC)
+    frame.extend(struct.pack("<H", cmd))
+    frame.append(len(payload))
+    frame.append(0x00)
+    frame.append(op_id)
+    frame.extend(payload)
+    crc = crc16(frame)
+    frame.extend(struct.pack("<H", crc))
+    return bytes(frame)
+
+def parse_frame(data):
+    """Parse a Nothing protocol frame. Returns (cmd, op_id, payload) or None."""
+    if len(data) < 10:
+        return None
+    if data[0:3] != HDR_MAGIC:
+        return None
+    cmd = struct.unpack("<H", data[3:5])[0]
+    length = data[5]
+    op_id = data[7]
+    if len(data) < 8 + length + 2:
+        return None
+    payload = data[8:8+length]
+    # Verify CRC
+    crc_received = struct.unpack("<H", data[8+length:8+length+2])[0]
+    crc_calc = crc16(data[:8+length])
+    if crc_received != crc_calc:
+        return None
+    return cmd, op_id, payload
+
+def emit(payload):
+    try:
+        sys.stdout.write(json.dumps(payload, separators=(",", ":")) + "\n")
+        sys.stdout.flush()
+    except (BrokenPipeError, ValueError):
+        os._exit(0)
+
+def arm_parent_death_signal():
+    try:
+        libc = ctypes.CDLL("libc.so.6", use_errno=True)
+        libc.prctl(1, signal.SIGTERM)
+    except Exception:
+        return
+    if os.getppid() == 1:
+        os._exit(0)
+
+def find_device_path(bus, address):
+    wanted = address.upper()
+    objects = dbus.Interface(bus.get_object("org.bluez", "/"),
+                             "org.freedesktop.DBus.ObjectManager").GetManagedObjects()
+    for path, interfaces in objects.items():
+        device = interfaces.get("org.bluez.Device1")
+        if device and str(device.get("Address", "")).upper() == wanted:
+            return str(path)
+    return None
+
+class Bridge:
+    def __init__(self, bus, address, loop):
+        self.bus = bus
+        self.address = address
+        self.loop = loop
+        self.exit_code = None
+        self.device = None
+        self.manager = None
+        self.registered = False
+        self.fd = None
+        self.watch = None
+        self.buffer = bytearray()
+        self.mode = ""
+        self.last_line = None
+        self.answered = False
+        self.connect_attempt = 0
+
+    def finish(self, code, message=None):
+        if self.exit_code is not None:
+            return False
+        self.exit_code = code
+        if message:
+            emit({"modes": False, "error": message})
+        self.loop.quit()
+        return False
+
+    def unregister(self):
+        if self.watch is not None:
+            try:
+                GLib.source_remove(self.watch)
+            except Exception:
+                pass
+            self.watch = None
+        if hasattr(self, 'poll_timer') and self.poll_timer is not None:
+            try:
+                GLib.source_remove(self.poll_timer)
+            except Exception:
+                pass
+            self.poll_timer = None
+        if self.fd is not None:
+            try:
+                os.close(self.fd)
+            except OSError:
+                pass
+            self.fd = None
+        if self.manager is not None and self.registered:
+            try:
+                self.manager.UnregisterProfile(PROFILE_PATH, timeout=REPLY_TIMEOUT)
+            except dbus.DBusException:
+                pass
+            self.registered = False
+
+    def register(self):
+        try:
+            device_path = find_device_path(self.bus, self.address)
+        except dbus.DBusException as error:
+            return self.finish(EXIT_TRANSIENT,
+                               "cannot reach BlueZ: %s" % error.get_dbus_message())
+        if not device_path:
+            return self.finish(EXIT_TRANSIENT,
+                               "no paired device with address %s" % self.address)
+        self.device = dbus.Interface(
+            self.bus.get_object("org.bluez", device_path), "org.bluez.Device1")
+        self.manager = dbus.Interface(
+            self.bus.get_object("org.bluez", "/org/bluez"), "org.bluez.ProfileManager1")
+        try:
+            self.manager.RegisterProfile(PROFILE_PATH, UUID, {
+                "Name": "Omaphones Nothing",
+                "Role": "client",
+                "Channel": dbus.UInt16(15),
+                "RequireAuthentication": dbus.Boolean(False),
+                "RequireAuthorization": dbus.Boolean(False),
+            }, timeout=REPLY_TIMEOUT)
+        except dbus.DBusException as error:
+            return self.finish(EXIT_TRANSIENT,
+                               "cannot register the Nothing profile: %s"
+                               % error.get_dbus_message())
+        self.registered = True
+        GLib.timeout_add(CONNECT_DELAY, self.connect, 0)
+        return False
+
+    def connect(self, attempt):
+        if self.exit_code is not None or self.fd is not None:
+            return False
+        self.connect_attempt = attempt + 1
+
+        def failed(error):
+            if self.exit_code is not None or self.fd is not None:
+                return
+            if self.connect_attempt < CONNECT_ATTEMPTS:
+                GLib.timeout_add(CONNECT_RETRY, self.connect, self.connect_attempt)
+                return
+            self.finish(EXIT_TRANSIENT, "cannot open the Nothing channel: %s"
+                        % error.get_dbus_message())
+
+        def success():
+            pass
+
+        try:
+            self.device.ConnectProfile(UUID, reply_handler=success,
+                                       error_handler=failed, timeout=CONNECT_TIMEOUT)
+        except dbus.DBusException as error:
+            failed(error)
+        return False
+
+    def opened(self, fd):
+        if self.fd is not None:
+            try:
+                os.close(fd)
+            except OSError:
+                pass
+            return
+        self.fd = fd
+        self.watch = GLib.io_add_watch(fd, GLib.PRIORITY_DEFAULT,
+                                       GLib.IO_IN | GLib.IO_HUP | GLib.IO_ERR,
+                                       self.on_io)
+        # Send initial ANC query
+        self.send_frame(build_frame(REQUEST_ANC))
+        GLib.timeout_add(ANSWER_TIMEOUT, self.check_answered)
+        # Start polling for ANC changes (device doesn't send unsolicited notifications)
+        self.poll_timer = GLib.timeout_add(POLL_INTERVAL, self.poll_anc)
+        return False
+
+    def check_answered(self):
+        if not self.answered:
+            self.finish(EXIT_UNSUPPORTED, "the earbuds did not answer the ANC query")
+        return False
+
+    def poll_anc(self):
+        if self.exit_code is not None or self.fd is None:
+            return False
+        self.send_frame(build_frame(REQUEST_ANC))
+        return True
+
+    def send_frame(self, frame):
+        if self.fd is None:
+            return
+        try:
+            written = 0
+            while written < len(frame):
+                written += os.write(self.fd, frame[written:])
+        except OSError as error:
+            self.finish(EXIT_TRANSIENT, "the Nothing channel closed: %s" % error)
+
+    def on_io(self, _fd, condition):
+        if condition & (GLib.IO_HUP | GLib.IO_ERR):
+            self.finish(EXIT_TRANSIENT, "the Nothing channel closed")
+            return False
+        try:
+            data = os.read(self.fd, 4096)
+        except OSError as error:
+            self.finish(EXIT_TRANSIENT, "the Nothing channel closed: %s" % error)
+            return False
+        if not data:
+            self.finish(EXIT_TRANSIENT, "the Nothing channel closed")
+            return False
+        self.buffer += data
+        while True:
+            # Find start of frame
+            start = -1
+            for i in range(len(self.buffer) - 2):
+                if self.buffer[i:i+3] == HDR_MAGIC:
+                    start = i
+                    break
+            if start < 0:
+                self.buffer.clear()
+                break
+            if start > 0:
+                del self.buffer[:start]
+            if len(self.buffer) < 8:
+                break
+            length = self.buffer[5]
+            total_len = 8 + length + 2
+            if len(self.buffer) < total_len:
+                break
+            frame = bytes(self.buffer[:total_len])
+            del self.buffer[:total_len]
+            self.on_frame(frame)
+            if self.exit_code is not None:
+                return False
+        return True
+
+    def on_frame(self, frame):
+        parsed = parse_frame(frame)
+        if parsed is None:
+            return
+        cmd, op_id, payload = parsed
+        if cmd in (ANC_PRIMARY, ANC_SECONDARY):
+            self.on_anc_response(payload)
+
+    def on_anc_response(self, payload):
+        if len(payload) < 2:
+            return
+        mode_byte = payload[1]
+        mode_name = ANC_MODE_NAMES.get(mode_byte, "unknown")
+        self.mode = mode_name
+        self.answered = True
+        line = {
+            "modes": True,
+            "mode": self.mode,
+            "available": MODE_ORDER,
+        }
+        if line != self.last_line:
+            self.last_line = line
+            emit(line)
+
+    def set_mode(self, mode):
+        if mode not in ANC_MODES:
+            return
+        device_val = ANC_MODES[mode]
+        frame = build_frame(CMD_SET_ANC, bytes([0x01, device_val, 0x00]))
+        self.send_frame(frame)
+
+    def command(self, line):
+        parts = line.strip().split()
+        if not parts:
+            return
+        if parts[0] == "set" and len(parts) > 1:
+            self.set_mode(parts[1])
+
+    def on_stdin(self, _fd, condition):
+        if condition & (GLib.IO_HUP | GLib.IO_ERR):
+            self.finish(0)
+            return False
+        try:
+            chunk = os.read(0, 4096)
+        except OSError:
+            self.finish(0)
+            return False
+        if not chunk:
+            self.finish(0)
+            return False
+        # Simple line buffering
+        text = chunk.decode("utf-8", "replace")
+        for line in text.split("\n"):
+            if line:
+                self.command(line)
+        return True
+
+    def listen_to_stdin(self):
+        GLib.io_add_watch(0, GLib.PRIORITY_DEFAULT,
+                          GLib.IO_IN | GLib.IO_HUP | GLib.IO_ERR, self.on_stdin)
+
+def main():
+    argv = sys.argv[1:]
+    address = argv[0].strip() if argv else ""
+    if argv and argv[0] in ("-h", "--help"):
+        print(USAGE)
+        return 0
+    if not argv or not ADDRESS.match(address):
+        emit({"modes": False,
+              "error": "%s (not a Bluetooth address: %r)" % (USAGE, address)})
+        sys.exit(EXIT_SETUP)
+
+    dbus.mainloop.glib.DBusGMainLoop(set_as_default=True)
+    try:
+        bus = dbus.SystemBus()
+    except dbus.DBusException as error:
+        emit({"modes": False, "error": "no system bus: %s" % error.get_dbus_message()})
+        sys.exit(EXIT_TRANSIENT)
+
+    loop = GLib.MainLoop()
+    bridge = Bridge(bus, address, loop)
+
+    class Profile(dbus.service.Object):
+        @dbus.service.method("org.bluez.Profile1", in_signature="", out_signature="")
+        def Release(self):
+            bridge.finish(EXIT_TRANSIENT, "BlueZ released the Nothing profile")
+
+        @dbus.service.method("org.bluez.Profile1", in_signature="oha{sv}", out_signature="")
+        def NewConnection(self, path, fd, properties):
+            bridge.opened(fd.take())
+
+        @dbus.service.method("org.bluez.Profile1", in_signature="o", out_signature="")
+        def RequestDisconnection(self, path):
+            bridge.finish(EXIT_TRANSIENT, "the Nothing channel closed")
+
+    Profile(bus, PROFILE_PATH)
+    bridge.listen_to_stdin()
+    bridge.register()
+
+    def stop(*_args):
+        bridge.finish(0)
+        return False
+
+    unix_signal_add(GLib.PRIORITY_DEFAULT, signal.SIGTERM, stop)
+    unix_signal_add(GLib.PRIORITY_DEFAULT, signal.SIGINT, stop)
+
+    # Keep the loop alive with a dummy timeout
+    GLib.timeout_add(1000, lambda: True)
+
+    try:
+        if bridge.exit_code is None:
+            loop.run()
+    finally:
+        bridge.unregister()
+    sys.exit(bridge.exit_code or 0)
+
+if __name__ == "__main__":
+    arm_parent_death_signal()
+    try:
+        main()
+    except SystemExit:
+        raise
+    except KeyboardInterrupt:
+        pass
+    except BaseException as error:
+        emit({"modes": False, "error": "%s: %s" % (type(error).__name__, error)})
+        sys.exit(EXIT_TRANSIENT)

@@ -637,3 +637,100 @@ stale-readback and stored-level behaviours above were pinned down.
 The widget's own bridge holds the same profile, so turn `useModeControl` off
 before running the probe, or BlueZ will refuse the registration to whichever
 asks second.
+
+## Nothing NT Link — the ANC mode on the Ear (a)
+
+A different earbud and a different protocol, on a channel Nothing serves itself:
+
+```
+aeac4a03-dff5-498f-843a-34487cf133eb   NT Link protocol   <- Ear (a), Ear (2), Ear, Ear (stick)…
+```
+
+The protocol was reverse-engineered by the Nothing Linux community. Key references:
+
+- [earctl](https://github.com/DaanHessen/earctl) — Rust implementation with protocol docs
+- [nothing-linux](https://github.com/sn99/nothing-linux) — Tauri app with protocol implementation
+- [bharadwaj-raju blog](https://bharadwaj-raju.github.io/posts/nothing-ear-2-on-linux/) — detailed protocol analysis
+
+**Opening it.** Register an `org.bluez.Profile1` with `UUID` set to `aeac4a03-dff5-498f-843a-34487cf133eb`, `Role` `client`, `Channel` `15` (the known NT Link RFCOMM channel), and BlueZ does the SDP lookup and hands over a connected socket in `NewConnection`. The first `ConnectProfile` attempt often fails with `br-connection-refused` or `br-connection-busy`; a retry after 1.5 seconds works.
+
+And then nothing happens: **the channel is silent until a command goes out.** An open socket with no traffic is the normal state, not a fault.
+
+### Frames
+
+```
+55 60 01 <CMD u16 LE> <LEN u8> 00 <OP_ID u8> <PAYLOAD…> <CRC u16 LE>
+^   \______________________________________________________________________/
+|                this whole span has CRC16/ARC (init=0xFFFF, poly=0xA001)   |
+|
+Magic bytes: 0x55 0x60 0x01 (always)
+```
+
+| field | size | meaning |
+|---|---|---|
+| magic | 3 | `55 60 01` — identifies Nothing protocol |
+| cmd | 2 | command code, little-endian |
+| len | 1 | payload length |
+| 00 | 1 | constant |
+| op_id | 1 | operation ID (echoed in response) |
+| payload | len | command-specific |
+| crc | 2 | CRC16/ARC over all preceding bytes |
+
+### Commands (observed on Ear (a))
+
+| command | code | payload | response |
+|---|---|---|---|
+| REQUEST_ANC | `0xC01E` | (empty) | `0x401E` (ANC_SECONDARY) |
+| CMD_SET_ANC | `0xF00F` | `01 <mode> 00` | `0xE003` (ANC_PRIMARY) + echo |
+| REQUEST_BATTERY | `0xC007` | (empty) | `0x4007` (BATTERY_SECONDARY) |
+| REQUEST_SERIAL | `0xC006` | (empty) | `0x4006` (SERIAL) |
+| REQUEST_FIRMWARE | `0xC042` | (empty) | `0x4042` (FIRMWARE) |
+| REQUEST_IN_EAR | `0xC00E` | (empty) | `0x400E` (IN_EAR) |
+| REQUEST_LATENCY | `0xC041` | (empty) | `0x4041` (LATENCY) |
+
+The response echoes the `op_id` and carries the result in `payload`.
+
+### ANC modes
+
+`CMD_SET_ANC` payload byte 1 (`<mode>`):
+
+| value | mode |
+|---|---|
+| `0x01` | High |
+| `0x02` | Mid |
+| `0x03` | Low |
+| `0x04` | Adaptive |
+| `0x05` | Off |
+| `0x07` | Transparency |
+
+`REQUEST_ANC` response (`0x401E`) payload byte 1 echoes the current mode with the same values.
+
+### Battery
+
+`REQUEST_BATTERY` response (`0x4007`) payload: count `u8` followed by `count` entries of `device_id u8 | level u8`. Device IDs: `0x02` = left, `0x03` = right, `0x04` = case. Level: bit 7 = charging, bits 0-6 = percentage (0-100).
+
+Example: `03 02 55 03 0F 04 55` → left 85%, right 15%, case 85%, none charging.
+
+### Serial / Firmware
+
+`REQUEST_SERIAL` (`0xC006`) returns a long payload with device info including serial number and firmware version. `REQUEST_FIRMWARE` (`0xC042`) returns firmware version string (e.g., `1.0.1.51`).
+
+### In the widget
+
+[`nothing-bridge`](nothing-bridge) holds the RFCOMM link, polls `REQUEST_ANC` every 3 seconds (the device sends no unsolicited notifications), and exposes the same JSON contract as the other bridges:
+
+```json
+{"modes": true, "mode": "transparency", "available": ["off","high","mid","low","adaptive","transparency"]}
+```
+
+Commands on stdin: `set off|high|mid|low|adaptive|transparency`.
+
+Exit codes match the other bridges (0 clean, 1 transient, 3 silent, 4 setup).
+
+### The probe
+
+[`tools/nothing_probe.py`](tools/nothing_probe.py) — registers the profile, connects, queries ANC/battery/serial/firmware, prints frames in both directions.
+
+```bash
+tools/nothing_probe.py 3C:B0:ED:AF:7C:30
+```

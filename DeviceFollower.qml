@@ -117,10 +117,11 @@ Item {
   //
   //      Either way exactly one process owns the link, because writes and the
   //      device's own notifications (a mode changed by touching the earbud) must
-  //      share one connection; this follower talks to it through its stdin, and
-  //      both bridges report on the same contract into the same state.
+//      share one connection; this follower talks to it through its stdin, and
+//      both bridges report on the same contract into the same state.
   readonly property string jblBridgePath: Qt.resolvedUrl("jbl-bridge").toString().replace(/^file:\/\//, "")
   readonly property string sonyBridgePath: Qt.resolvedUrl("sony-bridge").toString().replace(/^file:\/\//, "")
+  readonly property string nothingBridgePath: Qt.resolvedUrl("nothing-bridge").toString().replace(/^file:\/\//, "")
   property var ancState: ({})
   property bool ancEnabled: true
   readonly property bool jblWanted: useModeControl && useFastPair && ancEnabled && connected
@@ -133,11 +134,22 @@ Item {
     if (!jblWanted) { jblArmed = false; return }
     Qt.callLater(function () { jblArmed = follower.jblWanted })
   }
+  readonly property bool nothingWanted: useModeControl && nothingEnabled && connected
+    && controlBackend === "nothing"
+    && !nothingAddressParked
+  property bool nothingArmed: false
+  onNothingWantedChanged: {
+    console.log("nothingWanted changed:", nothingWanted, "useModeControl:", useModeControl, "nothingEnabled:", nothingEnabled, "connected:", connected, "controlBackend:", controlBackend, "nothingAddressParked:", nothingAddressParked)
+    if (!nothingWanted) { nothingArmed = false; return }
+    Qt.callLater(function () { nothingArmed = follower.nothingWanted })
+  }
+  onNothingArmedChanged: console.log("nothingArmed changed:", nothingArmed)
   property bool ancRestartWanted: false
   property bool ancAnswered: false
   property string ancRunError: ""
   property string ancErrorRaw: ""
   property bool sonyEnabled: true
+  property bool nothingEnabled: true
 
   // What this device serves, read once per connection with `bluetoothctl info`.
   // Empty while it is not connected, or while the probe is still out.
@@ -163,7 +175,7 @@ Item {
 
   // Whichever bridge this device calls for. They are exclusive — the backend is
   // one string — so this is "the bridge", not "either of two links".
-  readonly property bool bridgeRunning: ancBridge.running || sonyBridge.running
+  readonly property bool bridgeRunning: ancBridge.running || sonyBridge.running || nothingBridge.running
   // The bridge is up and the device has answered on it, which is the only state
   // in which a write has somewhere to land.
   readonly property bool ancLive: bridgeRunning && ancAnswered
@@ -171,9 +183,10 @@ Item {
   // switched off, because that needs no explaining.
   readonly property string ancError: {
     if (!useModeControl) return ""
-    // Only the JBL path goes through the Message Stream. A Sony headset serves
-    // its own channel and does not care whether Fast Pair is on.
-    if (controlBackend !== "sony" && !useFastPair) return "needs Fast Pair for the BLE address"
+    // Only the JBL path goes through the Message Stream. Sony and Nothing serve
+    // their own channels and do not care whether Fast Pair is on.
+    if (controlBackend !== "sony" && controlBackend !== "nothing" && !useFastPair)
+      return "needs Fast Pair for the BLE address"
     return ancErrorRaw
   }
 
@@ -183,10 +196,11 @@ Item {
   readonly property int modeSupportKnown: Model.supportVerdict(service ? service.modeSupport : ({}), modelId)
   readonly property bool ancModelParked: service ? service.ancParked[modelId] === true : false
   readonly property bool sonyAddressParked: service ? service.sonyParked[address] === true : false
+  readonly property bool nothingAddressParked: service ? service.nothingParked[address] === true : false
   // How long to wait before the next attempt, keyed by whatever identifies the
   // device for the backend in play — the Fast Pair model for the JBL bridge, the
-  // Classic address for the Sony one.
-  readonly property string ancBackoffKey: controlBackend === "sony" ? address : modelId
+  // Classic address for the Sony and Nothing ones.
+  readonly property string ancBackoffKey: (controlBackend === "sony" || controlBackend === "nothing") ? address : modelId
 
   readonly property int bluezLevel: Model.batteryLevel(device)
   // The bar carries one number: the headset's own figure where there is only
@@ -309,9 +323,9 @@ Item {
       deviceUuids = []
       return
     }
-    if (uuidProbe.running) return
-    uuidProbe.command = ["bluetoothctl", "info", address]
-    uuidProbe.running = true
+    // The uuidProbe Process now has a running binding that auto-starts when
+    // connected and deviceUuids is empty. Just reset deviceUuids to trigger it.
+    deviceUuids = []
   }
 
   // Refresh means "ask the earbuds for a fresh battery reading". The device
@@ -365,6 +379,7 @@ Item {
     if (!ancSupported || !ancLive) return false
     if (modesAvailable.indexOf(String(mode)) === -1) return false
     if (sonyBridge.running) sonyBridge.write("set " + mode + "\n")
+    else if (nothingBridge.running) nothingBridge.write("set " + mode + "\n")
     else ancBridge.write("set " + mode + "\n")
     return true
   }
@@ -658,14 +673,87 @@ Item {
     onTriggered: follower.sonyEnabled = true
   }
 
+  // Lives only while a Nothing earbud is connected. Like Sony, the channel is
+  // the device's own RFCOMM service (NT Link, UUID aeac4a03-...), so there is no
+  // BLE address to wait for, no Fast Pair to depend on, and no model-id cache to
+  // consult — the SDP UUID already confirms the protocol. The one reason not to
+  // run is that this address has already failed for good in this session.
+  Process {
+    id: nothingBridge
+    running: follower.useModeControl && follower.nothingEnabled && follower.connected
+      && follower.controlBackend === "nothing"
+      && !follower.nothingAddressParked
+    command: [follower.nothingBridgePath, follower.address]
+    stdinEnabled: true
+    stdout: SplitParser {
+      onRead: function(line) { follower.applyAncLine(line) }
+    }
+    stderr: StdioCollector { id: nothingStderr; waitForEnd: true }
+    // No bridge, no mode: a link that was killed leaves its last report behind,
+    // and a LISTENING MODE row that no longer controls anything is worse than no row.
+    onRunningChanged: {
+      if (running) {
+        follower.ancRunError = ""
+        follower.ancErrorRaw = ""
+      }
+      follower.ancState = ({})
+      follower.ancAnswered = false
+    }
+    onExited: function(exitCode, exitStatus) {
+      // The same four codes jbl-bridge uses: 0 clean stop · 1 transient, retry
+      // with a growing pause · 3 linked but silent to every query type it knows
+      // · 4 could not start at all. Both of the last two are about this earbud
+      // rather than about this moment, so the address is parked for the session.
+      // Nothing is written to disk: the SDP UUID makes the next session's
+      // decision for free, and a device that gains the feature in a firmware
+      // update should not have to argue with a cache.
+      //
+      // The address is this follower's own, which is why the old service had to
+      // remember which one a run was pointed at and this does not.
+      // Exit 3 parks (the earbud answered none of the query types); exit 4 is
+      // this machine's problem and backs off instead, message on screen.
+      if (exitCode === 3 && follower.service)
+        follower.service.parkAddress(follower.address)
+      // A device that linked and said nothing is not a fault to report — the
+      // same silence the JBL side treats as "this model does not do this".
+      if (exitCode === 3) {
+        follower.ancRunError = ""
+        follower.ancErrorRaw = ""
+      } else if (exitCode !== 0 && follower.ancRunError === "") {
+        follower.ancErrorRaw = Model.shortError(nothingStderr.text, exitCode === 4
+          ? "the listening-mode bridge could not start"
+          : "the listening-mode link dropped (exit " + exitCode + ")")
+      }
+
+      // Nothing cycles this bridge on purpose: the channel is the earbud's own
+      // and its address is this follower's, so there is no rotated address to
+      // follow and no re-aiming to do. Every exit waits out its backoff.
+      follower.nothingEnabled = false
+      nothingRestart.interval = follower.service
+        ? follower.service.ancBackoffFor(follower.address) : 10000
+      if ((exitCode === 1 || exitCode === 4) && follower.service)
+        follower.service.bumpAncBackoff(follower.address)
+      nothingRestart.restart()
+    }
+  }
+
+  Timer {
+    id: nothingRestart
+    repeat: false
+    onTriggered: follower.nothingEnabled = true
+  }
+
   // Reads the device's SDP UUIDs, which is how the backend is chosen. Started by
   // probeUuids() rather than by a `running` binding: this process exits as soon
   // as it has printed, and a binding that is still true at that moment is an
   // invitation to run it again for ever.
   Process {
     id: uuidProbe
+    running: follower.connected && follower.address !== "" && follower.deviceUuids.length === 0
+    command: ["bluetoothctl", "info", follower.address]
     stdout: StdioCollector { id: uuidProbeOut; waitForEnd: true }
     onExited: function(exitCode, exitStatus) {
+      console.log("uuidProbe exited:", exitCode, "stdout:", uuidProbeOut.text)
       // A probe that failed says nothing about the device, and an empty list is
       // exactly that: no Sony UUID seen, so a Fast Pair BLE address decides.
       follower.deviceUuids = exitCode === 0

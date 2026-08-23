@@ -450,29 +450,37 @@ function uuidsFromBluetoothctl(text) {
   return out
 }
 
-// "sony", "jbl" or "" — the backend to run for this device, and the empty string
-// for a device neither path can reach. The Sony UUID wins because it is the
-// stronger statement: it comes from the device's own SDP record, while a known
-// BLE address only says the Message Stream is up, which every Fast Pair device
-// does whether or not it answers a mode query.
+// "sony", "jbl", "nothing" or "" — the backend to run for this device, and the
+// empty string for a device neither path can reach. The Sony UUID wins because
+// it is the stronger statement: it comes from the device's own SDP record.
+// Nothing's NT Link UUID is equally strong. JBL needs a BLE address from the
+// Fast Pair stream.
+var NOTHING_NT_LINK_UUID = "aeac4a03-dff5-498f-843a-34487cf133eb"
 function controlBackend(uuids, bleAddress) {
   var list = uuids || []
-  for (var i = 0; i < list.length; i++)
-    if (str(list[i]).trim().toLowerCase() === SONY_MDR_V2_UUID) return "sony"
+  for (var i = 0; i < list.length; i++) {
+    var uuid = str(list[i]).trim().toLowerCase()
+    if (uuid === SONY_MDR_V2_UUID) return "sony"
+    if (uuid === NOTHING_NT_LINK_UUID) return "nothing"
+  }
   return str(bleAddress).trim() !== "" ? "jbl" : ""
 }
 
-// The order the panel draws them in, and the only names either bridge may use.
-var MODE_ORDER = ["off", "anc", "ambient", "talkthru"]
+// The order the panel draws them in, and the only names any bridge may use.
+// Nothing Ear adds high/mid/low/adaptive/transparency as ANC granularity.
+var MODE_ORDER = ["off", "high", "mid", "low", "adaptive", "transparency", "anc", "ambient", "talkthru"]
+// The default modes when no bridge has answered (JBL bridge sends no available list).
+var JBL_DEFAULT_MODES = ["off", "anc", "ambient", "talkthru"]
 
 // Which modes to offer for the state the bridge last reported. A line with no
 // `available` key is the JBL bridge, which names none and means all four — its
 // protocol has one fixed set of slots. The Sony bridge lists what the headset
-// has, and an over-ear WH has no TalkThru. Names it does not recognise are
-// dropped rather than drawn: a button the device will not take does nothing.
+// has, and an over-ear WH has no TalkThru. The Nothing bridge lists its ANC
+// granularity. Names not recognised are dropped rather than drawn: a button the
+// device will not take does nothing.
 function modesAvailable(state) {
   var list = state ? state.available : undefined
-  if (!list || !Array.isArray(list)) return MODE_ORDER.slice()
+  if (!list || !Array.isArray(list)) return JBL_DEFAULT_MODES.slice()
   var out = []
   for (var i = 0; i < MODE_ORDER.length; i++)
     if (list.indexOf(MODE_ORDER[i]) !== -1) out.push(MODE_ORDER[i])

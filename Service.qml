@@ -319,10 +319,14 @@ Item {
   // path never learns a Fast Pair model id, and one headset failing must not
   // retire another that happens to share a keyspace by accident.
   property var sonyParked: ({})
+  // Addresses whose Nothing bridge failed for good this session. Same rationale
+  // as sonyParked: keyed by classic address because the NT Link path never
+  // learns a Fast Pair model id.
+  property var nothingParked: ({})
   // How long to wait before the next attempt, keyed by whatever identifies the
   // device for the backend in play — the Fast Pair model for the JBL bridge, the
-  // Classic address for the Sony one: a device that is out of reach must not be
-  // dialled every ten seconds all afternoon.
+  // Classic address for the Sony and Nothing ones: a device that is out of reach
+  // must not be dialled every ten seconds all afternoon.
   property var ancBackoff: ({})
 
   function ancBackoffFor(key) {
@@ -358,6 +362,11 @@ Item {
     for (var key in sonyParked) next[key] = sonyParked[key]
     next[String(value)] = true
     sonyParked = next
+    // Also park for Nothing, since both use classic address
+    var nothingNext = {}
+    for (var nkey in nothingParked) nothingNext[nkey] = nothingParked[nkey]
+    nothingNext[String(value)] = true
+    nothingParked = nothingNext
   }
 
   // Which devices have been warned about, by address, and remembered across a
@@ -575,7 +584,8 @@ Item {
   }
 
   function writeMode(follower, mode) {
-    if (["off", "anc", "ambient", "talkthru"].indexOf(String(mode)) === -1)
+    var validModes = ["off", "anc", "ambient", "talkthru", "high", "mid", "low", "adaptive", "transparency"]
+    if (validModes.indexOf(String(mode)) === -1)
       return "unknown mode: " + mode
     if (!follower) return "unavailable"
     if (follower.setAncMode(mode)) return "ok"
