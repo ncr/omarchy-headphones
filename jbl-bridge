@@ -496,7 +496,7 @@ def main():
         sys.exit(EXIT_SETUP)
     if shutil.which("btgatt-client") is None:
         emit({"modes": False,
-              "error": "btgatt-client is missing; install bluez-utils"})
+              "error": "btgatt-client is missing"})
         sys.exit(EXIT_SETUP)
 
     try:

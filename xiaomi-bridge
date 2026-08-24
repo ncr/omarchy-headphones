@@ -62,8 +62,7 @@ try:
 except ImportError as error:
     sys.stdout.write(json.dumps({
         "modes": False,
-        "error": "missing python dependency %s — reinstall the "
-                 "python-dbus and python-gobject packages (Omarchy ships both)"
+        "error": "missing python dependency %s"
                  % (getattr(error, "name", None) or error),
     }) + "\n")
     sys.stdout.flush()

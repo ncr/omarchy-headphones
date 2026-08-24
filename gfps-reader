@@ -95,10 +95,9 @@ import signal
 import struct
 import sys
 
-# python-dbus and python-gobject are not guaranteed on a stock Omarchy install:
-# python-dbus arrives with uwsm, python-gobject may not arrive at all. Say so on
-# stdout in the shape the widget already reads, so the panel can print the reason
-# instead of sitting there with nothing to show.
+# Omarchy ships python-dbus and python-gobject, but a missing one must still
+# land on stdout in the shape the widget already reads, so the panel can print
+# the reason instead of sitting there with nothing to show.
 try:
     import dbus
     import dbus.mainloop.glib
@@ -107,8 +106,7 @@ try:
 except ImportError as error:
     sys.stdout.write(json.dumps({
         "stream": False,
-        "error": "missing python dependency %s — reinstall the "
-                 "python-dbus and python-gobject packages (Omarchy ships both)"
+        "error": "missing python dependency %s"
                  % (getattr(error, "name", None) or error),
     }) + "\n")
     sys.stdout.flush()
