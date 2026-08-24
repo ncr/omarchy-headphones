@@ -30,12 +30,15 @@ same idea, built for Apple's own protocol, and the plugin this one is modelled o
 ## Install
 
 ```bash
-sudo pacman -S --needed python-dbus python-gobject bluez-utils
 omarchy plugin add https://github.com/ncr/omarchy-headphones --enable
 ```
 
-Needs Omarchy 4.0 or later. The widget is live as soon as the command returns
-— no shell restart. Updating an older version (`omarchy plugin update io.github.ncr.omaphones`) is
+Needs Omarchy 4.0 or later. Everything else the plugin uses — `python-dbus`,
+`python-gobject`, `bluez-utils` — ships with the Omarchy base install. If one
+of them was removed, the panel says which and
+`sudo pacman -S --needed python-dbus python-gobject bluez-utils` puts it back.
+
+The widget is live as soon as the command returns — no shell restart. Updating an older version (`omarchy plugin update io.github.ncr.omaphones`) is
 the one exception: run `omarchy restart shell` once afterwards, or the old code
 keeps running.
 
@@ -71,11 +74,12 @@ existing protocols were found is written down in [PROTOCOL.md](PROTOCOL.md).
 ```text
 Add support for my Bluetooth headphones to the Omaphones plugin for Omarchy and
 open a pull request against `github.com/ncr/omarchy-headphones` with the result.
-0. If it is not installed yet: `sudo pacman -S --needed python-dbus
-   python-gobject`, then `omarchy plugin add
+0. If it is not installed yet: `omarchy plugin add
    https://github.com/ncr/omarchy-headphones --enable --yes` (`--yes` because you
    have no terminal to confirm in). It lands in
-   `~/.config/omarchy/plugins/io.github.ncr.omaphones`.
+   `~/.config/omarchy/plugins/io.github.ncr.omaphones`. Its Python helpers use
+   `python-dbus` and `python-gobject`, which Omarchy ships by default —
+   reinstall them only if the panel says one is missing.
 1. Connect the headphones and check `omarchy-shell omaphones status`. Find out
    what they serve: `bluetoothctl devices` for the address, `bluetoothctl info
    <address>` for the UUIDs — `df21fe2c-2515-4fdb-8886-f12c4d67927c` is the
