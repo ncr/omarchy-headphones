@@ -424,13 +424,16 @@ function readerLevel(state, key) {
 
 // ---- Which helper can control the listening mode of a given device.
 //
-// Two protocols, decided per device from its SDP record rather than from its
+// Three protocols, decided per device from its SDP record rather than from its
 // name: Sony's MDR v2 lives on an RFCOMM channel the headset itself serves, and
 // advertising the UUID is the whole claim — a device that lists it speaks it.
+// Xiaomi Buds 5 Pro (and other QCC sets that advertise CSR GAIA) speak Compact
+// GAIA on standard SPP; the GAIA UUID is the claim, SPP is the socket.
 // JBL's is a BLE GATT service at an address that rotates and is announced only
 // on the Fast Pair Message Stream, so knowing that address is what makes that
 // path possible at all.
 var SONY_MDR_V2_UUID = "956c7b26-d49a-4ba8-b03f-b17d393cb6e2"
+var CSR_GAIA_UUID = "00001100-d102-11e1-9b23-00025b00a5a5"
 
 // The UUIDs `bluetoothctl info <address>` printed, lowercased.
 // Quickshell.Bluetooth exposes no uuids property, so the SDP record is read the
@@ -450,19 +453,24 @@ function uuidsFromBluetoothctl(text) {
   return out
 }
 
-// "sony", "jbl" or "" — the backend to run for this device, and the empty string
-// for a device neither path can reach. The Sony UUID wins because it is the
-// stronger statement: it comes from the device's own SDP record, while a known
-// BLE address only says the Message Stream is up, which every Fast Pair device
-// does whether or not it answers a mode query.
+// "sony", "xiaomi", "jbl" or "" — the backend to run for this device, and the
+// empty string for a device no path can reach. SDP UUIDs win because they come
+// from the device's own record: Sony first, then CSR GAIA (Xiaomi / QCC on
+// SPP). A known BLE address only says the Message Stream is up, which every
+// Fast Pair device does whether or not it answers a mode query, so it is last.
 function controlBackend(uuids, bleAddress) {
   var list = uuids || []
-  for (var i = 0; i < list.length; i++)
-    if (str(list[i]).trim().toLowerCase() === SONY_MDR_V2_UUID) return "sony"
+  var gaia = false
+  for (var i = 0; i < list.length; i++) {
+    var id = str(list[i]).trim().toLowerCase()
+    if (id === SONY_MDR_V2_UUID) return "sony"
+    if (id === CSR_GAIA_UUID) gaia = true
+  }
+  if (gaia) return "xiaomi"
   return str(bleAddress).trim() !== "" ? "jbl" : ""
 }
 
-// The order the panel draws them in, and the only names either bridge may use.
+// The order the panel draws them in, and the only names a bridge may use.
 var MODE_ORDER = ["off", "anc", "ambient", "talkthru"]
 
 // Which modes to offer for the state the bridge last reported. A line with no

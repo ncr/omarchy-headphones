@@ -5,7 +5,7 @@
   "version": "1.0.2",
   "author": "Jacek Becela",
   "license": "MIT",
-  "description": "Battery and noise control for wireless headphones in the bar. Works with: JBL, Sony, and other headphones that support Google Fast Pair or standard Bluetooth battery reporting. Earbuds show left, right and case levels; ANC / Ambient switching. One icon per connected set.",
+  "description": "Battery and noise control for wireless headphones in the bar. Works with: JBL, Sony, Xiaomi, and other headphones that support Google Fast Pair or standard Bluetooth battery reporting. Earbuds show left, right and case levels; ANC / Ambient switching. One icon per connected set.",
   "kinds": [
     "service",
     "bar-widget"
@@ -17,7 +17,7 @@
   },
   "barWidget": {
     "displayName": "Omaphones",
-    "description": "Battery and noise control for wireless headphones in the bar. Works with: JBL, Sony, and other headphones that support Google Fast Pair or standard Bluetooth battery reporting. Earbuds show left, right and case levels; ANC / Ambient switching. One icon per connected set.",
+    "description": "Battery and noise control for wireless headphones in the bar. Works with: JBL, Sony, Xiaomi, and other headphones that support Google Fast Pair or standard Bluetooth battery reporting. Earbuds show left, right and case levels; ANC / Ambient switching. One icon per connected set.",
     "category": "Audio",
     "aliases": [
       "headphones",
@@ -59,7 +59,7 @@
         "type": "boolean",
         "label": "Noise control (ANC / Ambient)",
         "defaultValue": true,
-        "description": "The MODE row: Off / ANC / Ambient, following changes made on the device too. Works on Sony MDR v2 headsets and some JBL earbuds (JBL needs Fast Pair above). Hidden when the device answers for neither."
+        "description": "The MODE row: Off / ANC / Ambient, following changes made on the device too. Works on Sony MDR v2 headsets, Xiaomi Buds 5 Pro, and some JBL earbuds (JBL needs Fast Pair above). Hidden when the device answers for neither."
       },
       {
         "key": "lowBatteryThreshold",

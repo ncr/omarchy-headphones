@@ -6,10 +6,11 @@ Its *audio* side is BR/EDR only — every profile `bluetoothctl info` lists is
 RFCOMM or A2DP, and there is no GATT to read on it. The control protocol is on a
 separate LE connection: [further down](#the-control-protocol-lives-on-ble-and-it-is-fully-working).
 
-The [last section](#sony-mdr-v2--the-listening-mode-on-the-wh-ch720n) is a
+The [Sony section](#sony-mdr-v2--the-listening-mode-on-the-wh-ch720n) is a
 different device and a different protocol: a **Sony WH-CH720N**
 (`B0:11:22:33:44:55`), whose listening mode is on an RFCOMM channel of its own.
-Everything before it is the JBL.
+The [last section](#xiaomi-buds-5-pro--compact-gaia-on-spp) is Xiaomi Buds 5
+Pro: Compact GAIA on standard SPP. Everything before Sony is the JBL.
 
 The tools that produced all of this are in [`tools/`](tools/). The four Python
 probes each register an `org.bluez.Profile1` for one UUID, so BlueZ does the SDP
@@ -18,9 +19,10 @@ left registered after the process exits. [`tools/jbl-anc`](tools/jbl-anc) is the
 odd one out: it drives `btgatt-client` over LE, and shells out to
 `tools/gfps_probe.py` only to read the rotating BLE address, and only when there
 is no widget running to be asked for it.
-[`tools/sony_probe.py`](tools/sony_probe.py) is the newest, and the only probe
-that speaks a framed protocol rather than dumping bytes: it does the Sony
-handshake and asks each candidate NC/ASM variant in turn.
+[`tools/sony_probe.py`](tools/sony_probe.py) and
+[`tools/xiaomi_probe.py`](tools/xiaomi_probe.py) speak framed protocols rather
+than dumping bytes: Sony does the MDR handshake and asks each NC/ASM variant;
+Xiaomi does Compact GAIA on SPP.
 
 ## The channels
 
@@ -637,3 +639,103 @@ stale-readback and stored-level behaviours above were pinned down.
 The widget's own bridge holds the same profile, so turn `useModeControl` off
 before running the probe, or BlueZ will refuse the registration to whichever
 asks second.
+
+## Xiaomi Buds 5 Pro — Compact GAIA on SPP
+
+A third device and a third protocol, confirmed on **Xiaomi Buds 5 Pro**
+(`64:8F:DB:87:06:CB`, Qualcomm QCC-7228). There is no Google Fast Pair UUID, so
+per-earbud battery over the Message Stream is not available. BlueZ's HFP figure
+is the one the widget already shows. Two GATT Battery Service instances
+(`0000180f` / `00002a19`) exist on the device object, but ATT reads fail with
+*Not connected* while Classic A2DP is up; the GET on this channel that Moondrop
+uses for left/right percent (`0x1A01`) answered `01 00` / `02 00` / `03 ff`
+against a live BlueZ reading of ~90%, so those bytes are not a usable
+percentage. Listening mode is what this section is about.
+
+`bluetoothctl info` lists, among others:
+
+| UUID | What it is | Answers? |
+|---|---|---|
+| `00001100-d102-11e1-9b23-00025b00a5a5` | CSR GAIA | advertised; `ConnectProfile` returns *not supported* |
+| `00001101-0000-1000-8000-00805f9b34fb` | standard SPP | **Yes - handshake, GET/SET listening mode** |
+| `00000837-d103-0004-bf7f-2942153d354b` | vendor SPP (vivo uses this) | connects, no replies |
+| `2587db3c-ce70-4fc9-935f-777ab4188fd7` | vendor | *not supported* |
+| `df21fe2c-2515-4fdb-8886-f12c4d67927c` | Fast Pair Message Stream | **absent** |
+
+The widget picks this backend from the CSR GAIA UUID in the SDP record, then
+opens **SPP**. Same Profile1 arrangement as Sony: `Role` `client`, `Channel` `0`,
+async `ConnectProfile`, retry on `br-connection-busy`. `AutoConnect` must stay
+false: with it on, BlueZ handed a second socket and the probe replayed its plan
+on top of itself.
+
+Do not send Xiaomi `FE DC BA …` frames on this socket: they closed it. Do not
+send GAIA v1 factory-reset / power-off (`0x0104`, `0x0202`, `0x0204`).
+
+### Frames
+
+Compact GAIA, the same wrapping Moondrop and vivo use:
+
+```
+FF <ver> <flags=00> <payloadLen> <vendor u16be> <cmd u16be> <payload>
+```
+
+This device replies with **version 3**. Flags stayed 0 (no checksum, no
+extended length). Several frames can arrive in one `read()`.
+
+Handshake, vendor `0x000A` (generic GAIA):
+
+```
+->  ff 03 00 00  000a 0300
+<-  ff 03 00 04  000a 8300  00030301
+```
+
+Device commands use vendor `0x001D` (QTIL GAIA v3 / the same vendor Moondrop
+uses). GET response = GET + `0x0100`. Error = that value with `0x0080` set,
+payload a GAIA status (`05` invalid parameter, `01` not supported).
+
+### Listening mode
+
+| sent | reply | meaning |
+|---|---|---|
+| `0x1003` empty | `0x1103` 5 bytes | GET |
+| `0x1004` 1 byte | `0x1104` empty | SET ack |
+| `0x1004` 5 bytes (a copy of GET) | `0x1184` payload `05` | rejected |
+
+GET payloads actually seen, first byte echoing the SET byte:
+
+| SET | GET payload | panel name |
+|---|---|---|
+| `00` | `00 01 00 00 00` | Off (confirmed: panel Off) |
+| `01` | `01 01 01 00 00` | ANC (confirmed: panel ANC; byte 2 is 1 only here) |
+| `02` | `02 01 00 01 00` | Ambient / transparency (same extra flags as 0x03/0x04; SET did not drop the link) |
+| `03` | `03 01 00 01 00` | accepted, not offered |
+| `04` | `04 01 00 01 00` | **reboots the buds** - Moondrop's transparency byte on this vendor; never send |
+
+Off and ANC were confirmed by using the panel. Ambient was first mapped to
+`0x04` because that is Moondrop's SET value; the buds reboot when it is sent,
+so Ambient is `0x02` instead. `0x03` is still unnamed. Nothing unsolicited
+arrived when the GET was left alone; the bridge polls GET every 2.5 s so a
+press on the bud still updates the panel.
+
+### In the widget
+
+[`xiaomi-bridge`](xiaomi-bridge) is the sibling of [`sony-bridge`](sony-bridge):
+same JSON line, same stdin `set <mode>`, same four exit codes, Classic address,
+address parked for the session on exit 3. No `level` / `voice` keys - this
+protocol has no ambient dial.
+
+```json
+{"modes": true, "mode": "anc", "available": ["off","anc","ambient"]}
+```
+
+### The probe
+
+[`tools/xiaomi_probe.py`](tools/xiaomi_probe.py):
+
+```bash
+tools/xiaomi_probe.py 64:8F:DB:87:06:CB
+tools/xiaomi_probe.py 64:8F:DB:87:06:CB 15 set:ambient
+```
+
+Turn `useModeControl` off first: SPP is one holder, like Sony's UUID.
+
