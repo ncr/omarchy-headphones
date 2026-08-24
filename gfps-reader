@@ -107,8 +107,8 @@ try:
 except ImportError as error:
     sys.stdout.write(json.dumps({
         "stream": False,
-        "error": "missing python dependency %s — install it with: "
-                 "sudo pacman -S --needed python-dbus python-gobject"
+        "error": "missing python dependency %s — reinstall the "
+                 "python-dbus and python-gobject packages (Omarchy ships both)"
                  % (getattr(error, "name", None) or error),
     }) + "\n")
     sys.stdout.flush()
