@@ -2,7 +2,7 @@
   "schemaVersion": 1,
   "id": "io.github.ncr.omaphones",
   "name": "Omaphones",
-  "version": "1.0.3",
+  "version": "1.0.4",
   "author": "Jacek Becela",
   "license": "MIT",
   "description": "Battery and noise control for wireless headphones in the bar. Works with: JBL, Sony, Xiaomi, and other headphones that support Google Fast Pair or standard Bluetooth battery reporting. Earbuds show left, right and case levels; ANC / Ambient switching. One icon per connected set.",
