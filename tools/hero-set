@@ -34,7 +34,7 @@ done
 ((${#themes[@]})) || themes=(tokyo-night gruvbox nord kanagawa osaka-jade catppuccin-latte rose-pine flexoki-light)
 
 for bin in omarchy python3; do command -v "$bin" >/dev/null || { echo "hero-set: $bin is missing" >&2; exit 1; }; done
-python3 -c 'import PIL' 2>/dev/null || { echo "hero-set: python-pillow is missing (sudo pacman -S python-pillow)" >&2; exit 1; }
+python3 -c 'import PIL' 2>/dev/null || { echo "hero-set: python-pillow is missing" >&2; exit 1; }
 
 original=$(omarchy theme current)
 # The captured frames stay in the cache so the animation can be re-encoded
