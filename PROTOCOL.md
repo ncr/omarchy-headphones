@@ -9,20 +9,22 @@ separate LE connection: [further down](#the-control-protocol-lives-on-ble-and-it
 The [Sony section](#sony-mdr-v2--the-listening-mode-on-the-wh-ch720n) is a
 different device and a different protocol: a **Sony WH-CH720N**
 (`B0:11:22:33:44:55`), whose listening mode is on an RFCOMM channel of its own.
-The [last section](#xiaomi-buds-5-pro--compact-gaia-on-spp) is Xiaomi Buds 5
-Pro: Compact GAIA on standard SPP. Everything before Sony is the JBL.
+The [Xiaomi section](#xiaomi-buds-5-pro--compact-gaia-on-spp) is Xiaomi Buds 5
+Pro: Compact GAIA on standard SPP. The [Soundcore section](#soundcore-space-2--vendor-rfcomm)
+is Soundcore Space 2: vendor RFCOMM (`0cf12d31-…`). Everything before Sony is the JBL.
 
-The tools that produced all of this are in [`tools/`](tools/). The four Python
+The tools that produced all of this are in [`tools/`](tools/). The Python
 probes each register an `org.bluez.Profile1` for one UUID, so BlueZ does the SDP
 lookup and hands over a connected RFCOMM socket; no `sdptool`, no root, nothing
 left registered after the process exits. [`tools/jbl-anc`](tools/jbl-anc) is the
 odd one out: it drives `btgatt-client` over LE, and shells out to
 `tools/gfps_probe.py` only to read the rotating BLE address, and only when there
 is no widget running to be asked for it.
-[`tools/sony_probe.py`](tools/sony_probe.py) and
-[`tools/xiaomi_probe.py`](tools/xiaomi_probe.py) speak framed protocols rather
+[`tools/sony_probe.py`](tools/sony_probe.py),
+[`tools/xiaomi_probe.py`](tools/xiaomi_probe.py), and
+[`tools/soundcore_probe.py`](tools/soundcore_probe.py) speak framed protocols rather
 than dumping bytes: Sony does the MDR handshake and asks each NC/ASM variant;
-Xiaomi does Compact GAIA on SPP.
+Xiaomi does Compact GAIA on SPP; Soundcore queries state and sets sound modes.
 
 ## The channels
 
@@ -738,4 +740,54 @@ tools/xiaomi_probe.py 64:8F:DB:87:06:CB 15 set:ambient
 ```
 
 Turn `useModeControl` off first: SPP is one holder, like Sony's UUID.
+
+---
+
+## Soundcore Space 2 — vendor RFCOMM
+
+Notes from probing a **Soundcore Space 2** (`84:9D:4B:B0:2D:00`, modalias
+`bluetooth:v02B0p0000d001F`).
+
+Like Sony and Xiaomi, its listening mode is over an RFCOMM channel. Soundcore devices
+advertise a vendor UUID starting with `0cf12d31-fac3-4553-bd80-d6832e7...`
+(`0cf12d31-fac3-4553-bd80-d6832e7d1402` on the Space 2, where `d1402` is the model ID).
+Connecting an `org.bluez.Profile1` to this UUID opens the RFCOMM control link.
+
+### Framing
+
+```
+outbound:  08 ee 00 00 00 <cmd u8, u8> <len u16le> <payload> <checksum u8>
+inbound:   09 ff 00 00 01 <cmd u8, u8> <len u16le> <payload> <checksum u8>
+```
+
+- `<len u16le>` is the little-endian total byte length of the packet (including header, command, length, payload, and checksum).
+- `<checksum u8>` is the simple 8-bit sum (`sum(packet[:-1]) & 0xFF`).
+
+### Commands
+
+| Command | Direction | Meaning |
+|---|---|---|
+| `01 01` | Outbound | `RequestState`: ask for full initial state |
+| `01 01` | Inbound | `StateUpdate`: 103-byte payload (113-byte packet), sound modes at offset 71..77 |
+| `06 81` | Outbound | `SetSoundModes`: 6-byte payload `[mode, custom_anc, transparency_mode, nc_mode, wind_noise, custom_transparency]` |
+| `06 81` | Inbound | ACK from headphones |
+| `06 01` | Inbound | `SoundModes` notification when mode changes |
+
+### Sound mode byte
+
+- `0x00` — ANC
+- `0x01` — Ambient
+- `0x02` — Off (Normal)
+
+A mode change is confirmed on the headphones immediately and answered with both an ACK (`06 81`) and an unsolicited notification (`06 01`).
+
+### The probe
+
+[`tools/soundcore_probe.py`](tools/soundcore_probe.py):
+
+```bash
+tools/soundcore_probe.py 84:9D:4B:B0:2D:00
+tools/soundcore_probe.py 84:9D:4B:B0:2D:00 5 set:ambient
+```
+
 

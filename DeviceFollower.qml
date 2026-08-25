@@ -125,6 +125,7 @@ Item {
   readonly property string jblBridgePath: Qt.resolvedUrl("jbl-bridge").toString().replace(/^file:\/\//, "")
   readonly property string sonyBridgePath: Qt.resolvedUrl("sony-bridge").toString().replace(/^file:\/\//, "")
   readonly property string xiaomiBridgePath: Qt.resolvedUrl("xiaomi-bridge").toString().replace(/^file:\/\//, "")
+  readonly property string soundcoreBridgePath: Qt.resolvedUrl("soundcore-bridge").toString().replace(/^file:\/\//, "")
   property var ancState: ({})
   property bool ancEnabled: true
   readonly property bool jblWanted: useModeControl && useFastPair && ancEnabled && connected
@@ -143,6 +144,7 @@ Item {
   property string ancErrorRaw: ""
   property bool sonyEnabled: true
   property bool xiaomiEnabled: true
+  property bool soundcoreEnabled: true
 
   // What this device serves, read once per connection with `bluetoothctl info`.
   // Empty while it is not connected, or while the probe is still out.
@@ -168,7 +170,7 @@ Item {
 
   // Whichever bridge this device calls for. They are exclusive — the backend is
   // one string — so this is "the bridge", not "either of two links".
-  readonly property bool bridgeRunning: ancBridge.running || sonyBridge.running || xiaomiBridge.running
+  readonly property bool bridgeRunning: ancBridge.running || sonyBridge.running || xiaomiBridge.running || soundcoreBridge.running
   // The bridge is up and the device has answered on it, which is the only state
   // in which a write has somewhere to land.
   readonly property bool ancLive: bridgeRunning && ancAnswered
@@ -176,9 +178,9 @@ Item {
   // switched off, because that needs no explaining.
   readonly property string ancError: {
     if (!useModeControl) return ""
-    // Only the JBL path goes through the Message Stream. Sony and Xiaomi serve
+    // Only the JBL path goes through the Message Stream. Sony, Xiaomi and Soundcore serve
     // their own Classic channels and do not care whether Fast Pair is on.
-    if (controlBackend !== "sony" && controlBackend !== "xiaomi" && !useFastPair)
+    if (controlBackend !== "sony" && controlBackend !== "xiaomi" && controlBackend !== "soundcore" && !useFastPair)
       return "needs Fast Pair for the BLE address"
     return ancErrorRaw
   }
@@ -192,8 +194,8 @@ Item {
   readonly property bool sonyAddressParked: addressParked
   // How long to wait before the next attempt, keyed by whatever identifies the
   // device for the backend in play — the Fast Pair model for the JBL bridge, the
-  // Classic address for Sony and Xiaomi.
-  readonly property string ancBackoffKey: (controlBackend === "sony" || controlBackend === "xiaomi")
+  // Classic address for Sony, Xiaomi and Soundcore.
+  readonly property string ancBackoffKey: (controlBackend === "sony" || controlBackend === "xiaomi" || controlBackend === "soundcore")
     ? address : modelId
 
   readonly property int bluezLevel: Model.batteryLevel(device)
@@ -344,6 +346,7 @@ Item {
     if (ancRestart.running) { ancRestart.stop(); ancEnabled = true }
     if (sonyRestart.running) { sonyRestart.stop(); sonyEnabled = true }
     if (xiaomiRestart.running) { xiaomiRestart.stop(); xiaomiEnabled = true }
+    if (soundcoreRestart.running) { soundcoreRestart.stop(); soundcoreEnabled = true }
     if (!useFastPair || !service) return
     // The service cycles this device's channel and leaves every other device's
     // alone; it says whether the request went out at all, because a reader that
@@ -375,6 +378,7 @@ Item {
     if (modesAvailable.indexOf(String(mode)) === -1) return false
     if (sonyBridge.running) sonyBridge.write("set " + mode + "\n")
     else if (xiaomiBridge.running) xiaomiBridge.write("set " + mode + "\n")
+    else if (soundcoreBridge.running) soundcoreBridge.write("set " + mode + "\n")
     else ancBridge.write("set " + mode + "\n")
     return true
   }
@@ -716,6 +720,56 @@ Item {
     id: xiaomiRestart
     repeat: false
     onTriggered: follower.xiaomiEnabled = true
+  }
+
+  // Lives only while Soundcore headphones are connected.
+  // Same gates as Sony/Xiaomi: Classic RFCOMM, so there is no BLE address to wait for
+  // and no Fast Pair to depend on. An address that already failed for good this
+  // session is parked on the same map Sony and Xiaomi use.
+  Process {
+    id: soundcoreBridge
+    running: follower.useModeControl && follower.soundcoreEnabled && follower.connected
+      && follower.controlBackend === "soundcore"
+      && !follower.addressParked
+    command: [follower.soundcoreBridgePath, follower.address]
+    stdinEnabled: true
+    stdout: SplitParser {
+      onRead: function(line) { follower.applyAncLine(line) }
+    }
+    stderr: StdioCollector { id: soundcoreStderr; waitForEnd: true }
+    onRunningChanged: {
+      if (running) {
+        follower.ancRunError = ""
+        follower.ancErrorRaw = ""
+      }
+      follower.ancState = ({})
+      follower.ancAnswered = false
+    }
+    onExited: function(exitCode, exitStatus) {
+      if (exitCode === 3 && follower.service)
+        follower.service.parkAddress(follower.address)
+      if (exitCode === 3) {
+        follower.ancRunError = ""
+        follower.ancErrorRaw = ""
+      } else if (exitCode !== 0 && follower.ancRunError === "") {
+        follower.ancErrorRaw = Model.shortError(soundcoreStderr.text, exitCode === 4
+          ? "the listening-mode bridge could not start"
+          : "the listening-mode link dropped (exit " + exitCode + ")")
+      }
+
+      follower.soundcoreEnabled = false
+      soundcoreRestart.interval = follower.service
+        ? follower.service.ancBackoffFor(follower.address) : 10000
+      if ((exitCode === 1 || exitCode === 4) && follower.service)
+        follower.service.bumpAncBackoff(follower.address)
+      soundcoreRestart.restart()
+    }
+  }
+
+  Timer {
+    id: soundcoreRestart
+    repeat: false
+    onTriggered: follower.soundcoreEnabled = true
   }
 
   // Reads the device's SDP UUIDs, which is how the backend is chosen. Started by

@@ -53,6 +53,7 @@ again — along with its settings, so note them first if you changed any.
 |:----------------------------|:----------------------------------------------------------------------|:------------------------------------------------------------------------------------------------|:-------------------------------|
 | JBL TUNE230NC TWS (earbuds) | <img src="docs/icons/yes.svg" width="14" alt="yes"> left, right, case | <img src="docs/icons/yes.svg" width="14" alt="yes"> Off · ANC · Ambient · TalkThru              | [@ncr](https://github.com/ncr) |
 | Sony WH-CH720N (over-ear)   | <img src="docs/icons/yes.svg" width="14" alt="yes"> one figure        | <img src="docs/icons/yes.svg" width="14" alt="yes"> Off · ANC · Ambient (level, Focus on Voice) | [@ncr](https://github.com/ncr) |
+| Soundcore Space 2 (over-ear)| <img src="docs/icons/yes.svg" width="14" alt="yes"> one figure        | <img src="docs/icons/yes.svg" width="14" alt="yes"> Off · ANC · Ambient                          | [@Sovego](https://github.com/Sovego) |
 | Xiaomi Buds 5 Pro (earbuds) | <img src="docs/icons/yes.svg" width="14" alt="yes"> one figure        | <img src="docs/icons/yes.svg" width="14" alt="yes"> Off · ANC · Ambient                          | [@KentoNion](https://github.com/KentoNion)|
 | other Fast Pair headphones  | <img src="docs/icons/yes.svg" width="14" alt="yes"> expected          | <img src="docs/icons/unknown.svg" width="14" alt="untested">                                    | —                              |
 
@@ -60,7 +61,8 @@ Battery works on anything that serves the Google Fast Pair Message Stream
 (`bluetoothctl info <address>` lists `df21fe2c-…`) — most headphones do — and
 falls back to BlueZ's single figure otherwise. Noise control needs the
 vendor's own channel: Sony MDR v2 (`956c7b26-…`), Compact GAIA on SPP for
-Xiaomi Buds 5 Pro (`00001100-d102-…` in the SDP record), and JBL over BLE.
+Xiaomi Buds 5 Pro (`00001100-d102-…` in the SDP record), Soundcore vendor RFCOMM
+(`0cf12d31-…`), and JBL over BLE.
 
 ## Add your own headphones
 
@@ -201,6 +203,17 @@ row in the table above; an agent gets the steps from
 <tr>
 <td align="center">JBL TUNE230NC TWS — <a href="https://github.com/ncr">@ncr</a></td>
 <td align="center">Sony WH-CH720N — <a href="https://github.com/ncr">@ncr</a></td>
+</tr>
+</table>
+
+<table>
+<tr>
+<td width="50%"><img src="docs/gallery/soundcore-space-2.png" alt="Soundcore Space 2: one battery, Off / ANC / Ambient" width="100%"></td>
+<td width="50%"></td>
+</tr>
+<tr>
+<td align="center">Soundcore Space 2 — <a href="https://github.com/Sovego">@Sovego</a></td>
+<td align="center"></td>
 </tr>
 </table>
 

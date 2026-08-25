@@ -434,6 +434,7 @@ function readerLevel(state, key) {
 // path possible at all.
 var SONY_MDR_V2_UUID = "956c7b26-d49a-4ba8-b03f-b17d393cb6e2"
 var CSR_GAIA_UUID = "00001100-d102-11e1-9b23-00025b00a5a5"
+var SOUNDCORE_UUID_PREFIX = "0cf12d31-fac3-4553-bd80-d6832e7"
 
 // The UUIDs `bluetoothctl info <address>` printed, lowercased.
 // Quickshell.Bluetooth exposes no uuids property, so the SDP record is read the
@@ -453,20 +454,23 @@ function uuidsFromBluetoothctl(text) {
   return out
 }
 
-// "sony", "xiaomi", "jbl" or "" — the backend to run for this device, and the
+// "sony", "xiaomi", "soundcore", "jbl" or "" — the backend to run for this device, and the
 // empty string for a device no path can reach. SDP UUIDs win because they come
 // from the device's own record: Sony first, then CSR GAIA (Xiaomi / QCC on
-// SPP). A known BLE address only says the Message Stream is up, which every
+// SPP), then Soundcore vendor RFCOMM. A known BLE address only says the Message Stream is up, which every
 // Fast Pair device does whether or not it answers a mode query, so it is last.
 function controlBackend(uuids, bleAddress) {
   var list = uuids || []
   var gaia = false
+  var soundcore = false
   for (var i = 0; i < list.length; i++) {
     var id = str(list[i]).trim().toLowerCase()
     if (id === SONY_MDR_V2_UUID) return "sony"
     if (id === CSR_GAIA_UUID) gaia = true
+    if (id.indexOf(SOUNDCORE_UUID_PREFIX) === 0) soundcore = true
   }
   if (gaia) return "xiaomi"
+  if (soundcore) return "soundcore"
   return str(bleAddress).trim() !== "" ? "jbl" : ""
 }
 
