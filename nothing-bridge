@@ -1,0 +1,582 @@
+#!/usr/bin/env python3
+"""Hold one RFCOMM link to Nothing earbuds or headphones and mirror what they say.
+
+    nothing-bridge <classic-address>
+
+Prints one JSON object per line, and reads one command per line:
+
+    stdout   {"modes": true, "mode": "anc", "available": ["off","anc","ambient"],
+              "ancLevel": "high", "ancLevels": ["low","mid","high","adaptive"],
+              "latency": false,
+              "battery": {"left": 85, "right": 15, "case": 85,
+                          "charging": ["case"], "caseStale": false}}
+             {"modes": false, "error": "..."}
+    stdin    set off | set anc | set ambient
+             level low | level mid | level high | level adaptive
+             latency on | latency off
+
+Exit codes, which the shell-side service reads to decide what to do next:
+
+    0   clean stop: SIGTERM/SIGINT, or the widget closed the pipe
+    1   transient: the channel never opened, or closed under us. Says nothing
+        about the device, so the service retries with a growing pause
+    3   linked but silent: the channel opened and the noise-control query went
+        unanswered. This device speaks NT Link but not this part of it, so the
+        service parks the address
+    4   setup failure: bad arguments, or a Python without Bluetooth sockets.
+        About this machine, not about the device
+
+Sibling of sony-bridge and xiaomi-bridge: the same stdout/stdin/exit-code
+contract, a different channel. Nothing serves its own RFCOMM channel (15) for
+the Nothing X protocol, and advertises the NT Link UUID
+(aeac4a03-dff5-498f-843a-34487cf133eb) in its SDP record, which is how the
+widget picks this backend. The socket is opened directly rather than through
+an org.bluez.Profile1: the channel number is fixed, so there is no SDP lookup
+to ask BlueZ for.
+
+The vocabulary is the panel's, not Nothing's. Nothing X offers six settings —
+Off, Transparency, and noise cancelling at Low, Mid, High or Adaptive — and
+stores the strength with the mode. Here Transparency is `ambient`, the four
+strengths are one `anc` mode with an `ancLevel`, and `set anc` asks for the
+strength last seen (Adaptive when none has been). That keeps `setMode anc`
+meaning the same thing on every brand the widget drives.
+
+Protocol, from the two open clients that read it off the hardware —
+r-witz/omarchy-nothing-ear (Nothing Ear, Headphone (1)) and DaanHessen/earctl
+— and from the Ear (a) trace in pull request #2. See PROTOCOL.md:
+
+    frame    55 60 01 <cmd u16 LE> <len u16 LE> <op u8> <payload> <crc u16 LE>
+             CRC-16/MODBUS (init FFFF, poly A001) over everything before it
+    cmd      low byte is the command, high byte the direction:
+             C0 get · F0 set · 40 answer · 70 ack · E0 unsolicited
+    06       device info; asked first, because a fresh session may ignore
+             what follows until it has been
+    07       battery: <count> then <component> <level> pairs; component 2
+             left, 3 right, 4 case, 6 the one battery of a headphone; bit 7
+             of the level is charging
+    1E / 0F  noise control get / set; the mode byte at payload[1]:
+             1 high · 2 mid · 3 low · 4 adaptive · 5 off · 7 transparency,
+             set payload 01 <mode> 00
+    41 / 40  low latency get / set; get answers 01 on, set payload 01 on 02 off
+
+The case reports only while it is open. Its last reading is kept, on disk,
+for six hours and sent as `caseStale` once the case has gone quiet, so the
+panel can dim it rather than drop it.
+"""
+import ctypes
+import json
+import os
+import re
+import select
+import signal
+import socket
+import struct
+import sys
+import time
+
+USAGE = "usage: nothing-bridge <classic-address>"
+ADDRESS = re.compile(r"^([0-9A-Fa-f]{2}:){5}[0-9A-Fa-f]{2}$")
+
+RFCOMM_CHANNEL = 15
+
+SOF = 0x55
+CTRL_WITH_CRC = 0x0160
+
+CMD_DEVICE_INFO = 0x06
+CMD_BATTERY = 0x07
+CMD_ANC_GET = 0x1E
+CMD_ANC_SET = 0x0F
+CMD_LATENCY_GET = 0x41
+CMD_LATENCY_SET = 0x40
+
+DIR_GET = 0xC0
+DIR_SET = 0xF0
+DIR_ANSWER = 0x40
+DIR_ACK = 0x70
+DIR_EVENT = 0xE0
+
+# The mode byte, and the panel's name for it. The four strengths are one mode
+# with a level; the level names are the panel's ANC_LEVEL_ORDER.
+MODE_BYTES = {"off": 0x05, "ambient": 0x07}
+LEVEL_BYTES = {"high": 0x01, "mid": 0x02, "low": 0x03, "adaptive": 0x04}
+LEVEL_FROM_BYTE = {byte: name for name, byte in LEVEL_BYTES.items()}
+AVAILABLE = ["off", "anc", "ambient"]
+LEVELS = ["low", "mid", "high", "adaptive"]
+DEFAULT_LEVEL = "adaptive"
+
+COMPONENTS = {2: "left", 3: "right", 4: "case", 6: "headset"}
+
+EXIT_TRANSIENT = 1
+EXIT_UNSUPPORTED = 3
+EXIT_SETUP = 4
+
+# The channel is not always ready the instant BlueZ reports the connection;
+# the first connect is often refused and the second, a moment later, is not.
+CONNECT_TIMEOUT = 5.0
+CONNECT_ATTEMPTS = 6
+CONNECT_RETRY = 1.5
+# How long a fresh session gets to answer the device-info probe before the
+# real queries go out anyway.
+INFO_TIMEOUT = 1.5
+# How long the noise-control query gets before the device is called silent.
+ANSWER_TIMEOUT = 5.0
+# Touch controls do not announce themselves reliably on this channel, so the
+# mode is asked again on a light poll; the battery on every fifth one.
+POLL_INTERVAL = 3.0
+BATTERY_EVERY = 5
+# A set is answered by an ack, not by the new state: ask shortly after.
+READBACK_DELAY = 0.4
+
+STATE_DIR = os.path.join(
+    os.environ.get("XDG_STATE_HOME") or os.path.expanduser("~/.local/state"),
+    "omaphones")
+CASE_FILE = os.path.join(STATE_DIR, "nothing-case.json")
+CASE_MAX_AGE = 6 * 3600
+
+
+class Stop(Exception):
+    """Raised into whatever the main thread is doing when asked to quit."""
+
+
+def emit(payload):
+    try:
+        sys.stdout.write(json.dumps(payload, separators=(",", ":")) + "\n")
+        sys.stdout.flush()
+    except (BrokenPipeError, ValueError):
+        os._exit(0)
+
+
+def arm_parent_death_signal():
+    """Die with the shell that started us, like the other bridges."""
+    try:
+        libc = ctypes.CDLL("libc.so.6", use_errno=True)
+        libc.prctl(1, signal.SIGTERM)
+    except Exception:
+        return
+    if os.getppid() == 1:
+        os._exit(0)
+
+
+def crc16(data):
+    crc = 0xFFFF
+    for byte in data:
+        crc ^= byte
+        for _ in range(8):
+            crc = (crc >> 1) ^ 0xA001 if crc & 1 else crc >> 1
+    return crc & 0xFFFF
+
+
+def frame(command, direction, payload=b"", operation=1):
+    wire = (command & 0xFF) | ((direction & 0xFF) << 8)
+    body = struct.pack("<BHHH", SOF, CTRL_WITH_CRC, wire, len(payload))
+    body += bytes([operation & 0xFF]) + payload
+    return body + struct.pack("<H", crc16(body))
+
+
+def take_frames(buffer):
+    """Whole frames from a byte buffer as (command, direction, payload)."""
+    frames = []
+    while True:
+        try:
+            start = buffer.index(SOF)
+        except ValueError:
+            buffer.clear()
+            break
+        if start:
+            del buffer[:start]
+        if len(buffer) < 8:
+            break
+        _, ctrl, wire, length = struct.unpack_from("<BHHH", buffer)
+        crc_size = 2 if ctrl & 0x20 else 0
+        total = 8 + length + crc_size
+        if len(buffer) < total:
+            break
+        raw = bytes(buffer[:total])
+        del buffer[:total]
+        if crc_size and struct.unpack_from("<H", raw, 8 + length)[0] != crc16(raw[:8 + length]):
+            # A frame that fails its check cannot be trusted; look for the next.
+            continue
+        frames.append((wire & 0xFF, (wire >> 8) & 0xFF, raw[8:8 + length]))
+    return frames
+
+
+def parse_anc(payload):
+    """(mode, level) in the panel's words, or (None, None) for nothing usable.
+
+    The mode byte sits at payload[1] behind a kind byte of 1. Some firmware
+    adds a second (2, level) pair; where it does, that level wins.
+    """
+    if len(payload) < 2:
+        return None, None
+    mode_byte = payload[1]
+    level = None
+    for offset in range(3, len(payload) - 1, 3):
+        if payload[offset] == 2 and payload[offset + 1] in LEVEL_FROM_BYTE:
+            level = LEVEL_FROM_BYTE[payload[offset + 1]]
+    if mode_byte == 0x07:
+        return "ambient", level
+    if mode_byte in (0x00, 0x05):
+        return "off", level
+    if mode_byte in LEVEL_FROM_BYTE:
+        return "anc", level or LEVEL_FROM_BYTE[mode_byte]
+    return None, level
+
+
+def parse_battery(payload):
+    """{"left": 85, ...} for the components present, and the charging ones."""
+    levels = {}
+    charging = []
+    if not payload:
+        return levels, charging
+    count = payload[0]
+    for index in range(count):
+        offset = 1 + index * 2
+        if offset + 1 >= len(payload):
+            break
+        name = COMPONENTS.get(payload[offset])
+        raw = payload[offset + 1]
+        level = raw & 0x7F
+        if name is None or level > 100:
+            continue
+        levels[name] = level
+        if raw & 0x80:
+            charging.append(name)
+    return levels, charging
+
+
+def read_case_cache(address):
+    try:
+        with open(CASE_FILE) as handle:
+            data = json.load(handle)
+    except (OSError, ValueError):
+        return None
+    if not isinstance(data, dict):
+        return None
+    entry = data.get(address.upper())
+    if not isinstance(entry, dict):
+        return None
+    level, saved = entry.get("level"), entry.get("saved")
+    if not isinstance(level, int) or not isinstance(saved, (int, float)):
+        return None
+    if not 0 <= level <= 100 or time.time() - saved > CASE_MAX_AGE:
+        return None
+    return level
+
+
+def write_case_cache(address, level):
+    try:
+        os.makedirs(STATE_DIR, exist_ok=True)
+        try:
+            with open(CASE_FILE) as handle:
+                data = json.load(handle)
+        except (OSError, ValueError):
+            data = {}
+        if not isinstance(data, dict):
+            data = {}
+        data[address.upper()] = {"level": level, "saved": int(time.time())}
+        temporary = CASE_FILE + ".%d.tmp" % os.getpid()
+        with open(temporary, "w") as handle:
+            json.dump(data, handle, separators=(",", ":"), sort_keys=True)
+        os.replace(temporary, CASE_FILE)
+    except OSError:
+        # A cache that cannot be written costs a dimmed row, not correctness.
+        pass
+
+
+class Bridge:
+    def __init__(self, address):
+        self.address = address
+        self.sock = None
+        self.buffer = bytearray()
+        self.pending_stdin = ""
+        self.exit_code = None
+
+        self.mode = None
+        self.level = None
+        self.latency = None
+        self.levels = {}
+        self.charging = []
+        self.case_level = read_case_cache(address)
+        self.case_stale = self.case_level is not None
+        self.last_line = None
+
+        self.info_seen = False
+        self.queries_sent = False
+        self.opened_at = None
+        self.next_poll = None
+        self.polls = 0
+        self.readback_at = None
+
+    # ---- The link.
+
+    def connect(self):
+        last_error = None
+        for attempt in range(CONNECT_ATTEMPTS):
+            if attempt:
+                time.sleep(CONNECT_RETRY)
+            sock = socket.socket(socket.AF_BLUETOOTH, socket.SOCK_STREAM,
+                                 socket.BTPROTO_RFCOMM)
+            sock.settimeout(CONNECT_TIMEOUT)
+            try:
+                sock.connect((self.address, RFCOMM_CHANNEL))
+            except OSError as error:
+                sock.close()
+                last_error = error
+                continue
+            sock.setblocking(False)
+            self.sock = sock
+            return True
+        reason = getattr(last_error, "strerror", None) or str(last_error)
+        self.finish(EXIT_TRANSIENT, "cannot open the Nothing channel: %s" % reason)
+        return False
+
+    def finish(self, code, message=None):
+        if self.exit_code is not None:
+            return
+        self.exit_code = code
+        if message:
+            emit({"modes": False, "error": message})
+
+    def send(self, command, direction=DIR_GET, payload=b""):
+        if self.sock is None:
+            return
+        try:
+            self.sock.sendall(frame(command, direction, payload))
+        except OSError as error:
+            self.finish(EXIT_TRANSIENT, "the Nothing channel closed: %s" % error)
+
+    # ---- What the device said.
+
+    def on_frame(self, command, direction, payload):
+        if direction not in (DIR_ANSWER, DIR_ACK, DIR_EVENT):
+            return
+        if command == CMD_DEVICE_INFO:
+            self.info_seen = True
+            self.send_queries()
+        elif command in (CMD_ANC_GET, 0x03) and direction != DIR_ACK:
+            # 40 1E answers the query; E0 03 is the device announcing a change.
+            mode, level = parse_anc(payload)
+            if mode is None:
+                return
+            self.mode = mode
+            if level is not None:
+                self.level = level
+            self.report()
+        elif command in (CMD_BATTERY, 0x01) and direction != DIR_ACK:
+            # 40 07 answers the query; E0 01 is the device announcing a change.
+            levels, charging = parse_battery(payload)
+            if not levels:
+                return
+            self.levels = levels
+            self.charging = charging
+            if "case" in levels:
+                self.case_level = levels["case"]
+                self.case_stale = False
+                write_case_cache(self.address, levels["case"])
+            elif self.case_level is not None:
+                self.case_stale = True
+            self.report()
+        elif command == CMD_LATENCY_GET and direction == DIR_ANSWER:
+            self.latency = bool(payload) and payload[0] == 1
+            self.report()
+        elif command in (CMD_ANC_SET, CMD_LATENCY_SET):
+            # Acked; the new state is what a read-back says, not the ack.
+            self.readback_at = time.monotonic() + READBACK_DELAY
+
+    def report(self):
+        if self.mode is None:
+            return
+        battery = dict(self.levels)
+        charging = list(self.charging)
+        if self.case_level is not None and "case" not in battery:
+            battery["case"] = self.case_level
+            charging = [name for name in charging if name != "case"]
+        battery["charging"] = charging
+        battery["caseStale"] = self.case_stale and "case" in battery
+        line = {
+            "modes": True,
+            "mode": self.mode,
+            "available": AVAILABLE,
+            "ancLevel": self.level or DEFAULT_LEVEL,
+            "ancLevels": LEVELS,
+            "battery": battery,
+        }
+        if self.latency is not None:
+            line["latency"] = self.latency
+        if line != self.last_line:
+            self.last_line = line
+            emit(line)
+
+    # ---- What we ask.
+
+    def send_queries(self):
+        if self.queries_sent:
+            return
+        self.queries_sent = True
+        self.send(CMD_BATTERY)
+        self.send(CMD_ANC_GET)
+        self.send(CMD_LATENCY_GET)
+        self.next_poll = time.monotonic() + POLL_INTERVAL
+
+    def poll(self):
+        self.polls += 1
+        self.send(CMD_ANC_GET)
+        if self.polls % BATTERY_EVERY == 0:
+            self.send(CMD_BATTERY)
+        self.next_poll = time.monotonic() + POLL_INTERVAL
+
+    def readback(self):
+        self.readback_at = None
+        self.send(CMD_ANC_GET)
+        self.send(CMD_LATENCY_GET)
+
+    # ---- What the widget asks.
+
+    def command(self, line):
+        parts = line.strip().split()
+        if len(parts) < 2 or self.mode is None:
+            return
+        verb, value = parts[0], parts[1]
+        if verb == "set":
+            if value == "anc":
+                byte = LEVEL_BYTES[self.level or DEFAULT_LEVEL]
+            else:
+                byte = MODE_BYTES.get(value)
+            if byte is None:
+                return
+            self.send(CMD_ANC_SET, DIR_SET, bytes([0x01, byte, 0x00]))
+        elif verb == "level":
+            byte = LEVEL_BYTES.get(value)
+            if byte is None:
+                return
+            self.level = value
+            self.send(CMD_ANC_SET, DIR_SET, bytes([0x01, byte, 0x00]))
+        elif verb == "latency":
+            if value not in ("on", "off") or self.latency is None:
+                return
+            self.send(CMD_LATENCY_SET, DIR_SET, bytes([0x01 if value == "on" else 0x02]))
+        else:
+            return
+        # A set is acked rather than answered; ask anyway in case it is not.
+        self.readback_at = time.monotonic() + READBACK_DELAY * 2
+
+    def on_stdin(self):
+        try:
+            chunk = os.read(0, 4096)
+        except OSError:
+            chunk = b""
+        if not chunk:
+            # The widget closed the pipe: a clean stop, not a failure.
+            self.finish(0)
+            return
+        self.pending_stdin += chunk.decode("utf-8", "replace")
+        while "\n" in self.pending_stdin:
+            line, self.pending_stdin = self.pending_stdin.split("\n", 1)
+            self.command(line)
+
+    def on_socket(self):
+        try:
+            data = self.sock.recv(4096)
+        except BlockingIOError:
+            return
+        except OSError as error:
+            self.finish(EXIT_TRANSIENT, "the Nothing channel closed: %s" % error)
+            return
+        if not data:
+            self.finish(EXIT_TRANSIENT, "the Nothing channel closed")
+            return
+        self.buffer += data
+        for command, direction, payload in take_frames(self.buffer):
+            self.on_frame(command, direction, payload)
+            if self.exit_code is not None:
+                return
+
+    # ---- The loop.
+
+    def run(self):
+        if not self.connect():
+            return self.exit_code
+        self.opened_at = time.monotonic()
+        self.send(CMD_DEVICE_INFO)
+        info_deadline = self.opened_at + INFO_TIMEOUT
+        answer_deadline = self.opened_at + INFO_TIMEOUT + ANSWER_TIMEOUT
+
+        while self.exit_code is None:
+            now = time.monotonic()
+            if not self.queries_sent and now >= info_deadline:
+                self.send_queries()
+            if self.mode is None and now >= answer_deadline:
+                self.finish(EXIT_UNSUPPORTED,
+                            "the device did not answer the noise-control query")
+                break
+            if self.readback_at is not None and now >= self.readback_at:
+                self.readback()
+            if self.next_poll is not None and now >= self.next_poll:
+                self.poll()
+
+            deadlines = [info_deadline if not self.queries_sent else None,
+                         answer_deadline if self.mode is None else None,
+                         self.readback_at, self.next_poll]
+            wait = min([d for d in deadlines if d is not None], default=now + 1.0) - now
+            try:
+                ready, _, _ = select.select([0, self.sock], [], [], max(0.0, min(wait, 1.0)))
+            except (OSError, ValueError):
+                self.finish(EXIT_TRANSIENT, "the Nothing channel closed")
+                break
+            if self.sock in ready:
+                self.on_socket()
+            if 0 in ready:
+                self.on_stdin()
+        return self.exit_code
+
+    def close(self):
+        if self.sock is not None:
+            try:
+                self.sock.close()
+            except OSError:
+                pass
+            self.sock = None
+
+
+def main():
+    argv = sys.argv[1:]
+    if argv and argv[0] in ("-h", "--help"):
+        print(USAGE)
+        return 0
+    address = argv[0].strip() if argv else ""
+    if not ADDRESS.match(address):
+        emit({"modes": False,
+              "error": "%s (not a Bluetooth address: %r)" % (USAGE, address)})
+        return EXIT_SETUP
+    if not hasattr(socket, "AF_BLUETOOTH"):
+        emit({"modes": False,
+              "error": "this Python was built without Bluetooth sockets"})
+        return EXIT_SETUP
+
+    bridge = Bridge(address)
+
+    def stop(*_args):
+        raise Stop()
+
+    signal.signal(signal.SIGTERM, stop)
+    signal.signal(signal.SIGINT, stop)
+    try:
+        code = bridge.run()
+    except Stop:
+        code = 0
+    finally:
+        bridge.close()
+    return code or 0
+
+
+if __name__ == "__main__":
+    arm_parent_death_signal()
+    try:
+        sys.exit(main())
+    except SystemExit:
+        raise
+    except Stop:
+        sys.exit(0)
+    except BaseException as error:
+        emit({"modes": False, "error": "%s: %s" % (type(error).__name__, error)})
+        sys.exit(EXIT_TRANSIENT)

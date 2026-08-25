@@ -81,50 +81,88 @@ Item {
   readonly property bool streaming: reading.stream === true
     && (readerRunning || refreshing)
 
-  readonly property int leftLevel: streaming ? Model.readerLevel(reading, "left") : -1
-  readonly property int rightLevel: streaming ? Model.readerLevel(reading, "right") : -1
-  readonly property int caseLevel: streaming ? Model.readerLevel(reading, "case") : -1
-  readonly property bool leftCharging: streaming && reading.leftCharging === true
-  readonly property bool rightCharging: streaming && reading.rightCharging === true
-  readonly property bool caseCharging: streaming && reading.caseCharging === true
+  // ---- What the mode bridge said about the battery, on a device whose control
+  //      channel carries it (the Nothing one does). Second to the Fast Pair
+  //      stream, which announces a change the moment it happens where the
+  //      bridge polls: it fills in when there is no stream — a set with no
+  //      Message Stream, or Fast Pair switched off — and only while the bridge
+  //      is up and answering, for the reason the stream's levels go with the
+  //      reader: a figure nobody is updating must not read as current.
+  readonly property bool bridgeBattery: ancLive && !streaming
+    && (Model.bridgeLevel(ancState, "left") >= 0 || Model.bridgeLevel(ancState, "right") >= 0
+        || Model.bridgeLevel(ancState, "case") >= 0 || Model.bridgeLevel(ancState, "headset") >= 0)
+
+  readonly property int leftLevel: streaming ? Model.readerLevel(reading, "left")
+    : (bridgeBattery ? Model.bridgeLevel(ancState, "left") : -1)
+  readonly property int rightLevel: streaming ? Model.readerLevel(reading, "right")
+    : (bridgeBattery ? Model.bridgeLevel(ancState, "right") : -1)
+  readonly property int caseLevel: streaming ? Model.readerLevel(reading, "case")
+    : (bridgeBattery ? Model.bridgeLevel(ancState, "case") : -1)
+  readonly property bool leftCharging: streaming ? reading.leftCharging === true
+    : (bridgeBattery && Model.bridgeCharging(ancState, "left"))
+  readonly property bool rightCharging: streaming ? reading.rightCharging === true
+    : (bridgeBattery && Model.bridgeCharging(ancState, "right"))
+  readonly property bool caseCharging: streaming ? reading.caseCharging === true
+    : (bridgeBattery && Model.bridgeCharging(ancState, "case"))
   readonly property bool perBud: leftLevel >= 0 || rightLevel >= 0
+  // The case only reports while it is open. The Nothing bridge keeps its last
+  // reading and says so; the panel dims that row rather than dropping it.
+  readonly property bool caseStale: bridgeBattery && Model.bridgeCaseStale(ancState)
 
   // A set with one battery for the whole thing — an over-ear headset, mostly.
   // It is its own shape, not a pair with one bud missing: there is no side to
   // name and no case to report, so the panel draws one row and the bar fills
   // both halves of the mark with the same figure. `perBud` deliberately stays
   // false here, because there are no buds to compare.
-  readonly property bool single: streaming && reading.single === true
-  readonly property int singleLevel: single ? Model.readerLevel(reading, "battery") : -1
-  readonly property bool singleCharging: single && reading.batteryCharging === true
+  readonly property bool single: streaming ? reading.single === true
+    : (bridgeBattery && Model.bridgeLevel(ancState, "headset") >= 0)
+  readonly property int singleLevel: !single ? -1
+    : (streaming ? Model.readerLevel(reading, "battery") : Model.bridgeLevel(ancState, "headset"))
+  readonly property bool singleCharging: single && (streaming ? reading.batteryCharging === true
+    : Model.bridgeCharging(ancState, "headset"))
 
   readonly property string modelId: String(reading.modelId || "")
   readonly property string bleAddress: String(reading.bleAddress || "")
 
-  // ---- Listening mode. Three devices, three protocols, one piece of state: the
+  // ---- Listening mode. Four devices, four protocols, one piece of state: the
   //      panel shows a mode and writes a mode, and which helper carries it is
   //      decided per device from the UUIDs in its SDP record.
   //
-  //        sony-bridge    Sony's MDR protocol v2, over an RFCOMM channel the
-  //                       headset itself serves. Deterministic: a device that
-  //                       advertises the UUID speaks the protocol, so this path
-  //                       needs no Fast Pair, no rotating address and no cache of
-  //                       which models answered.
-  //        xiaomi-bridge  Compact GAIA on standard SPP. The CSR GAIA UUID in
-  //                       the SDP record is the claim; the socket is SPP. Same
-  //                       lifecycle as Sony: Classic address, no Fast Pair.
-  //        jbl-bridge     JBL's BLE GATT service, on the earbuds' BLE side at an
-  //                       address that rotates and is announced only on the
-  //                       Message Stream — so that path needs the reader, and is
-  //                       unreachable without it.
+  //        sony-bridge     Sony's MDR protocol v2, over an RFCOMM channel the
+  //                        headset itself serves. Deterministic: a device that
+  //                        advertises the UUID speaks the protocol, so this path
+  //                        needs no Fast Pair, no rotating address and no cache
+  //                        of which models answered.
+  //        nothing-bridge  Nothing's NT Link, RFCOMM channel 15, same shape as
+  //                        Sony's: the UUID in the record is the claim. Carries
+  //                        the battery and the low-latency switch as well.
+  //        xiaomi-bridge   Compact GAIA on standard SPP. The CSR GAIA UUID in
+  //                        the SDP record is the claim; the socket is SPP. Same
+  //                        lifecycle as Sony: Classic address, no Fast Pair.
+  //        jbl-bridge      JBL's BLE GATT service, on the earbuds' BLE side at
+  //                        an address that rotates and is announced only on the
+  //                        Message Stream — so that path needs the reader, and
+  //                        is unreachable without it.
   //
   //      Either way exactly one process owns the link, because writes and the
   //      device's own notifications (a mode changed by touching the earbud) must
   //      share one connection; this follower talks to it through its stdin, and
   //      the bridges report on the same contract into the same state.
+  //
+  //      The three Classic-channel bridges take the same argument, report the
+  //      same lines and end the same four ways, so one Process runs whichever
+  //      of them the backend names; only the JBL one, which dials a BLE address
+  //      the reader announces, has a lifecycle of its own.
   readonly property string jblBridgePath: Qt.resolvedUrl("jbl-bridge").toString().replace(/^file:\/\//, "")
   readonly property string sonyBridgePath: Qt.resolvedUrl("sony-bridge").toString().replace(/^file:\/\//, "")
+  readonly property string nothingBridgePath: Qt.resolvedUrl("nothing-bridge").toString().replace(/^file:\/\//, "")
   readonly property string xiaomiBridgePath: Qt.resolvedUrl("xiaomi-bridge").toString().replace(/^file:\/\//, "")
+  readonly property string classicBridgePath: {
+    if (controlBackend === "sony") return sonyBridgePath
+    if (controlBackend === "nothing") return nothingBridgePath
+    if (controlBackend === "xiaomi") return xiaomiBridgePath
+    return ""
+  }
   property var ancState: ({})
   property bool ancEnabled: true
   readonly property bool jblWanted: useModeControl && useFastPair && ancEnabled && connected
@@ -141,13 +179,13 @@ Item {
   property bool ancAnswered: false
   property string ancRunError: ""
   property string ancErrorRaw: ""
-  property bool sonyEnabled: true
-  property bool xiaomiEnabled: true
+  property bool classicEnabled: true
 
   // What this device serves, read once per connection with `bluetoothctl info`.
   // Empty while it is not connected, or while the probe is still out.
   property var deviceUuids: []
   readonly property string controlBackend: Model.controlBackend(deviceUuids, bleAddress)
+  readonly property bool classicBackend: Model.isClassicBackend(controlBackend)
 
   readonly property bool ancSupported: ancState.modes === true
   readonly property string ancMode: String(ancState.mode || "")
@@ -155,6 +193,16 @@ Item {
   // bridge names none and means all four; the Sony bridge lists what the headset
   // has, which for an over-ear WH is Off / NC / Ambient and no TalkThru.
   readonly property var modesAvailable: Model.modesAvailable(ancState)
+  // How strong the noise cancelling is, on a device that grades it (Nothing:
+  // Low / Mid / High / Adaptive). Empty on every other bridge, which hides the
+  // row. `ancLevel` is the strength last seen, kept across Off and Ambient so
+  // `set anc` has somewhere to go back to; the panel lights it only under ANC.
+  readonly property var ancLevels: Model.ancLevelsAvailable(ancState)
+  readonly property string ancLevel: Model.ancLevel(ancState)
+  // Low latency, a switch the Nothing channel carries. `latencyKnown` is the
+  // bridge having mentioned it at all; a device that never does has no row.
+  readonly property bool latencyKnown: ancLive && typeof ancState.latency === "boolean"
+  readonly property bool latencyEnabled: latencyKnown && ancState.latency === true
   // Ambient detail, Sony only: how much of the room comes through (0-20) and
   // whether voices are lifted out of it. -1 and false mean "not said".
   readonly property int ambientLevel: typeof ancState.level === "number" ? ancState.level : -1
@@ -168,7 +216,7 @@ Item {
 
   // Whichever bridge this device calls for. They are exclusive — the backend is
   // one string — so this is "the bridge", not "either of two links".
-  readonly property bool bridgeRunning: ancBridge.running || sonyBridge.running || xiaomiBridge.running
+  readonly property bool bridgeRunning: ancBridge.running || classicBridge.running
   // The bridge is up and the device has answered on it, which is the only state
   // in which a write has somewhere to land.
   readonly property bool ancLive: bridgeRunning && ancAnswered
@@ -176,9 +224,10 @@ Item {
   // switched off, because that needs no explaining.
   readonly property string ancError: {
     if (!useModeControl) return ""
-    // Only the JBL path goes through the Message Stream. Sony and Xiaomi serve
-    // their own Classic channels and do not care whether Fast Pair is on.
-    if (controlBackend !== "sony" && controlBackend !== "xiaomi" && !useFastPair)
+    // Only the JBL path goes through the Message Stream. The Classic-channel
+    // bridges serve the device's own channel and do not care whether Fast Pair
+    // is on.
+    if (!classicBackend && !useFastPair)
       return "needs Fast Pair for the BLE address"
     return ancErrorRaw
   }
@@ -189,12 +238,23 @@ Item {
   readonly property int modeSupportKnown: Model.supportVerdict(service ? service.modeSupport : ({}), modelId)
   readonly property bool ancModelParked: service ? service.ancParked[modelId] === true : false
   readonly property bool addressParked: service ? service.sonyParked[address] === true : false
-  readonly property bool sonyAddressParked: addressParked
   // How long to wait before the next attempt, keyed by whatever identifies the
   // device for the backend in play — the Fast Pair model for the JBL bridge, the
-  // Classic address for Sony and Xiaomi.
-  readonly property string ancBackoffKey: (controlBackend === "sony" || controlBackend === "xiaomi")
-    ? address : modelId
+  // Classic address for the others.
+  readonly property string ancBackoffKey: classicBackend ? address : modelId
+
+  // ---- The A2DP codec, which is the host's to choose: PipeWire negotiates it
+  //      and offers one card profile per codec both sides can do. Read with
+  //      `pactl list cards` when the device connects, when the panel opens, and
+  //      after a change; changed with `pactl set-card-profile`. A card with one
+  //      codec on offer has nothing to choose, and the panel draws no row.
+  //      This is about the link, not the device, so it is the same for every
+  //      brand — and nothing to do with the vendor channel's own codec flag,
+  //      which Nothing's firmware acknowledges without acting on.
+  property var codecState: ({ options: [], active: "" })
+  readonly property var codecOptions: Array.isArray(codecState.options) ? codecState.options : []
+  readonly property string activeCodec: String(codecState.active || "")
+  readonly property bool codecChoice: connected && codecOptions.length > 1
 
   readonly property int bluezLevel: Model.batteryLevel(device)
   // The bar carries one number: the headset's own figure where there is only
@@ -279,10 +339,11 @@ Item {
 
   // One JSON line from whichever bridge is running. The mode is whatever the
   // line says — a bridge reports its device's whole state on every change — but
-  // the three keys only the Sony bridge sends carry forward when a line omits
-  // them: the JBL bridge's {"modes", "mode"} lines say nothing about an ambient
-  // level, and reading that silence as "unknown" would blank a level the device
-  // never changed.
+  // the keys only one bridge sends carry forward when a line omits them: the
+  // JBL bridge's {"modes", "mode"} lines say nothing about an ambient level,
+  // and reading that silence as "unknown" would blank a level the device never
+  // changed. Sony's are level and voice; Nothing's the ANC strength, the
+  // latency switch and the battery.
   function applyAncLine(line) {
     var parsed = null
     try {
@@ -291,7 +352,7 @@ Item {
       return
     }
     if (parsed === null || typeof parsed !== "object" || Array.isArray(parsed)) return
-    var carried = ["available", "level", "voice"]
+    var carried = ["available", "level", "voice", "ancLevel", "ancLevels", "latency", "battery"]
     for (var i = 0; i < carried.length; i++) {
       var key = carried[i]
       if (parsed[key] === undefined && ancState[key] !== undefined) parsed[key] = ancState[key]
@@ -342,8 +403,8 @@ Item {
       service.resetAncBackoff(address)
     }
     if (ancRestart.running) { ancRestart.stop(); ancEnabled = true }
-    if (sonyRestart.running) { sonyRestart.stop(); sonyEnabled = true }
-    if (xiaomiRestart.running) { xiaomiRestart.stop(); xiaomiEnabled = true }
+    if (classicRestart.running) { classicRestart.stop(); classicEnabled = true }
+    probeCodecs()
     if (!useFastPair || !service) return
     // The service cycles this device's channel and leaves every other device's
     // alone; it says whether the request went out at all, because a reader that
@@ -364,6 +425,15 @@ Item {
   function refreshIfStale() {
     if (!connected) return
     if (readingStamp === 0 || Date.now() - readingStamp > stalerThanMs) refresh()
+    // Someone may have changed the codec elsewhere since the last look, and one
+    // pactl call on opening the panel is cheap.
+    probeCodecs()
+  }
+
+  // The Classic-channel bridge is live for this backend: the one place a write
+  // to Sony's dial, Nothing's strength or either's mode can go.
+  function classicLive(backend) {
+    return ancLive && classicBridge.running && controlBackend === backend
   }
 
   // True only when the write actually went out, so callers can say "unavailable"
@@ -373,8 +443,7 @@ Item {
   function setAncMode(mode) {
     if (!ancSupported || !ancLive) return false
     if (modesAvailable.indexOf(String(mode)) === -1) return false
-    if (sonyBridge.running) sonyBridge.write("set " + mode + "\n")
-    else if (xiaomiBridge.running) xiaomiBridge.write("set " + mode + "\n")
+    if (classicBridge.running) classicBridge.write("set " + mode + "\n")
     else ancBridge.write("set " + mode + "\n")
     return true
   }
@@ -384,10 +453,10 @@ Item {
   // to ambient as part of it, because the level is stored only by a set that
   // carries it: sending a level while Noise Cancelling is on changes nothing.
   function setAmbientLevel(value) {
-    if (!ancLive || !sonyBridge.running) return false
+    if (!classicLive("sony")) return false
     var level = Math.max(0, Math.min(20, Math.round(Number(value))))
     if (!isFinite(level)) return false
-    sonyBridge.write("level " + level + "\n")
+    classicBridge.write("level " + level + "\n")
     return true
   }
 
@@ -395,8 +464,52 @@ Item {
   // Sony only, the same as the level, and switched on its own — the headset
   // keeps it with the ambient setting, so this does not disturb the amount.
   function setAmbientVoice(on) {
-    if (!ancLive || !sonyBridge.running) return false
-    sonyBridge.write("voice " + (on ? "on" : "off") + "\n")
+    if (!classicLive("sony")) return false
+    classicBridge.write("voice " + (on ? "on" : "off") + "\n")
+    return true
+  }
+
+  // How strong the noise cancelling is, on a device that grades it. The device
+  // stores the strength with the mode, so asking for one turns ANC on at it —
+  // the same way Sony's dial switches the headset to Ambient. A strength the
+  // bridge did not list is not a write.
+  function setAncLevel(level) {
+    if (!ancLive || !classicBridge.running) return false
+    if (ancLevels.indexOf(String(level)) === -1) return false
+    classicBridge.write("level " + level + "\n")
+    return true
+  }
+
+  // Low latency on or off, on a device whose bridge has reported the switch.
+  function setLatency(on) {
+    if (!latencyKnown || !classicBridge.running) return false
+    classicBridge.write("latency " + (on ? "on" : "off") + "\n")
+    return true
+  }
+
+  // ---- The codec, through PipeWire. One probe at a time, started by hand
+  //      rather than by a `running` binding, for the reason the UUID probe is:
+  //      a process that exits the moment it has printed must not be re-armed
+  //      by a condition that is still true when it does.
+  function probeCodecs() {
+    if (!connected || address === "") {
+      codecState = ({ options: [], active: "" })
+      return
+    }
+    if (codecProbe.running) return
+    codecProbe.command = ["pactl", "list", "cards"]
+    codecProbe.running = true
+  }
+
+  // True when the change was handed to PipeWire, which may still refuse it —
+  // the probe that follows says what the card settled on. A codec the card does
+  // not offer is not a write.
+  function setCodec(key) {
+    if (!connected || codecSet.running) return false
+    var profile = Model.codecProfile(codecState, key)
+    if (profile === "") return false
+    codecSet.command = ["pactl", "set-card-profile", Model.cardNameFor(address), profile]
+    codecSet.running = true
     return true
   }
 
@@ -496,8 +609,15 @@ Item {
       // What the device serves is only known while it is here to be asked, and a
       // list left behind would keep a bridge armed for a device in its case.
       deviceUuids = []
+      codecState = ({ options: [], active: "" })
+      codecProbeDelay.stop()
     }
-    if (connected) probeUuids()
+    if (connected) {
+      probeUuids()
+      // PipeWire builds the card a moment after BlueZ reports the connection;
+      // asked straight away, the list would be empty.
+      codecProbeDelay.restart()
+    }
     checkLowBattery()
   }
 
@@ -509,7 +629,41 @@ Item {
   Component.onCompleted: {
     if (connected && address !== "" && service) service.rememberAddress(address)
     probeUuids()
+    if (connected) probeCodecs()
     checkLowBattery()
+  }
+
+  Timer {
+    id: codecProbeDelay
+    interval: 2500
+    repeat: false
+    onTriggered: follower.probeCodecs()
+  }
+
+  Process {
+    id: codecProbe
+    stdout: StdioCollector { id: codecProbeOut; waitForEnd: true }
+    onExited: function(exitCode, exitStatus) {
+      // A pactl that failed says nothing about the card; an empty list is
+      // exactly that, and hides the row.
+      follower.codecState = exitCode === 0
+        ? Model.parseCardProfiles(codecProbeOut.text, follower.address)
+        : ({ options: [], active: "" })
+    }
+  }
+
+  // PipeWire answers set-card-profile before the new stream is up, and the
+  // sink it rebuilds takes a moment to name its codec: ask again shortly.
+  Process {
+    id: codecSet
+    onExited: codecSettle.restart()
+  }
+
+  Timer {
+    id: codecSettle
+    interval: 1500
+    repeat: false
+    onTriggered: follower.probeCodecs()
   }
 
   // A refresh that never lands must not hold the per-earbud rows on screen for
@@ -597,22 +751,24 @@ Item {
     onTriggered: follower.ancEnabled = true
   }
 
-  // Lives only while a Sony headset is connected. Nothing else gates it: the
-  // channel is the headset's own, so there is no BLE address to wait for, no
-  // Fast Pair to depend on and no cache to consult — the SDP UUID already said
-  // this device speaks the protocol. The one reason not to run is that this
-  // address has already failed for good in this session.
+  // The Classic-channel bridge — sony-bridge, nothing-bridge or xiaomi-bridge,
+  // whichever the backend names. Lives only while such a device is connected.
+  // Nothing else gates it: the channel is the device's own, so there is no BLE
+  // address to wait for, no Fast Pair to depend on and no cache to consult —
+  // the SDP UUID already said this device speaks the protocol. The one reason
+  // not to run is that this address has already failed for good in this
+  // session.
   Process {
-    id: sonyBridge
-    running: follower.useModeControl && follower.sonyEnabled && follower.connected
-      && follower.controlBackend === "sony"
-      && !follower.sonyAddressParked
-    command: [follower.sonyBridgePath, follower.address]
+    id: classicBridge
+    running: follower.useModeControl && follower.classicEnabled && follower.connected
+      && follower.classicBridgePath !== ""
+      && !follower.addressParked
+    command: [follower.classicBridgePath, follower.address]
     stdinEnabled: true
     stdout: SplitParser {
       onRead: function(line) { follower.applyAncLine(line) }
     }
-    stderr: StdioCollector { id: sonyStderr; waitForEnd: true }
+    stderr: StdioCollector { id: classicStderr; waitForEnd: true }
     // No bridge, no mode, the same as the JBL one: a link that was killed leaves
     // its last report behind, and a LISTENING MODE row that no longer controls
     // anything is worse than no row.
@@ -627,7 +783,7 @@ Item {
     onExited: function(exitCode, exitStatus) {
       // The same four codes jbl-bridge uses: 0 clean stop · 1 transient, retry
       // with a growing pause · 3 linked but silent to every query type it knows
-      // · 4 could not start at all. Both of the last two are about this headset
+      // · 4 could not start at all. Both of the last two are about this device
       // rather than about this moment, so the address is parked for the session.
       // Nothing is written to disk: the SDP UUID makes the next session's
       // decision for free, and a headset that gains the feature in a firmware
@@ -635,7 +791,7 @@ Item {
       //
       // The address is this follower's own, which is why the old service had to
       // remember which one a run was pointed at and this does not.
-      // Exit 3 parks (the headset answered none of the query types); exit 4 is
+      // Exit 3 parks (the device answered none of the query types); exit 4 is
       // this machine's problem and backs off instead, message on screen.
       if (exitCode === 3 && follower.service)
         follower.service.parkAddress(follower.address)
@@ -645,77 +801,27 @@ Item {
         follower.ancRunError = ""
         follower.ancErrorRaw = ""
       } else if (exitCode !== 0 && follower.ancRunError === "") {
-        follower.ancErrorRaw = Model.shortError(sonyStderr.text, exitCode === 4
+        follower.ancErrorRaw = Model.shortError(classicStderr.text, exitCode === 4
           ? "the listening-mode bridge could not start"
           : "the listening-mode link dropped (exit " + exitCode + ")")
       }
 
-      // Nothing cycles this bridge on purpose: the channel is the headset's own
+      // Nothing cycles this bridge on purpose: the channel is the device's own
       // and its address is this follower's, so there is no rotated address to
       // follow and no re-aiming to do. Every exit waits out its backoff.
-      follower.sonyEnabled = false
-      sonyRestart.interval = follower.service
+      follower.classicEnabled = false
+      classicRestart.interval = follower.service
         ? follower.service.ancBackoffFor(follower.address) : 10000
       if ((exitCode === 1 || exitCode === 4) && follower.service)
         follower.service.bumpAncBackoff(follower.address)
-      sonyRestart.restart()
+      classicRestart.restart()
     }
   }
 
   Timer {
-    id: sonyRestart
+    id: classicRestart
     repeat: false
-    onTriggered: follower.sonyEnabled = true
-  }
-
-  // Lives only while Xiaomi / QCC buds that advertise CSR GAIA are connected.
-  // Same gates as Sony: the channel is Classic SPP, so there is no BLE address
-  // to wait for and no Fast Pair to depend on. An address that already failed
-  // for good this session is parked on the same map Sony uses.
-  Process {
-    id: xiaomiBridge
-    running: follower.useModeControl && follower.xiaomiEnabled && follower.connected
-      && follower.controlBackend === "xiaomi"
-      && !follower.addressParked
-    command: [follower.xiaomiBridgePath, follower.address]
-    stdinEnabled: true
-    stdout: SplitParser {
-      onRead: function(line) { follower.applyAncLine(line) }
-    }
-    stderr: StdioCollector { id: xiaomiStderr; waitForEnd: true }
-    onRunningChanged: {
-      if (running) {
-        follower.ancRunError = ""
-        follower.ancErrorRaw = ""
-      }
-      follower.ancState = ({})
-      follower.ancAnswered = false
-    }
-    onExited: function(exitCode, exitStatus) {
-      if (exitCode === 3 && follower.service)
-        follower.service.parkAddress(follower.address)
-      if (exitCode === 3) {
-        follower.ancRunError = ""
-        follower.ancErrorRaw = ""
-      } else if (exitCode !== 0 && follower.ancRunError === "") {
-        follower.ancErrorRaw = Model.shortError(xiaomiStderr.text, exitCode === 4
-          ? "the listening-mode bridge could not start"
-          : "the listening-mode link dropped (exit " + exitCode + ")")
-      }
-
-      follower.xiaomiEnabled = false
-      xiaomiRestart.interval = follower.service
-        ? follower.service.ancBackoffFor(follower.address) : 10000
-      if ((exitCode === 1 || exitCode === 4) && follower.service)
-        follower.service.bumpAncBackoff(follower.address)
-      xiaomiRestart.restart()
-    }
-  }
-
-  Timer {
-    id: xiaomiRestart
-    repeat: false
-    onTriggered: follower.xiaomiEnabled = true
+    onTriggered: follower.classicEnabled = true
   }
 
   // Reads the device's SDP UUIDs, which is how the backend is chosen. Started by

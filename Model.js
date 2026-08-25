@@ -424,15 +424,18 @@ function readerLevel(state, key) {
 
 // ---- Which helper can control the listening mode of a given device.
 //
-// Three protocols, decided per device from its SDP record rather than from its
+// Four protocols, decided per device from its SDP record rather than from its
 // name: Sony's MDR v2 lives on an RFCOMM channel the headset itself serves, and
 // advertising the UUID is the whole claim — a device that lists it speaks it.
+// Nothing's NT Link is the same shape: its own UUID in the record, its own
+// RFCOMM channel (15), carrying noise control, battery and low latency.
 // Xiaomi Buds 5 Pro (and other QCC sets that advertise CSR GAIA) speak Compact
 // GAIA on standard SPP; the GAIA UUID is the claim, SPP is the socket.
 // JBL's is a BLE GATT service at an address that rotates and is announced only
 // on the Fast Pair Message Stream, so knowing that address is what makes that
 // path possible at all.
 var SONY_MDR_V2_UUID = "956c7b26-d49a-4ba8-b03f-b17d393cb6e2"
+var NOTHING_NT_LINK_UUID = "aeac4a03-dff5-498f-843a-34487cf133eb"
 var CSR_GAIA_UUID = "00001100-d102-11e1-9b23-00025b00a5a5"
 
 // The UUIDs `bluetoothctl info <address>` printed, lowercased.
@@ -453,21 +456,33 @@ function uuidsFromBluetoothctl(text) {
   return out
 }
 
-// "sony", "xiaomi", "jbl" or "" — the backend to run for this device, and the
-// empty string for a device no path can reach. SDP UUIDs win because they come
-// from the device's own record: Sony first, then CSR GAIA (Xiaomi / QCC on
-// SPP). A known BLE address only says the Message Stream is up, which every
-// Fast Pair device does whether or not it answers a mode query, so it is last.
+// "sony", "nothing", "xiaomi", "jbl" or "" — the backend to run for this
+// device, and the empty string for a device no path can reach. SDP UUIDs win
+// because they come from the device's own record: Sony first, then Nothing,
+// then CSR GAIA (Xiaomi / QCC on SPP). A known BLE address only says the
+// Message Stream is up, which every Fast Pair device does whether or not it
+// answers a mode query, so it is last.
 function controlBackend(uuids, bleAddress) {
   var list = uuids || []
+  var nothing = false
   var gaia = false
   for (var i = 0; i < list.length; i++) {
     var id = str(list[i]).trim().toLowerCase()
     if (id === SONY_MDR_V2_UUID) return "sony"
+    if (id === NOTHING_NT_LINK_UUID) nothing = true
     if (id === CSR_GAIA_UUID) gaia = true
   }
+  if (nothing) return "nothing"
   if (gaia) return "xiaomi"
   return str(bleAddress).trim() !== "" ? "jbl" : ""
+}
+
+// The backends whose bridge takes the Classic address and serves the device's
+// own channel — everything but JBL, whose bridge dials a BLE address.
+var CLASSIC_BACKENDS = ["sony", "nothing", "xiaomi"]
+
+function isClassicBackend(backend) {
+  return CLASSIC_BACKENDS.indexOf(str(backend)) !== -1
 }
 
 // The order the panel draws them in, and the only names a bridge may use.
@@ -485,4 +500,163 @@ function modesAvailable(state) {
   for (var i = 0; i < MODE_ORDER.length; i++)
     if (list.indexOf(MODE_ORDER[i]) !== -1) out.push(MODE_ORDER[i])
   return out
+}
+
+// ---- How strong the noise cancelling is, on devices that grade it.
+//
+// Nothing's ANC comes in four strengths — Low, Mid, High and Adaptive — and
+// the device stores the strength with the mode: asking for "high" turns ANC on
+// at high. The panel draws them as a second row under Off / ANC / Ambient, the
+// same way it draws the Sony ambient dial: a detail of one mode, not a mode.
+// The order is the panel's, weakest first; a bridge that grades nothing sends
+// no `ancLevels`, and that is an empty row rather than a default set, because
+// unlike the modes there is no protocol with a fixed set of strengths.
+var ANC_LEVEL_ORDER = ["low", "mid", "high", "adaptive"]
+
+function ancLevelsAvailable(state) {
+  var list = state ? state.ancLevels : undefined
+  if (!list || !Array.isArray(list)) return []
+  var out = []
+  for (var i = 0; i < ANC_LEVEL_ORDER.length; i++)
+    if (list.indexOf(ANC_LEVEL_ORDER[i]) !== -1) out.push(ANC_LEVEL_ORDER[i])
+  return out
+}
+
+// The strength the bridge last reported, or "" for none it recognises: a
+// button lit for a strength this panel cannot name would be a lie.
+function ancLevel(state) {
+  var value = str(state ? state.ancLevel : "")
+  return ANC_LEVEL_ORDER.indexOf(value) !== -1 ? value : ""
+}
+
+// ---- Battery from a mode bridge, for a device whose control channel reports
+//      it — the Nothing bridge does — as a fallback for a set with no Fast
+//      Pair stream, or one with Fast Pair switched off:
+//
+//        {"battery": {"left": 85, "right": 15, "case": 85, "headset": -1,
+//                     "charging": ["left"], "caseStale": false}}
+//
+//      A component that is not in the object, or that reads as anything but a
+//      whole number in range, is -1: not reported.
+function bridgeLevel(state, key) {
+  var battery = state ? state.battery : undefined
+  if (!battery || typeof battery !== "object" || Array.isArray(battery)) return -1
+  var value = battery[key]
+  if (typeof value !== "number" || !isFinite(value)) return -1
+  if (value < 0 || value > 100) return -1
+  return Math.round(value)
+}
+
+function bridgeCharging(state, key) {
+  var battery = state ? state.battery : undefined
+  if (!battery || typeof battery !== "object") return false
+  var list = battery.charging
+  return Array.isArray(list) && list.indexOf(key) !== -1
+}
+
+function bridgeCaseStale(state) {
+  var battery = state ? state.battery : undefined
+  return !!battery && typeof battery === "object" && battery.caseStale === true
+}
+
+// ---- The A2DP codec, which is the host's business rather than the device's:
+//      PipeWire negotiates it, and offers one card profile per codec the two
+//      sides agree on. `pactl list cards` is where that list is printed:
+//
+//        Card #87787
+//                Name: bluez_card.78_5E_A2_76_7F_20
+//                Profiles:
+//                        off: Off (sinks: 0, ...)
+//                        a2dp-sink: High Fidelity Playback (A2DP Sink, codec AAC) (...)
+//                        a2dp-sink-sbc: High Fidelity Playback (A2DP Sink, codec SBC) (...)
+//                        a2dp-sink-aac: High Fidelity Playback (A2DP Sink, codec AAC) (...)
+//                Active Profile: a2dp-sink-aac
+//
+//      Every `a2dp-sink*` profile names its codec in the description; the plain
+//      `a2dp-sink` names whichever one is negotiated now. One option per codec,
+//      and the option carries the profile to select for it — the codec-specific
+//      one where there is one, because the plain profile means "negotiate
+//      again" rather than "this codec". A card with one A2DP codec has nothing
+//      to choose; the panel hides the row then.
+var CODEC_LABELS = {
+  sbc: "SBC", sbc_xq: "SBC-XQ", aac: "AAC", ldac: "LDAC", lhdc: "LHDC",
+  lhdc_v5: "LHDC V5", aptx: "aptX", aptx_hd: "aptX HD", aptx_ll: "aptX LL",
+  aptx_ll_duplex: "aptX LL", opus_05: "Opus", lc3: "LC3", faststream: "FastStream"
+}
+
+function codecKey(raw) {
+  return str(raw).toLowerCase().replace(/[^a-z0-9]+/g, "_").replace(/^_+|_+$/g, "")
+}
+
+function codecLabel(key) {
+  var name = codecKey(key)
+  return CODEC_LABELS[name] || str(key).toUpperCase()
+}
+
+function cardNameFor(address) {
+  return "bluez_card." + str(address).trim().toUpperCase().replace(/:/g, "_")
+}
+
+// {options: [{key, label, profile}], active: key} for the card of one device;
+// no options for a card that is not there. `active` is "" when the active
+// profile is not an A2DP one — the headset profile during a call, or off.
+function parseCardProfiles(text, address) {
+  var out = { options: [], active: "" }
+  var wanted = cardNameFor(address)
+  if (wanted === "bluez_card.") return out
+  var blocks = str(text).split(/^(?=Card #)/m)
+  var block = ""
+  for (var b = 0; b < blocks.length; b++) {
+    if (new RegExp("^\\s*Name:\\s*" + wanted.replace(/\./g, "\\.") + "\\s*$", "m").test(blocks[b])) {
+      block = blocks[b]
+      break
+    }
+  }
+  if (block === "") return out
+
+  var lines = block.split("\n")
+  var inProfiles = false
+  var activeProfile = ""
+  var plainCodec = ""
+  for (var i = 0; i < lines.length; i++) {
+    var line = lines[i]
+    var trimmed = line.replace(/^\s+|\s+$/g, "")
+    if (trimmed === "Profiles:") { inProfiles = true; continue }
+    var active = trimmed.match(/^Active Profile:\s*(\S+)/)
+    if (active) { activeProfile = active[1]; inProfiles = false; continue }
+    if (!inProfiles) continue
+    var head = trimmed.match(/^(a2dp-sink[^:\s]*):/)
+    var codec = trimmed.match(/codec\s+([^()\s]+)/i)
+    if (!head || !codec) continue
+    var profile = head[1]
+    var key = codecKey(codec[1])
+    if (key === "") continue
+    if (profile === "a2dp-sink") plainCodec = key
+    var known = -1
+    for (var k = 0; k < out.options.length; k++)
+      if (out.options[k].key === key) known = k
+    if (known === -1) {
+      out.options.push({ key: key, label: codecLabel(key), profile: profile })
+    } else if (out.options[known].profile === "a2dp-sink") {
+      // The specific profile is the one to select; the plain one only said
+      // which codec is negotiated at the moment.
+      out.options[known].profile = profile
+    }
+  }
+
+  if (activeProfile === "a2dp-sink") {
+    out.active = plainCodec
+  } else {
+    for (var j = 0; j < out.options.length; j++)
+      if (out.options[j].profile === activeProfile) out.active = out.options[j].key
+  }
+  return out
+}
+
+// The profile to select for a codec key, or "" for one the card does not offer.
+function codecProfile(codecState, key) {
+  var options = codecState && Array.isArray(codecState.options) ? codecState.options : []
+  for (var i = 0; i < options.length; i++)
+    if (options[i].key === str(key)) return options[i].profile
+  return ""
 }

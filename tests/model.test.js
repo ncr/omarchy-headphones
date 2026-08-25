@@ -648,3 +648,153 @@ Deno.test("shortError neutralises markup a helper quoted", () => {
     "boom: ‹img src=x›",
   );
 });
+
+Deno.test("controlBackend picks nothing from the NT Link UUID", () => {
+  const nothing = ["0000110b-0000-1000-8000-00805f9b34fb", Model.NOTHING_NT_LINK_UUID];
+  assertEquals(Model.controlBackend(nothing, ""), "nothing");
+  // A Fast Pair address does not outrank the device's own record.
+  assertEquals(Model.controlBackend(nothing, "48:B4:41:00:00:01"), "nothing");
+  assertEquals(Model.controlBackend([Model.NOTHING_NT_LINK_UUID.toUpperCase()], ""), "nothing");
+  // Sony still wins; GAIA loses to Nothing the same way it loses to Sony.
+  assertEquals(
+    Model.controlBackend([Model.NOTHING_NT_LINK_UUID, Model.SONY_MDR_V2_UUID], ""),
+    "sony",
+  );
+  assertEquals(
+    Model.controlBackend([Model.CSR_GAIA_UUID, Model.NOTHING_NT_LINK_UUID], ""),
+    "nothing",
+  );
+  assertEquals(Model.isClassicBackend("nothing"), true);
+  assertEquals(Model.isClassicBackend("sony"), true);
+  assertEquals(Model.isClassicBackend("xiaomi"), true);
+  assertEquals(Model.isClassicBackend("jbl"), false);
+  assertEquals(Model.isClassicBackend(""), false);
+});
+
+Deno.test("ancLevelsAvailable is empty unless the bridge graded the noise cancelling", () => {
+  // The JBL and Sony bridges never mention strengths: no row.
+  assertEquals(Model.ancLevelsAvailable({ modes: true, mode: "anc" }), []);
+  assertEquals(Model.ancLevelsAvailable({}), []);
+  assertEquals(Model.ancLevelsAvailable(null), []);
+  // The Nothing bridge's four, in the panel's order rather than the line's.
+  assertEquals(
+    Model.ancLevelsAvailable({ ancLevels: ["adaptive", "high", "low", "mid"] }),
+    ["low", "mid", "high", "adaptive"],
+  );
+  assertEquals(Model.ancLevelsAvailable({ ancLevels: ["high", "wind"] }), ["high"]);
+  assertEquals(Model.ancLevelsAvailable({ ancLevels: [] }), []);
+});
+
+Deno.test("ancLevel names only a strength the panel can draw", () => {
+  assertEquals(Model.ancLevel({ ancLevel: "high" }), "high");
+  assertEquals(Model.ancLevel({ ancLevel: "adaptive" }), "adaptive");
+  assertEquals(Model.ancLevel({ ancLevel: "loud" }), "");
+  assertEquals(Model.ancLevel({}), "");
+  assertEquals(Model.ancLevel(null), "");
+});
+
+Deno.test("bridge battery reads what the line carried and nothing more", () => {
+  const line = {
+    modes: true,
+    battery: { left: 85, right: 15, case: 85, charging: ["case"], caseStale: true },
+  };
+  assertEquals(Model.bridgeLevel(line, "left"), 85);
+  assertEquals(Model.bridgeLevel(line, "right"), 15);
+  assertEquals(Model.bridgeLevel(line, "case"), 85);
+  // Not mentioned is not reported.
+  assertEquals(Model.bridgeLevel(line, "headset"), -1);
+  assertEquals(Model.bridgeCharging(line, "case"), true);
+  assertEquals(Model.bridgeCharging(line, "left"), false);
+  assertEquals(Model.bridgeCaseStale(line), true);
+  // Out-of-range and non-numbers are "not reported", not clamped.
+  assertEquals(Model.bridgeLevel({ battery: { left: 130 } }, "left"), -1);
+  assertEquals(Model.bridgeLevel({ battery: { left: "85" } }, "left"), -1);
+  assertEquals(Model.bridgeLevel({ battery: { left: -1 } }, "left"), -1);
+  // A line with no battery, an array, or no line at all.
+  assertEquals(Model.bridgeLevel({ modes: true, mode: "anc" }, "left"), -1);
+  assertEquals(Model.bridgeLevel({ battery: [85] }, "0"), -1);
+  assertEquals(Model.bridgeLevel(null, "left"), -1);
+  assertEquals(Model.bridgeCharging(null, "left"), false);
+  assertEquals(Model.bridgeCaseStale({ battery: { case: 50 } }), false);
+  assertEquals(Model.bridgeCaseStale(null), false);
+});
+
+// `pactl list cards` as PipeWire prints it: one card with a single negotiated
+// codec (a JBL on a machine without codec switching) and one with a choice.
+const oneCodecCards = [
+  "Card #48",
+  "\tName: alsa_card.pci-0000_01_00.1",
+  "\tProfiles:",
+  "\t\toutput:hdmi-stereo: Digital Stereo (HDMI) Output (sinks: 1, sources: 0, priority: 5900, available: yes)",
+  "\tActive Profile: output:hdmi-stereo",
+  "Card #87787",
+  "\tName: bluez_card.78_5E_A2_76_7F_20",
+  "\tDriver: module-bluez5-device.c",
+  "\tProperties:",
+  "\t\tdevice.description = \"JBL TUNE230NC TWS\"",
+  "\t\tapi.bluez5.address = \"78:5E:A2:76:7F:20\"",
+  "\tProfiles:",
+  "\t\toff: Off (sinks: 0, sources: 0, priority: 0, available: yes)",
+  "\t\ta2dp-sink: High Fidelity Playback (A2DP Sink, codec AAC) (sinks: 1, sources: 0, priority: 131, available: yes)",
+  "\t\theadset-head-unit-cvsd: Headset Head Unit (HSP/HFP, codec CVSD) (sinks: 1, sources: 1, priority: 3, available: yes)",
+  "\t\theadset-head-unit: Headset Head Unit (HSP/HFP, codec MSBC) (sinks: 1, sources: 1, priority: 4, available: yes)",
+  "\tActive Profile: a2dp-sink",
+  "\tPorts:",
+  "\t\theadset-output: Headphones (type: Headset, priority: 0, latency offset: 0 usec, available)",
+  "\t\t\tPart of profile(s): a2dp-sink",
+].join("\n");
+
+const manyCodecCards = [
+  "Card #91",
+  "\tName: bluez_card.2C_BE_EB_00_11_22",
+  "\tProfiles:",
+  "\t\toff: Off (sinks: 0, sources: 0, priority: 0, available: yes)",
+  "\t\ta2dp-sink: High Fidelity Playback (A2DP Sink, codec LDAC) (sinks: 1, sources: 0, priority: 131, available: yes)",
+  "\t\ta2dp-sink-sbc: High Fidelity Playback (A2DP Sink, codec SBC) (sinks: 1, sources: 0, priority: 128, available: yes)",
+  "\t\ta2dp-sink-sbc_xq: High Fidelity Playback (A2DP Sink, codec SBC-XQ) (sinks: 1, sources: 0, priority: 129, available: yes)",
+  "\t\ta2dp-sink-aac: High Fidelity Playback (A2DP Sink, codec AAC) (sinks: 1, sources: 0, priority: 130, available: yes)",
+  "\t\ta2dp-sink-ldac: High Fidelity Playback (A2DP Sink, codec LDAC) (sinks: 1, sources: 0, priority: 131, available: yes)",
+  "\t\theadset-head-unit: Headset Head Unit (HSP/HFP, codec MSBC) (sinks: 1, sources: 1, priority: 4, available: yes)",
+  "\tActive Profile: a2dp-sink-aac",
+].join("\n");
+
+Deno.test("parseCardProfiles lists one option per A2DP codec, with the profile to select", () => {
+  const one = Model.parseCardProfiles(oneCodecCards, "78:5E:A2:76:7F:20");
+  assertEquals(one.options, [{ key: "aac", label: "AAC", profile: "a2dp-sink" }]);
+  // The plain profile names the codec negotiated now.
+  assertEquals(one.active, "aac");
+  // Address matching is case-insensitive: BlueZ writes it upper, a line may not.
+  assertEquals(Model.parseCardProfiles(oneCodecCards, "78:5e:a2:76:7f:20").active, "aac");
+
+  const many = Model.parseCardProfiles(manyCodecCards, "2C:BE:EB:00:11:22");
+  assertEquals(many.options, [
+    // LDAC was seen first on the plain profile, and keeps its place in the
+    // list; the codec-specific profile is what selecting it uses.
+    { key: "ldac", label: "LDAC", profile: "a2dp-sink-ldac" },
+    { key: "sbc", label: "SBC", profile: "a2dp-sink-sbc" },
+    { key: "sbc_xq", label: "SBC-XQ", profile: "a2dp-sink-sbc_xq" },
+    { key: "aac", label: "AAC", profile: "a2dp-sink-aac" },
+  ]);
+  assertEquals(many.active, "aac");
+  assertEquals(Model.codecProfile(many, "sbc_xq"), "a2dp-sink-sbc_xq");
+  assertEquals(Model.codecProfile(many, "aptx"), "");
+  assertEquals(Model.codecProfile(null, "sbc"), "");
+});
+
+Deno.test("parseCardProfiles answers nothing for a card that is not there", () => {
+  const empty = { options: [], active: "" };
+  assertEquals(Model.parseCardProfiles(oneCodecCards, "00:11:22:33:44:55"), empty);
+  assertEquals(Model.parseCardProfiles("", "78:5E:A2:76:7F:20"), empty);
+  assertEquals(Model.parseCardProfiles(null, "78:5E:A2:76:7F:20"), empty);
+  assertEquals(Model.parseCardProfiles(oneCodecCards, ""), empty);
+  // A card that is on the headset profile, or off, has no active codec.
+  const onCall = manyCodecCards.replace("Active Profile: a2dp-sink-aac", "Active Profile: headset-head-unit");
+  assertEquals(Model.parseCardProfiles(onCall, "2C:BE:EB:00:11:22").active, "");
+});
+
+Deno.test("codecLabel knows the usual names and shouts the rest", () => {
+  assertEquals(Model.codecLabel("aac"), "AAC");
+  assertEquals(Model.codecLabel("SBC-XQ"), "SBC-XQ");
+  assertEquals(Model.codecLabel("aptx_hd"), "aptX HD");
+  assertEquals(Model.codecLabel("newcodec"), "NEWCODEC");
+});

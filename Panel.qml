@@ -106,6 +106,22 @@ Panel {
   readonly property int ambientLevel: current ? current.ambientLevel : -1
   readonly property bool ambientVoice: current ? current.ambientVoice : false
   readonly property bool ambientControls: current ? current.ambientControls : false
+  // ANC strength, Nothing only: which strengths the device grades its noise
+  // cancelling in, and the one it is at (or was last at).
+  readonly property var ancLevels: current ? current.ancLevels : []
+  readonly property string ancLevel: current ? current.ancLevel : ""
+  // Low latency, Nothing only: whether the bridge has mentioned the switch,
+  // and its position.
+  readonly property bool latencyKnown: current ? current.latencyKnown : false
+  readonly property bool latencyEnabled: current ? current.latencyEnabled : false
+  // The A2DP codec, any brand: what PipeWire offers for this link and what it
+  // negotiated. `codecChoice` is the follower's answer to "is there more than
+  // one", which is the only case worth a row.
+  readonly property var codecOptions: current ? current.codecOptions : []
+  readonly property string activeCodec: current ? current.activeCodec : ""
+  readonly property bool codecChoice: current ? current.codecChoice : false
+  // The case's last reading, kept after the case closed (Nothing).
+  readonly property bool caseStale: current ? current.caseStale : false
   // The row is a control, so it appears only when there is something to control:
   // the setting is on, the device has answered for its listening mode, and at
   // least one of the modes it named is one this panel knows how to draw.
@@ -115,6 +131,13 @@ Panel {
   // on a Sony the level is stored with the ambient setting — a dial drawn next
   // to Noise Cancelling would move a number nothing is listening to.
   readonly property bool ambientRowVisible: modeRowVisible && ambientControls && ancMode === "ambient"
+  // The strengths are drawn whenever the device grades its ANC, whichever mode
+  // it is in: unlike the dial, an unlit row of buttons claims nothing, and a
+  // strength pressed from Off or Ambient turns ANC on at it — one press to any
+  // of the six settings Nothing offers. Only under ANC is one of them lit.
+  readonly property bool levelRowVisible: modeRowVisible && ancLevelOptions.length > 0
+  readonly property bool latencyRowVisible: modeRowVisible && latencyKnown
+  readonly property bool codecRowVisible: connected && codecChoice
 
   // The level waiting on the debounce below, and -1 with nothing waiting.
   property int pendingAmbientLevel: -1
@@ -164,14 +187,44 @@ Panel {
     return out
   }
 
+  // The strengths, on digits: every letter near the hand already means a mode
+  // or a panel, and h / l — the letters a person would reach for — are taken
+  // by the key catcher for moving before this panel ever sees them. Digits
+  // read as a scale, which is what a strength is.
+  readonly property var allLevelOptions: [
+    { value: "low", key: "1", label: "Low", tooltip: "Noise Cancelling, low" },
+    { value: "mid", key: "2", label: "Mid", tooltip: "Noise Cancelling, medium" },
+    { value: "high", key: "3", label: "High", tooltip: "Noise Cancelling, high" },
+    { value: "adaptive", key: "4", label: "Adaptive", tooltip: "Noise Cancelling, adaptive" }
+  ]
+
+  readonly property var ancLevelOptions: {
+    var out = []
+    for (var i = 0; i < allLevelOptions.length; i++)
+      if (ancLevels.indexOf(allLevelOptions[i].value) !== -1) out.push(allLevelOptions[i])
+    return out
+  }
+
+  // The codec chips, from whatever PipeWire listed for this card.
+  readonly property var codecChipOptions: {
+    var out = []
+    for (var i = 0; i < codecOptions.length; i++)
+      out.push({ value: codecOptions[i].key, label: codecOptions[i].label })
+    return out
+  }
+
   readonly property string ancHint: {
     var parts = []
     for (var i = 0; i < ancOptions.length; i++)
       parts.push(ancOptions[i].key + " " + ancOptions[i].label)
     // The two Ambient keys exist only while the row they drive is on screen, so
     // they are named only then: a hint that listed them the rest of the time
-    // would be offering keys that do nothing.
+    // would be offering keys that do nothing. Same for the strengths and the
+    // latency switch.
     if (ambientRowVisible) parts.push("[ ] Level", "f Voice")
+    for (var j = 0; j < ancLevelOptions.length; j++)
+      if (levelRowVisible) parts.push(ancLevelOptions[j].key + " " + ancLevelOptions[j].label)
+    if (latencyRowVisible) parts.push("g Latency")
     return parts.join(" · ")
   }
 
@@ -180,6 +233,7 @@ Panel {
   // that offered them would be describing a widget you do not have.
   readonly property string keyHint: {
     var parts = ["r Refresh"]
+    if (codecRowVisible) parts.push("c Codec")
     if (followed.length > 1) parts.push(", . Device")
     parts.push("b Bluetooth", "v Volume", "tab Next panel")
     return parts.join(" · ")
@@ -339,6 +393,40 @@ Panel {
     return false
   }
 
+  // The strengths follow the same rule as the modes: a digit is a key only
+  // while the row it drives is drawn.
+  function setAncLevel(level) {
+    if (!levelRowVisible || !current) return false
+    return current.setAncLevel(level)
+  }
+
+  function setAncLevelByKey(key) {
+    for (var i = 0; i < ancLevelOptions.length; i++)
+      if (ancLevelOptions[i].key === String(key)) return setAncLevel(ancLevelOptions[i].value)
+    return false
+  }
+
+  // Asked for, not set optimistically: the switch follows the device, like the
+  // voice switch does.
+  function toggleLatency() {
+    if (!latencyRowVisible || !current) return false
+    return current.setLatency(!latencyEnabled)
+  }
+
+  function setCodec(key) {
+    if (!codecRowVisible || !current) return false
+    return current.setCodec(key)
+  }
+
+  // The next codec along, wrapping — for the c key, which has no chip to name.
+  function cycleCodec() {
+    if (!codecRowVisible || codecOptions.length === 0) return false
+    var index = -1
+    for (var i = 0; i < codecOptions.length; i++)
+      if (codecOptions[i].key === activeCodec) index = i
+    return setCodec(codecOptions[(index + 1) % codecOptions.length].key)
+  }
+
   // Opening the panel is when someone wants the truth about a reading that may
   // have gone stale in the case. The device on screen is the one asked; the
   // others are refreshed when you walk to them.
@@ -424,12 +512,16 @@ Panel {
         else if (t === "[") root.stepAmbientLevel(-1)
         else if (t === "]") root.stepAmbientLevel(1)
         else if (t === "f" || t === "F") root.toggleAmbientVoice()
+        else if (t === "g" || t === "G") root.toggleLatency()
+        else if (t === "c" || t === "C") root.cycleCodec()
         // The two device keys, punctuation for the same reason the brackets
         // are: every letter here already belongs to a mode or to a panel, and
         // , and . sit next to each other under the hand that is on the keys.
         else if (t === ",") root.stepDevice(-1)
         else if (t === ".") root.stepDevice(1)
-        else root.setAncModeByKey(t)
+        // A letter is a mode; a digit is a strength. Neither is a key on a
+        // device that does not offer what it names.
+        else if (!root.setAncModeByKey(t)) root.setAncLevelByKey(t)
       }
       // h/l and the arrows, the way the stock Audio panel moves a slider. This
       // panel has no cursor to walk, so they mean the one slider it can have.
@@ -517,6 +609,9 @@ Panel {
             label: "Case"
             level: root.caseLevel
             charging: false
+            // A case that has closed stops reporting; its last reading stays,
+            // dimmed, rather than going to a dash.
+            stale: root.caseStale
           }
         }
 
@@ -593,6 +688,34 @@ Panel {
             // touching them, so the selection follows the device rather than the
             // click: `value` is bound to what the device last said.
             onChanged: function(mode) { root.setAncMode(mode) }
+          }
+
+          // ---- How strong, on a device that grades its noise cancelling
+          //      (Nothing: Low / Mid / High / Adaptive). Drawn whatever the
+          //      mode, lit only under ANC; a strength pressed from Off or
+          //      Ambient turns ANC on at it, which is what the device does.
+          Column {
+            width: parent.width
+            visible: root.levelRowVisible
+            spacing: Style.space(6)
+
+            Text {
+              text: "ANC level"
+              color: root.foreground
+              font.family: root.fontFamily
+              font.pixelSize: Style.font.body
+            }
+
+            ButtonGroup {
+              width: parent.width
+              options: root.ancLevelOptions
+              value: root.ancMode === "anc" ? root.ancLevel : ""
+              foreground: root.foreground
+              background: Color.background
+              fontFamily: root.fontFamily
+              fontSize: Style.font.bodySmall
+              onChanged: function(level) { root.setAncLevel(level) }
+            }
           }
 
           // ---- The two settings that live inside Ambient on a Sony: how much
@@ -677,6 +800,36 @@ Panel {
               }
             }
           }
+
+          // ---- Low latency, a switch the Nothing channel carries. Drawn the
+          //      way the voice switch is, and following the device the same
+          //      way: the knob moves when the earbuds say it has.
+          Item {
+            width: parent.width
+            visible: root.latencyRowVisible
+            implicitHeight: Math.max(latencyLabel.implicitHeight, latencySwitch.implicitHeight)
+
+            Text {
+              id: latencyLabel
+              text: "Low latency"
+              color: root.foreground
+              font.family: root.fontFamily
+              font.pixelSize: Style.font.body
+              anchors.left: parent.left
+              anchors.verticalCenter: parent.verticalCenter
+            }
+
+            ToggleSwitch {
+              id: latencySwitch
+              checked: root.latencyEnabled
+              foreground: root.foreground
+              accent: Color.accent
+              anchors.right: parent.right
+              anchors.verticalCenter: parent.verticalCenter
+
+              onToggled: root.toggleLatency()
+            }
+          }
         }
 
         // Where the row would have been, when the bridge has a reason it is not
@@ -690,6 +843,36 @@ Panel {
           font.family: root.fontFamily
           font.pixelSize: Style.font.caption
           wrapMode: Text.WordWrap
+        }
+
+        // ---- Codec — which A2DP codec carries the audio. PipeWire's choice,
+        //      not the device's, so this row belongs to every brand; it is
+        //      drawn only when the card offers more than one. Switching one
+        //      rebuilds the stream, so the sound drops for a moment.
+        Column {
+          width: parent.width
+          visible: root.codecRowVisible
+          spacing: Style.space(8)
+
+          PanelSectionHeader {
+            width: parent.width
+            text: "CODEC"
+            foreground: root.foreground
+            fontFamily: root.fontFamily
+          }
+
+          ButtonGroup {
+            width: parent.width
+            options: root.codecChipOptions
+            value: root.activeCodec
+            foreground: root.foreground
+            background: Color.background
+            fontFamily: root.fontFamily
+            fontSize: Style.font.bodySmall
+            // The selection follows what PipeWire reports, not the click: a
+            // profile it refuses leaves the chip where it was.
+            onChanged: function(key) { root.setCodec(key) }
+          }
         }
 
         PanelSeparator {
@@ -1062,10 +1245,14 @@ Panel {
     property string label: ""
     property int level: -1
     property bool charging: false
+    // A reading the component left behind rather than one it is giving now:
+    // drawn at half strength, so it reads as a memory and not as a fault.
+    property bool stale: false
 
     readonly property bool known: level >= 0
     readonly property bool low: known && level <= root.lowThreshold && !charging
     readonly property color tint: !known ? root.dim : (low ? root.urgent : root.foreground)
+    readonly property real strength: stale ? 0.5 : 1.0
 
     // Always drawn. A component that reports nothing gets a dash and an empty
     // track: a row that vanishes reads as a broken widget, and the earbud going
@@ -1123,6 +1310,7 @@ Panel {
           ? Math.max(meterTrack.height, meterTrack.width * row.level / 100)
           : 0
         color: row.tint
+        opacity: row.strength
 
         Behavior on width { NumberAnimation { duration: 200; easing.type: Easing.OutCubic } }
         Behavior on color { ColorAnimation { duration: 200 } }
@@ -1133,6 +1321,7 @@ Panel {
       id: rowPercent
       text: Model.percentLabel(row.level)
       color: row.tint
+      opacity: row.strength
       font.family: root.fontFamily
       font.pixelSize: Style.font.bodySmall
       anchors.right: parent.right

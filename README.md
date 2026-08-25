@@ -13,7 +13,11 @@
   headphones, filling up as they charge. Readable from the bar without opening
   anything.
 - **Noise control** — Off / ANC / Ambient / TalkThru, from the panel or a key.
-  JBL, Sony and Xiaomi Buds 5 Pro today; built to learn your brand.
+  JBL, Sony, Nothing and Xiaomi Buds 5 Pro today; built to learn your brand.
+  Sony adds the ambient level and Focus on Voice; Nothing the ANC strength
+  (Low / Mid / High / Adaptive) and a low-latency switch.
+- **Codec** — which A2DP codec carries the audio (SBC, AAC, LDAC…), for any
+  set whose card PipeWire offers a choice on.
 - **Several headphones at once** — one icon per connected set, each with its own
   panel.
 - **Low-battery notification** that names the earbud.
@@ -54,13 +58,17 @@ again — along with its settings, so note them first if you changed any.
 | JBL TUNE230NC TWS (earbuds) | <img src="docs/icons/yes.svg" width="14" alt="yes"> left, right, case | <img src="docs/icons/yes.svg" width="14" alt="yes"> Off · ANC · Ambient · TalkThru              | [@ncr](https://github.com/ncr) |
 | Sony WH-CH720N (over-ear)   | <img src="docs/icons/yes.svg" width="14" alt="yes"> one figure        | <img src="docs/icons/yes.svg" width="14" alt="yes"> Off · ANC · Ambient (level, Focus on Voice) | [@ncr](https://github.com/ncr) |
 | Xiaomi Buds 5 Pro (earbuds) | <img src="docs/icons/yes.svg" width="14" alt="yes"> one figure        | <img src="docs/icons/yes.svg" width="14" alt="yes"> Off · ANC · Ambient                          | [@KentoNion](https://github.com/KentoNion)|
+| Nothing Ear (a) · Ear · Headphone (1) | <img src="docs/icons/unknown.svg" width="14" alt="untested"> left, right, case (one figure on Headphone (1)) | <img src="docs/icons/unknown.svg" width="14" alt="untested"> Off · ANC (Low / Mid / High / Adaptive) · Ambient · low latency | untested here — written from [PR #2](https://github.com/ncr/omarchy-headphones/pull/2) and [omarchy-nothing-ear](https://github.com/r-witz/omarchy-nothing-ear); a confirmation is welcome |
 | other Fast Pair headphones  | <img src="docs/icons/yes.svg" width="14" alt="yes"> expected          | <img src="docs/icons/unknown.svg" width="14" alt="untested">                                    | —                              |
 
 Battery works on anything that serves the Google Fast Pair Message Stream
 (`bluetoothctl info <address>` lists `df21fe2c-…`) — most headphones do — and
 falls back to BlueZ's single figure otherwise. Noise control needs the
-vendor's own channel: Sony MDR v2 (`956c7b26-…`), Compact GAIA on SPP for
-Xiaomi Buds 5 Pro (`00001100-d102-…` in the SDP record), and JBL over BLE.
+vendor's own channel: Sony MDR v2 (`956c7b26-…`), Nothing NT Link
+(`aeac4a03-…`, RFCOMM channel 15), Compact GAIA on SPP for Xiaomi Buds 5 Pro
+(`00001100-d102-…` in the SDP record), and JBL over BLE. Nothing's channel
+carries the battery too, which is what the panel shows when there is no Fast
+Pair stream to read it from.
 
 ## Add your own headphones
 
@@ -79,18 +87,18 @@ open a pull request against `github.com/ncr/omarchy-headphones` with the result.
    what they serve: `bluetoothctl devices` for the address, `bluetoothctl info
    <address>` for the UUIDs — `df21fe2c-2515-4fdb-8886-f12c4d67927c` is the
    Google Fast Pair Message Stream (battery), `956c7b26-d49a-4ba8-b03f-b17d393cb6e2`
-   is Sony MDR v2 (noise control); JBL earbuds are probed over BLE by the
-   plugin itself.
+   is Sony MDR v2 (noise control), `aeac4a03-dff5-498f-843a-34487cf133eb` is
+   Nothing NT Link; JBL earbuds are probed over BLE by the plugin itself.
 2. If battery and the mode row both already work, nothing needs
    writing: the pull request is my device's row in the table in `README.md` —
    device, two ticks, my GitHub handle — plus the screenshot from step 4.
 3. Otherwise extend the plugin. Read `PROTOCOL.md` and the docstrings of
-   `sony-bridge` and `jbl-bridge` first — they show how the two existing
-   channels were found and what the bridge contract is. Find the channel the
-   vendor's own app uses (the probes in `tools/`, an open-source client for the
-   brand, an HCI snoop), write a `brand-bridge` modelled on `sony-bridge` with
-   the same stdout/stdin/exit-code contract, add its UUID to `controlBackend()`
-   in `Model.js` and a bridge block next to `sonyBridge` in
+   `sony-bridge`, `nothing-bridge` and `jbl-bridge` first — they show how the
+   existing channels were found and what the bridge contract is. Find the
+   channel the vendor's own app uses (the probes in `tools/`, an open-source
+   client for the brand, an HCI snoop), write a `brand-bridge` modelled on
+   `sony-bridge` with the same stdout/stdin/exit-code contract, add its UUID to
+   `controlBackend()` in `Model.js` and its path to `classicBridgePath` in
    `DeviceFollower.qml`, test it on my headphones with `omarchy restart shell`,
    and add my device to the table. Run the unit suite (`deno test --allow-read
    tests/model.test.js`) if you touched `Model.js`, and note what the device
@@ -136,6 +144,9 @@ Keys, while the panel is open (the panel lists them itself, bottom rows):
 | `o` `n` `a` `t` | Off · ANC · Ambient · TalkThru — only the modes this device has |
 | `[` `]` | Ambient level down / up (Sony) |
 | `f` | Focus on voice on / off (Sony) |
+| `1` `2` `3` `4` | ANC strength: Low · Mid · High · Adaptive (Nothing) — turns ANC on at it |
+| `g` | Low latency on / off (Nothing) |
+| `c` | Next codec, where the card offers more than one |
 | `r` | Ask the device again |
 | `,` `.` | Previous / next connected set |
 | `b` `v` | Bluetooth panel / Audio panel |
@@ -153,6 +164,9 @@ Everything is reachable over IPC — `omarchy-shell omaphones <method>`:
 | `mode` · `setMode <m>` | `off` `anc` `ambient` `talkthru`, or `pending` / `unsupported` · `ok` / `busy` / `unavailable` |
 | `ambientLevel` · `setAmbientLevel <n>` | 0-20 (Sony) |
 | `ambientVoice` · `setAmbientVoice on\|off` | `on` / `off` (Sony) |
+| `ancLevel` · `setAncLevel <l>` | `low` `mid` `high` `adaptive` (Nothing); setting one turns ANC on |
+| `latency` · `setLatency on\|off` | `on` / `off` (Nothing) |
+| `codec` · `codecs` · `setCodec <c>` | the codec in use, the ones on offer (one per line), pick one |
 | `refresh` | ask the device again |
 | `open` · `close` · `toggle` | the panel |
 
@@ -165,6 +179,13 @@ introspection calls (`bleAddress`, `panelRect`) for the tools in `tools/`.
 
 What it deliberately does not do — connect, volume, MAC addresses, equalisers —
 lives in the stock panels a keypress away (`b`, `v`).
+
+The CODEC row is PipeWire's, not the headphones': it lists the A2DP profiles
+`pactl list cards` shows for the set's card, one per codec, and appears only
+when there is more than one to choose from. A card that offers a single
+`a2dp-sink` profile — which is what a stock BlueZ, without codec switching
+enabled, gives most headphones — has no row. Switching rebuilds the stream, so
+the sound drops for a moment.
 
 ## Settings
 
@@ -210,6 +231,7 @@ row in the table above; an agent gets the steps from
 - [Bluetooth-Battery-Meter](https://github.com/maniacx/Bluetooth-Battery-Meter) — the clearest reading of the Fast Pair battery bytes.
 - [bluetooth-py](https://github.com/GroupXyz2/bluetooth-py) — the JBL command numbers.
 - [Gadgetbridge](https://codeberg.org/Freeyourgadget/Gadgetbridge) and [mos9527/SonyHeadphonesClient](https://github.com/mos9527/SonyHeadphonesClient) — the Sony frame format; the two disagree about the WH-CH720N, and the hardware settled it here.
+- [r-witz/omarchy-nothing-ear](https://github.com/r-witz/omarchy-nothing-ear) — the Nothing protocol as a working Omarchy widget: battery components, the latency switch, the case cache, and the codec row; [DaanHessen/earctl](https://github.com/DaanHessen/earctl) — the command table; [@Jenesaispas69](https://github.com/Jenesaispas69)'s [PR #2](https://github.com/ncr/omarchy-headphones/pull/2) — the NT Link UUID and the frame layout from an Ear (a).
 
 ## Licence
 

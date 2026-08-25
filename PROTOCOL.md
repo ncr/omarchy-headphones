@@ -739,3 +739,151 @@ tools/xiaomi_probe.py 64:8F:DB:87:06:CB 15 set:ambient
 
 Turn `useModeControl` off first: SPP is one holder, like Sony's UUID.
 
+
+## Nothing NT Link — the Nothing X protocol on RFCOMM channel 15
+
+A fourth channel, and the first one read from other people's work rather than
+off a headset on this desk: nobody here owns a Nothing device. What follows is
+what three clients agree on — [r-witz/omarchy-nothing-ear](https://github.com/r-witz/omarchy-nothing-ear)
+(Nothing Ear and Headphone (1), the bridge's battery and latency handling is
+theirs), [DaanHessen/earctl](https://github.com/DaanHessen/earctl) (the command
+table, many models), and the Ear (a) trace that came with
+[pull request #2](https://github.com/ncr/omarchy-headphones/pull/2) (the SDP
+UUID, the frame layout confirmed on the wire). Where they differ, both readings
+are handled below. Treat every byte here as reported rather than confirmed until
+someone with the earbuds runs the probe.
+
+```
+aeac4a03-dff5-498f-843a-34487cf133eb   NT Link   <- Ear (a); the Ear (2), Ear, Ear (stick) and
+                                                    Headphone (1) speak the same protocol
+```
+
+**Opening it.** The channel number is fixed at 15, so there is no SDP lookup to
+ask BlueZ for: the bridge opens an `AF_BLUETOOTH` / `BTPROTO_RFCOMM` socket
+straight to `(address, 15)`. The first connect after the device pairs or
+reconnects is often refused; a retry a second and a half later is not. The
+Ear (a) trace went through `org.bluez.Profile1` with the UUID and `Channel: 15`
+instead and landed on the same socket.
+
+**Activation.** Nothing X asks for device info (`06`) first, and r-witz found
+that a fresh session may ignore what follows until it has been asked. The bridge
+sends it first and waits up to a second and a half for the answer before the real
+queries go out; the answer itself is not used.
+
+### Frames
+
+```
+55 60 01 <cmd u16 LE> <len u16 LE> <op u8> <payload…> <crc u16 LE>
+^^ ^^^^^
+|  ctrl 0x0160: bit 0x20 says a CRC follows the payload
+SOF
+```
+
+| field | size | meaning |
+|---|---|---|
+| SOF | 1 | `55` |
+| ctrl | 2 | `0160` LE. Bit `0x20` — set on everything seen — means a CRC is appended |
+| cmd | 2 | LE. Low byte the command, high byte the direction: `C0` get, `F0` set, `40` answer, `70` ack, `E0` unsolicited |
+| len | 2 | payload length, LE (the Ear (a) trace read it as `<len u8> 00`, which is the same bytes) |
+| op | 1 | an operation id, echoed in the answer; the bridge always sends 1 |
+| payload | len | command-specific |
+| crc | 2 | CRC-16/MODBUS (init `FFFF`, poly `A001`, check value `4B37`) over every byte before it, LE |
+
+So `55 60 01 1E C0 00 00 01 B1 1D` asks for the noise-control state.
+
+### Commands
+
+| command | get | answer | set | notes |
+|---|---|---|---|---|
+| device info | `C0 06` | `40 06` | — | asked first, see Activation |
+| battery | `C0 07` | `40 07`, and `E0 01` unsolicited | — | |
+| noise control | `C0 1E` | `40 1E`, and `E0 03` unsolicited | `F0 0F` | |
+| low latency | `C0 41` | `40 41` | `F0 40` | absent on models without it: the get goes unanswered |
+| codec flag | `C0 29` | `40 29` | — | the device's own idea of its codec mode; read-only, see below |
+
+**Battery** answers with a count byte and then `<component> <level>` pairs.
+Bit 7 of the level is charging, the low seven bits the percentage:
+
+| component | |
+|---|---|
+| `02` | left earbud |
+| `03` | right earbud |
+| `04` | case — present only while the case is open |
+| `06` | the one battery of a Headphone (1) |
+
+`03 02 55 03 0F 04 55` is left 85%, right 15%, case 85%, nothing charging.
+
+**Noise control** answers with `01 <mode> 00`; the set payload is the same
+three bytes. The mode byte:
+
+| value | Nothing X calls it | the widget calls it |
+|---|---|---|
+| `01` | Noise Cancelling, High | `anc`, level `high` |
+| `02` | Noise Cancelling, Mid | `anc`, level `mid` |
+| `03` | Noise Cancelling, Low | `anc`, level `low` |
+| `04` | Noise Cancelling, Adaptive | `anc`, level `adaptive` |
+| `05` | Off | `off` |
+| `07` | Transparency | `ambient` |
+
+r-witz's client reads the payload as `(kind, value, 0)` triplets, with kind `1`
+carrying the mode and an optional kind `2` carrying a strength `1`–`4` on its
+own; earctl and the Ear (a) trace read the mode byte alone. The bridge reads
+`payload[1]` as the mode and lets a `02 <level>` triplet, where one follows,
+override the strength — so either firmware is read the same way.
+
+A set is answered with an ack (`70 0F`), not with the new state; the Ear (a)
+trace saw the `E0 03` announcement follow it. The bridge asks again half a
+second after every set rather than trusting either. Touch controls on the
+earbuds are not reliably announced on this channel, so the mode is polled every
+three seconds and the battery every fifth poll.
+
+**Low latency**: the answer's first byte is `01` for on; the set payload is
+`01` for on and `02` for off.
+
+**The codec flag** (`29`) is the device's own codec mode — `00` standard, `01`
+LHDC, `02` LDAC. r-witz reports it and deliberately never writes it: the
+firmware acknowledges a value without applying it, and the codec actually used
+is whatever the host negotiated. The widget's codec row is PipeWire's (see
+README) and leaves this alone.
+
+### In the widget
+
+[`nothing-bridge`](nothing-bridge) holds the socket and writes the same lines
+the other bridges do, in the panel's vocabulary — Transparency is `ambient`,
+the four strengths are `anc` with an `ancLevel`:
+
+```json
+{"modes": true, "mode": "anc", "available": ["off","anc","ambient"],
+ "ancLevel": "high", "ancLevels": ["low","mid","high","adaptive"],
+ "latency": false,
+ "battery": {"left": 85, "right": 15, "case": 85, "charging": [], "caseStale": false}}
+```
+
+Commands on stdin: `set off|anc|ambient`, `level low|mid|high|adaptive`,
+`latency on|off`. `set anc` asks for the strength last seen (Adaptive when none
+has been), because the device stores the strength with the mode and has no
+plain "on".
+
+The battery is a fallback: the Fast Pair stream, where the device serves one,
+announces a change the moment it happens and wins while it is up. The case only
+reports while open, so the bridge keeps its last reading — on disk, six hours —
+and sends it as `caseStale`, which the panel dims.
+
+Exit codes match the other bridges: 0 clean, 1 transient (the socket refused or
+closed), 3 silent (open, but the noise-control query went unanswered), 4 setup.
+
+### The probe
+
+[`tools/nothing_probe.py`](tools/nothing_probe.py) — opens the socket, sends
+the four gets, prints every frame in both directions decoded, and optionally
+writes one setting afterwards:
+
+```bash
+tools/nothing_probe.py 3C:B0:ED:AF:7C:30
+tools/nothing_probe.py 3C:B0:ED:AF:7C:30 set-anc high
+tools/nothing_probe.py 3C:B0:ED:AF:7C:30 set-latency on
+```
+
+The widget's bridge holds the same channel, so turn `useModeControl` off, or
+disconnect and reconnect the earbuds with the panel closed, before running it —
+a second RFCOMM client on channel 15 is refused while the first is up.
