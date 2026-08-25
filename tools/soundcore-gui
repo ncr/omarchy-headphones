@@ -1,0 +1,316 @@
+#!/usr/bin/env python3
+"""Soundcore Desktop Controller GUI (GTK4 / Libadwaita)
+
+Full graphic interface for Soundcore headphones and earbuds on Linux.
+"""
+import os
+import sys
+import threading
+import time
+
+try:
+    from soundcore_api import (
+        find_soundcore_devices, SoundcoreDevice, PRESETS, EQ_FREQUENCIES_10
+    )
+except ImportError:
+    sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+    from soundcore_api import (
+        find_soundcore_devices, SoundcoreDevice, PRESETS, EQ_FREQUENCIES_10
+    )
+
+import gi
+gi.require_version("Gtk", "4.0")
+gi.require_version("Adw", "1")
+from gi.repository import Gtk, Adw, GLib, Gio
+
+
+class SoundcoreWindow(Adw.ApplicationWindow):
+    def __init__(self, app):
+        super().__init__(application=app, title="Soundcore Controller")
+        self.set_default_size(700, 780)
+        self.device: SoundcoreDevice = None
+        self.updating_ui = False
+
+        # Main Layout
+        self.main_box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL)
+        self.set_content(self.main_box)
+
+        # Header Bar
+        header = Adw.HeaderBar()
+        self.main_box.append(header)
+
+        # Device selector dropdown in header
+        self.dev_model = Gtk.StringList()
+        self.dev_dropdown = Gtk.DropDown(model=self.dev_model)
+        self.dev_dropdown.connect("notify::selected", self.on_device_selected)
+        header.set_title_widget(self.dev_dropdown)
+
+        # Refresh button in header
+        refresh_btn = Gtk.Button(icon_name="view-refresh-symbolic")
+        refresh_btn.set_tooltip_text("Scan and refresh devices")
+        refresh_btn.connect("clicked", lambda b: self.refresh_devices())
+        header.pack_start(refresh_btn)
+
+        # Scrolled Container
+        scrolled = Gtk.ScrolledWindow()
+        scrolled.set_vexpand(True)
+        self.main_box.append(scrolled)
+
+        clamp = Adw.Clamp()
+        clamp.set_maximum_size(680)
+        scrolled.set_child(clamp)
+
+        content_box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=18)
+        content_box.set_margin_top(18)
+        content_box.set_margin_bottom(24)
+        content_box.set_margin_start(16)
+        content_box.set_margin_end(16)
+        clamp.set_child(content_box)
+
+        # 1. Device Info & Battery Group
+        self.info_group = Adw.PreferencesGroup(title="Device")
+        content_box.append(self.info_group)
+
+        self.battery_row = Adw.ActionRow(title="Battery Level", subtitle="Not connected")
+        self.battery_level_label = Gtk.Label(label="—")
+        self.battery_level_label.add_css_class("heading")
+        self.battery_row.add_suffix(self.battery_level_label)
+        self.info_group.add(self.battery_row)
+
+        self.details_row = Adw.ActionRow(title="Hardware Info", subtitle="Firmware: — · Serial: —")
+        self.info_group.add(self.details_row)
+
+        # 2. Listening Mode Group
+        self.mode_group = Adw.PreferencesGroup(title="Noise Control")
+        content_box.append(self.mode_group)
+
+        # Mode Buttons (ANC, Normal, Ambient)
+        mode_box = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=8)
+        mode_box.set_homogeneous(True)
+        mode_box.set_margin_top(6)
+        mode_box.set_margin_bottom(6)
+
+        self.btn_anc = Gtk.ToggleButton(label="ANC")
+        self.btn_off = Gtk.ToggleButton(label="Normal (Off)")
+        self.btn_ambient = Gtk.ToggleButton(label="Ambient")
+
+        self.btn_anc.connect("toggled", lambda b: self.on_mode_button_toggled("anc", b))
+        self.btn_off.connect("toggled", lambda b: self.on_mode_button_toggled("off", b))
+        self.btn_ambient.connect("toggled", lambda b: self.on_mode_button_toggled("ambient", b))
+
+        mode_box.append(self.btn_anc)
+        mode_box.append(self.btn_off)
+        mode_box.append(self.btn_ambient)
+
+        mode_row = Adw.PreferencesRow()
+        mode_row.set_child(mode_box)
+        self.mode_group.add(mode_row)
+
+        # ANC Level Slider
+        self.anc_level_row = Adw.ActionRow(title="ANC Intensity (1-5)")
+        self.anc_level_slider = Gtk.Scale.new_with_range(Gtk.Orientation.HORIZONTAL, 1, 5, 1)
+        self.anc_level_slider.set_hexpand(True)
+        self.anc_level_slider.set_draw_value(True)
+        self.anc_level_slider.set_value_pos(Gtk.PositionType.RIGHT)
+        self.anc_level_slider.connect("value-changed", self.on_anc_level_changed)
+        self.anc_level_row.add_suffix(self.anc_level_slider)
+        self.mode_group.add(self.anc_level_row)
+
+        # Ambient Pass-Through Slider
+        self.ambient_level_row = Adw.ActionRow(title="Ambient Transparency Level (1-5)")
+        self.ambient_level_slider = Gtk.Scale.new_with_range(Gtk.Orientation.HORIZONTAL, 1, 5, 1)
+        self.ambient_level_slider.set_hexpand(True)
+        self.ambient_level_slider.set_draw_value(True)
+        self.ambient_level_slider.set_value_pos(Gtk.PositionType.RIGHT)
+        self.ambient_level_slider.connect("value-changed", self.on_ambient_level_changed)
+        self.ambient_level_row.add_suffix(self.ambient_level_slider)
+        self.mode_group.add(self.ambient_level_row)
+
+        # Wind Noise Reduction
+        self.wind_switch = Gtk.Switch()
+        self.wind_switch.set_valign(Gtk.Align.CENTER)
+        self.wind_switch.connect("notify::active", self.on_wind_switch_toggled)
+        self.wind_row = Adw.ActionRow(title="Wind Noise Reduction")
+        self.wind_row.add_suffix(self.wind_switch)
+        self.mode_group.add(self.wind_row)
+
+        # 3. Equalizer Group
+        self.eq_group = Adw.PreferencesGroup(title="Equalizer")
+        content_box.append(self.eq_group)
+
+        # Preset Dropdown
+        self.preset_model = Gtk.StringList()
+        for p in PRESETS.keys():
+            self.preset_model.append(p)
+        self.preset_dropdown = Gtk.DropDown(model=self.preset_model)
+        self.preset_dropdown.connect("notify::selected", self.on_preset_selected)
+
+        self.preset_row = Adw.ActionRow(title="EQ Preset")
+        self.preset_row.add_suffix(self.preset_dropdown)
+        self.eq_group.add(self.preset_row)
+
+        # 10-Band EQ Graphic Sliders
+        eq_card = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=8)
+        eq_card.set_margin_top(8)
+        eq_card.set_margin_bottom(8)
+
+        sliders_box = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=12)
+        sliders_box.set_homogeneous(True)
+        eq_card.append(sliders_box)
+
+        self.eq_sliders = []
+        self.eq_val_labels = []
+
+        for freq in EQ_FREQUENCIES_10:
+            col = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=4)
+            val_lbl = Gtk.Label(label="0.0")
+            val_lbl.add_css_class("caption")
+            self.eq_val_labels.append(val_lbl)
+
+            scale = Gtk.Scale.new_with_range(Gtk.Orientation.VERTICAL, -6.0, 6.0, 0.5)
+            scale.set_inverted(True)
+            scale.set_vexpand(True)
+            scale.set_size_request(-1, 140)
+            scale.set_draw_value(False)
+            scale.connect("value-changed", self.on_band_slider_changed)
+            self.eq_sliders.append(scale)
+
+            freq_lbl = Gtk.Label(label=freq)
+            freq_lbl.add_css_class("caption")
+            freq_lbl.set_ellipsize(Gtk.Pango.EllipsizeMode.MIDDLE)
+
+            col.append(val_lbl)
+            col.append(scale)
+            col.append(freq_lbl)
+            sliders_box.append(col)
+
+        # Flat button
+        btn_flat = Gtk.Button(label="Reset to Flat (0 dB)")
+        btn_flat.set_halign(Gtk.Align.CENTER)
+        btn_flat.connect("clicked", lambda b: self.set_eq_flat())
+        eq_card.append(btn_flat)
+
+        eq_row = Adw.PreferencesRow()
+        eq_row.set_child(eq_card)
+        self.eq_group.add(eq_row)
+
+        # Start initial device discovery
+        self.devices_list = []
+        self.refresh_devices()
+
+    def refresh_devices(self):
+        self.devices_list = find_soundcore_devices()
+        self.dev_model.splice(0, self.dev_model.get_n_items(), [d["name"] for d in self.devices_list])
+        if self.devices_list:
+            self.dev_dropdown.set_selected(0)
+            self.select_device(self.devices_list[0])
+        else:
+            self.battery_row.set_subtitle("No Soundcore devices found.")
+            self.battery_level_label.set_text("—")
+
+    def on_device_selected(self, dropdown, _param):
+        idx = dropdown.get_selected()
+        if 0 <= idx < len(self.devices_list):
+            self.select_device(self.devices_list[idx])
+
+    def select_device(self, dev_info):
+        if self.device:
+            self.device.disconnect()
+        self.device = SoundcoreDevice(dev_info["address"], dev_info["uuid"])
+        self.device.on_state_change = lambda: GLib.idle_add(self.update_ui_from_state)
+        
+        # Connect in background thread
+        threading.Thread(target=self._async_connect, daemon=True).start()
+
+    def _async_connect(self):
+        if self.device:
+            self.device.connect_sync(timeout_sec=5.0)
+
+    def update_ui_from_state(self):
+        if not self.device or not self.device.connected:
+            return
+        self.updating_ui = True
+        
+        # Battery
+        self.battery_level_label.set_text(f"{self.device.battery_level}%")
+        self.battery_row.set_subtitle("Charging" if self.device.battery_charging else "Discharging")
+        self.details_row.set_subtitle(f"Firmware: {self.device.firmware or '—'}  ·  Serial: {self.device.serial or '—'}")
+
+        # Modes
+        self.btn_anc.set_active(self.device.mode == "anc")
+        self.btn_off.set_active(self.device.mode == "off")
+        self.btn_ambient.set_active(self.device.mode == "ambient")
+
+        self.anc_level_slider.set_value(self.device.anc_level)
+        self.ambient_level_slider.set_value(self.device.ambient_level)
+        self.wind_switch.set_active(self.device.wind_noise)
+
+        # Equalizer
+        for idx, (slider, lbl) in enumerate(zip(self.eq_sliders, self.eq_val_labels)):
+            if idx < len(self.device.eq_bands):
+                val = self.device.eq_bands[idx]
+                slider.set_value(val)
+                lbl.set_text(f"{val:+.1f}")
+
+        self.updating_ui = False
+
+    def on_mode_button_toggled(self, mode_name, button):
+        if self.updating_ui or not button.get_active():
+            return
+        if self.device and self.device.connected:
+            self.device.set_listening_mode(mode_name)
+            self.update_ui_from_state()
+
+    def on_anc_level_changed(self, scale):
+        if self.updating_ui or not self.device or not self.device.connected:
+            return
+        level = int(scale.get_value())
+        self.device.set_listening_mode("anc", level=level)
+
+    def on_ambient_level_changed(self, scale):
+        if self.updating_ui or not self.device or not self.device.connected:
+            return
+        level = int(scale.get_value())
+        self.device.set_listening_mode("ambient", level=level)
+
+    def on_wind_switch_toggled(self, switch, _param):
+        if self.updating_ui or not self.device or not self.device.connected:
+            return
+        self.device.set_listening_mode(self.device.mode, wind=switch.get_active())
+
+    def on_preset_selected(self, dropdown, _param):
+        if self.updating_ui or not self.device or not self.device.connected:
+            return
+        preset_name = list(PRESETS.keys())[dropdown.get_selected()]
+        self.device.set_preset_eq(preset_name)
+        self.update_ui_from_state()
+
+    def on_band_slider_changed(self, scale):
+        if self.updating_ui or not self.device or not self.device.connected:
+            return
+        gains = [s.get_value() for s in self.eq_sliders]
+        for s, l in zip(self.eq_sliders, self.eq_val_labels):
+            l.set_text(f"{s.get_value():+.1f}")
+        self.device.set_custom_eq(gains)
+
+    def set_eq_flat(self):
+        if self.device and self.device.connected:
+            self.device.set_custom_eq([0.0] * 10)
+            self.update_ui_from_state()
+
+
+class SoundcoreApp(Adw.Application):
+    def __init__(self):
+        super().__init__(application_id="io.github.soundcore.controller",
+                         flags=Gio.ApplicationFlags.FLAGS_NONE)
+
+    def do_activate(self):
+        win = self.props.active_window
+        if not win:
+            win = SoundcoreWindow(self)
+        win.present()
+
+
+if __name__ == "__main__":
+    app = SoundcoreApp()
+    sys.exit(app.run(sys.argv))

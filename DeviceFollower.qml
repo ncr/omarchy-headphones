@@ -388,20 +388,34 @@ Item {
   // to ambient as part of it, because the level is stored only by a set that
   // carries it: sending a level while Noise Cancelling is on changes nothing.
   function setAmbientLevel(value) {
-    if (!ancLive || !sonyBridge.running) return false
-    var level = Math.max(0, Math.min(20, Math.round(Number(value))))
-    if (!isFinite(level)) return false
-    sonyBridge.write("level " + level + "\n")
-    return true
+    if (!ancLive) return false
+    if (sonyBridge.running) {
+      var level = Math.max(0, Math.min(20, Math.round(Number(value))))
+      if (!isFinite(level)) return false
+      sonyBridge.write("level " + level + "\n")
+      return true
+    }
+    if (soundcoreBridge.running) {
+      var scLevel = Math.max(1, Math.min(5, Math.round(Number(value))))
+      if (!isFinite(scLevel)) return false
+      soundcoreBridge.write("level " + scLevel + "\n")
+      return true
+    }
+    return false
   }
 
-  // Focus on Voice: the headset lifts speech out of what Ambient lets through.
-  // Sony only, the same as the level, and switched on its own — the headset
-  // keeps it with the ambient setting, so this does not disturb the amount.
+  // Focus on Voice (Sony) / Wind Noise Reduction (Soundcore)
   function setAmbientVoice(on) {
-    if (!ancLive || !sonyBridge.running) return false
-    sonyBridge.write("voice " + (on ? "on" : "off") + "\n")
-    return true
+    if (!ancLive) return false
+    if (sonyBridge.running) {
+      sonyBridge.write("voice " + (on ? "on" : "off") + "\n")
+      return true
+    }
+    if (soundcoreBridge.running) {
+      soundcoreBridge.write("wind " + (on ? "on" : "off") + "\n")
+      return true
+    }
+    return false
   }
 
   // Cycle a helper now rather than after its failure backoff: the reason is a

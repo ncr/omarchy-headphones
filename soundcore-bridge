@@ -339,6 +339,8 @@ class Bridge:
             "modes": True,
             "mode": self.mode,
             "available": AVAILABLE,
+            "level": int(self.sound_mode_params[5]),
+            "voice": bool(self.sound_mode_params[4]),
         }
         if first or line != self.last_line:
             self.last_line = line
@@ -355,6 +357,23 @@ class Bridge:
                 body = list(self.sound_mode_params)
                 body[0] = byte
                 self.write(make_packet(CMD_SOUND_MODES_SET, bytes(body)))
+        elif parts[0] == "level" and len(parts) > 1:
+            try:
+                val = max(1, min(5, int(round(float(parts[1])))))
+                body = list(self.sound_mode_params)
+                body[5] = val
+                self.write(make_packet(CMD_SOUND_MODES_SET, bytes(body)))
+                self.sound_mode_params = body
+                self.on_mode_byte(self.sound_mode_params[0])
+            except (ValueError, TypeError):
+                pass
+        elif parts[0] in ("voice", "wind") and len(parts) > 1:
+            on = parts[1].lower() in ("1", "on", "true", "yes")
+            body = list(self.sound_mode_params)
+            body[4] = 1 if on else 0
+            self.write(make_packet(CMD_SOUND_MODES_SET, bytes(body)))
+            self.sound_mode_params = body
+            self.on_mode_byte(self.sound_mode_params[0])
 
     def on_stdin(self, _fd, condition):
         if condition & (GLib.IO_HUP | GLib.IO_ERR):
