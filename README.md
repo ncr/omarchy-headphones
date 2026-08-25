@@ -36,13 +36,6 @@ Headphones not on the list? [Add yours](#add-your-own-headphones).
 </tr>
 </table>
 
-All taken the same way — `tools/gallery-shot <which>`: an empty workspace, the
-device's panel open, a fixed 1120×840 frame. A pull request that adds headphones
-adds its cell here, caption under it; the steps are in
-`.claude/skills/gallery-screenshot/SKILL.md`. (The animation further down is the
-JBL shot under a few themes, stitched by `tools/hero-set`; `tools/rebuild-visuals`
-remakes every picture in this file after a change to the widget's look.)
-
 ## What it does
 
 - **Battery level** — per earbud and the case, or the single battery of
