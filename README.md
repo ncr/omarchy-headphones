@@ -12,10 +12,35 @@ get the battery meter too, over Google Fast Pair or BlueZ; noise control needs
 a bridge for the brand, and [adding one](#add-your-own-headphones) is the pull
 request this repo is built for.
 
-<p align="center"><a href="#what-it-does">What it does</a> · <a href="#install">Install</a> · <a href="#supported-headphones">Supported headphones</a> · <a href="#add-your-own-headphones">Add yours</a> · <a href="#in-the-panel">In the panel</a> · <a href="#settings">Settings</a> · <a href="#gallery">Gallery</a></p>
+## Gallery
 
-> [!TIP]
-> Prefer pictures? **[See the Gallery](#gallery)** first, then **[Install](#install)**.
+<table>
+<tr>
+<td width="50%"><img src="docs/gallery/jbl-tune230nc-tws.png" alt="JBL TUNE230NC TWS: left, right and case, and noise control" width="100%"></td>
+<td width="50%"><img src="docs/gallery/sony-wh-ch720n.png" alt="Sony WH-CH720N: one battery, Off / ANC / Ambient, the ambient level slider and the Focus on voice switch" width="100%"></td>
+</tr>
+<tr>
+<td align="center">JBL TUNE230NC TWS — <a href="https://github.com/ncr">@ncr</a></td>
+<td align="center">Sony WH-CH720N — <a href="https://github.com/ncr">@ncr</a></td>
+</tr>
+<tr>
+<td width="50%"><img src="docs/gallery/soundcore-space-2.png" alt="Soundcore Space 2: one battery, Off / ANC / Ambient" width="100%"></td>
+<td width="50%"><img src="docs/gallery/nothing-ear-a.png" alt="Nothing Ear (a): left, right and case, and the mode row" width="100%"></td>
+</tr>
+<tr>
+<td align="center">Soundcore Space 2 — <a href="https://github.com/Sovego">@Sovego</a></td>
+<td align="center">Nothing Ear (a) — <a href="https://github.com/Jenesaispas69">@Jenesaispas69</a></td>
+</tr>
+</table>
+
+All taken the same way — `tools/gallery-shot <which>`: an empty workspace, the
+device's panel open, a fixed 1120×840 frame. A pull request that adds headphones
+adds its cell here, caption under it; the steps are in
+`.claude/skills/gallery-screenshot/SKILL.md`. (The animation further down is the
+JBL shot under a few themes, stitched by `tools/hero-set`; `tools/rebuild-visuals`
+remakes every picture in this file after a change to the widget's look.)
+
+<p align="center"><a href="#gallery">Gallery</a> · <a href="#what-it-does">What it does</a> · <a href="#install">Install</a> · <a href="#supported-headphones">Supported headphones</a> · <a href="#add-your-own-headphones">Add yours</a> · <a href="#in-the-panel">In the panel</a> · <a href="#settings">Settings</a></p>
 
 ## What it does
 
@@ -216,37 +241,6 @@ and booleans), or the widget's entry in `~/.config/omarchy/shell.json`.
 | `showPercentage`       | `false` | A written percentage instead of the drawn meter; costs a bar slot.                                                       |
 | `hideWhenDisconnected` | `true`  | Drop the widget while nothing is connected.                                                                              |
 | `notifyLowBattery`     | `true`  | Send the notification.                                                                                                   |
-
-## Gallery
-
-One screenshot per supported set, all taken the same way — `tools/gallery-shot
-<which>` switches to an empty workspace, opens that device's panel and saves a
-fixed 1120×840 frame to `docs/gallery/`. (The picture at the top is the same
-shot under a few themes, dark and light, stitched into an animated WebP by
-`tools/hero-set`; `tools/rebuild-visuals` remakes every picture in this file
-after a change to the widget's look.) A pull request that adds headphones
-adds its own here — a cell in the table below, caption under it — next to its
-row in the table above; an agent gets the steps from
-`.claude/skills/gallery-screenshot/SKILL.md`.
-
-<table>
-<tr>
-<td width="50%"><img src="docs/gallery/jbl-tune230nc-tws.png" alt="JBL TUNE230NC TWS: left, right and case, and noise control" width="100%"></td>
-<td width="50%"><img src="docs/gallery/sony-wh-ch720n.png" alt="Sony WH-CH720N: one battery, Off / ANC / Ambient, the ambient level slider and the Focus on voice switch" width="100%"></td>
-</tr>
-<tr>
-<td align="center">JBL TUNE230NC TWS — <a href="https://github.com/ncr">@ncr</a></td>
-<td align="center">Sony WH-CH720N — <a href="https://github.com/ncr">@ncr</a></td>
-</tr>
-<tr>
-<td width="50%"><img src="docs/gallery/soundcore-space-2.png" alt="Soundcore Space 2: one battery, Off / ANC / Ambient" width="100%"></td>
-<td width="50%"><img src="docs/gallery/nothing-ear-a.png" alt="Nothing Ear (a): left, right and case, and the mode row" width="100%"></td>
-</tr>
-<tr>
-<td align="center">Soundcore Space 2 — <a href="https://github.com/Sovego">@Sovego</a></td>
-<td align="center">Nothing Ear (a) — <a href="https://github.com/Jenesaispas69">@Jenesaispas69</a></td>
-</tr>
-</table>
 
 ## Credits
 
