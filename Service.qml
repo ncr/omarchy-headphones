@@ -584,8 +584,9 @@ Item {
   }
 
   function writeMode(follower, mode) {
-    var validModes = ["off", "anc", "ambient", "talkthru", "high", "mid", "low", "adaptive", "transparency"]
-    if (validModes.indexOf(String(mode)) === -1)
+    // Use Model.MODE_ORDER which is the canonical list of all modes any bridge may send.
+    // This keeps the validation in sync with the panel's button list.
+    if (Model.MODE_ORDER.indexOf(String(mode)) === -1)
       return "unknown mode: " + mode
     if (!follower) return "unavailable"
     if (follower.setAncMode(mode)) return "ok"

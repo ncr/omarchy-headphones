@@ -615,16 +615,6 @@ Nothing is written to disk on this path, unlike the JBL one. The UUID makes the
 next session's decision for free, and a headset that gains the feature in a
 firmware update should not have to argue with a cache.
 
-### The probe
-
-[`tools/sony_probe.py`](tools/sony_probe.py) is the reference for all of the
-above and the thing every frame here was read off:
-
-```bash
-tools/sony_probe.py B0:11:22:33:44:55                  # 25 seconds of everything it says
-tools/sony_probe.py B0:11:22:33:44:55 40               # for longer
-tools/sony_probe.py B0:11:22:33:44:55 25 set:ambient:10:0   # …and set one mode on the way
-```
 
 It registers the profile, waits for BlueZ to connect it, sends the handshake,
 ACKs everything, asks `NCASM_GET_PARAM` with each candidate type in turn and
@@ -727,10 +717,3 @@ Commands on stdin: `set off|high|mid|low|adaptive|transparency`.
 
 Exit codes match the other bridges (0 clean, 1 transient, 3 silent, 4 setup).
 
-### The probe
-
-[`tools/nothing_probe.py`](tools/nothing_probe.py) — registers the profile, connects, queries ANC/battery/serial/firmware, prints frames in both directions.
-
-```bash
-tools/nothing_probe.py 3C:B0:ED:AF:7C:30
-```

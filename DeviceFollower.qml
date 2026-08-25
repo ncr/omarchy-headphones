@@ -137,12 +137,6 @@ Item {
   readonly property bool nothingWanted: useModeControl && nothingEnabled && connected
     && controlBackend === "nothing"
     && !nothingAddressParked
-  property bool nothingArmed: false
-  onNothingWantedChanged: {
-    if (!nothingWanted) { nothingArmed = false; return }
-    Qt.callLater(function () { nothingArmed = follower.nothingWanted })
-  }
-  onNothingArmedChanged: {}
   property bool ancRestartWanted: false
   property bool ancAnswered: false
   property string ancRunError: ""
@@ -748,8 +742,6 @@ Item {
   // invitation to run it again for ever.
   Process {
     id: uuidProbe
-    running: follower.connected && follower.address !== "" && follower.deviceUuids.length === 0
-    command: ["bluetoothctl", "info", follower.address]
     stdout: StdioCollector { id: uuidProbeOut; waitForEnd: true }
     onExited: function(exitCode, exitStatus) {
       // A probe that failed says nothing about the device, and an empty list is
@@ -758,6 +750,16 @@ Item {
         ? Model.uuidsFromBluetoothctl(uuidProbeOut.text)
         : []
     }
+  }
+
+  function probeUuids() {
+    if (!connected || address === "") {
+      deviceUuids = []
+      return
+    }
+    if (uuidProbe.running) return
+    uuidProbe.command = ["bluetoothctl", "info", address]
+    uuidProbe.running = true
   }
 
   // The BLE address rotates. When the Message Stream reports a new one the old

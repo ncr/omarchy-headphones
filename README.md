@@ -53,7 +53,7 @@ again — along with its settings, so note them first if you changed any.
 |:----------------------------|:----------------------------------------------------------------------|:------------------------------------------------------------------------------------------------|:-------------------------------|
 | JBL TUNE230NC TWS (earbuds) | <img src="docs/icons/yes.svg" width="14" alt="yes"> left, right, case | <img src="docs/icons/yes.svg" width="14" alt="yes"> Off · ANC · Ambient · TalkThru              | [@ncr](https://github.com/ncr) |
 | Sony WH-CH720N (over-ear)   | <img src="docs/icons/yes.svg" width="14" alt="yes"> one figure        | <img src="docs/icons/yes.svg" width="14" alt="yes"> Off · ANC · Ambient (level, Focus on Voice) | [@ncr](https://github.com/ncr) |
-| Nothing Ear (a)             | <img src="docs/icons/yes.svg" width="14" alt="yes"> left, right, case | <img src="docs/icons/yes.svg" width="14" alt="yes"> Off · High · Mid · Low · Adaptive · Transparency | [@yoda](https://github.com/yoda) |
+| Nothing Ear (a)             | <img src="docs/icons/yes.svg" width="14" alt="yes"> left, right, case | <img src="docs/icons/yes.svg" width="14" alt="yes"> Off · High · Mid · Low · Adaptive · Transparency | [@Jenesaispas69](https://github.com/Jenesaispas69) |
 | other Fast Pair headphones  | <img src="docs/icons/yes.svg" width="14" alt="yes"> expected          | <img src="docs/icons/unknown.svg" width="14" alt="untested">                                    | —                              |
 
 Battery works on anything that serves the Google Fast Pair Message Stream
@@ -206,7 +206,7 @@ row in the table above; an agent gets the steps from
 <td width="50%"><img src="docs/gallery/nothing-ear-a.png" alt="Nothing Ear (a): left, right and case, and ANC granularity (Off / High / Mid / Low / Adaptive / Transparency)" width="100%"></td>
 </tr>
 <tr>
-<td align="center">Nothing Ear (a) — <a href="https://github.com/yoda">@yoda</a></td>
+<td align="center">Nothing Ear (a) — <a href="https://github.com/Jenesaispas69">@Jenesaispas69</a></td>
 </tr>
 </table>
 
