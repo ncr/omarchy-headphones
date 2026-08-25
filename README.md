@@ -12,6 +12,10 @@ get the battery meter too, over Google Fast Pair or BlueZ. Noise control needs
 a small helper written for the brand — [add yours](#add-your-own-headphones)
 and send a pull request.
 
+```bash
+omarchy plugin add https://github.com/ncr/omarchy-headphones --enable
+```
+
 <p align="center"><a href="#install">Install</a> · <a href="#what-it-does">What it does</a> · <a href="#supported-headphones">Supported headphones</a> · <a href="#in-the-panel">In the panel</a> · <a href="#settings">Settings</a> · <a href="#gallery">Gallery</a> · <a href="#add-your-own-headphones">Add your headphones</a></p>
 
 ## Gallery
