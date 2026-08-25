@@ -62,6 +62,31 @@ Panel {
   // gone (unplugged, out of range, filtered away by a changed deviceMatch)
   // leaves the popup on the first icon rather than on nothing at all.
   property var chosen: null
+
+  // The hero's second line, while a set is connected: one of these at a time,
+  // swapped every few seconds the way the Bluetooth and Wi-Fi panels do it.
+  // Short, because they sit next to the icon in a 340-pixel card and the hero
+  // sets them in capitals; and about what this widget actually does — two
+  // batteries and a case, the vendor channels, the modes — rather than about
+  // Bluetooth in general. Disconnected states keep their plain sentence: "not
+  // connected" is information, and a joke in its place would be a lie.
+  property int phraseIndex: 0
+  readonly property var activePhrases: [
+    "Counting electrons per ear",
+    "Asking the case nicely",
+    "Cancelling noise, politely",
+    "Both ears accounted for",
+    "Holding the RFCOMM line",
+    "Reading the room, ambiently",
+    "Filling the little icon",
+    "Talking to the left one first",
+    "Bridging the vendor gap",
+    "Pairing fast, judging faster",
+    "Keeping the case in the loop",
+    "Codecs, sorted by taste"
+  ]
+  readonly property bool rotatingPhrases: connected
+  readonly property string heroPhrase: activePhrases[phraseIndex % activePhrases.length]
   readonly property var current: followed.indexOf(chosen) !== -1
     ? chosen
     : (followed.length > 0 ? followed[0] : null)
@@ -369,6 +394,36 @@ Panel {
     return current.setAmbientVoice(!ambientVoice)
   }
 
+  // The phrase swap: fade the line out, move to the next phrase, fade it in.
+  // Only while the panel is open and a set is connected; a panel that is
+  // closed has nobody to amuse, and a disconnected one has something to say.
+  Timer {
+    id: phraseTimer
+    interval: 2800
+    running: root.opened && root.rotatingPhrases
+    repeat: true
+    onTriggered: phraseSwap.restart()
+  }
+
+  SequentialAnimation {
+    id: phraseSwap
+    PropertyAnimation {
+      target: hero; property: "metaOpacity"
+      to: 0.0; duration: 180; easing.type: Easing.OutQuad
+    }
+    ScriptAction {
+      script: root.phraseIndex = (root.phraseIndex + 1) % root.activePhrases.length
+    }
+    PropertyAnimation {
+      target: hero; property: "metaOpacity"
+      to: 1.0; duration: 260; easing.type: Easing.InQuad
+    }
+  }
+
+  // A swap caught mid-fade by a disconnect would leave the plain sentence
+  // half-visible.
+  onRotatingPhrasesChanged: if (!rotatingPhrases) { phraseSwap.stop(); hero.metaOpacity = 1.0 }
+
   Timer {
     id: ambientWrite
     interval: 150
@@ -558,7 +613,7 @@ Panel {
             id: hero
             width: parent.width
             title: root.deviceName || "Earbuds"
-            meta: Model.statusLine(root.summary)
+            meta: root.rotatingPhrases ? root.heroPhrase : Model.statusLine(root.summary)
             foreground: root.foreground
             fontFamily: root.fontFamily
             iconOpacity: root.connected ? 1.0 : 0.5

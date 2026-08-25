@@ -8,9 +8,11 @@
 
 One icon per connected set, filling up as it charges; click it for the
 left, right and case levels and the noise-control buttons. Other headphones
-get the battery meter too, over Google Fast Pair or BlueZ; noise control needs
-a bridge for the brand, and [adding one](#add-your-own-headphones) is the pull
-request this repo is built for.
+get the battery meter too, over Google Fast Pair or BlueZ. Noise control needs
+a small helper written for the brand — [add yours](#add-your-own-headphones)
+and send a pull request.
+
+<p align="center"><a href="#install">Install</a> · <a href="#what-it-does">What it does</a> · <a href="#supported-headphones">Supported headphones</a> · <a href="#in-the-panel">In the panel</a> · <a href="#settings">Settings</a> · <a href="#gallery">Gallery</a> · <a href="#add-your-own-headphones">Add your headphones</a></p>
 
 ## Gallery
 
@@ -39,8 +41,6 @@ adds its cell here, caption under it; the steps are in
 `.claude/skills/gallery-screenshot/SKILL.md`. (The animation further down is the
 JBL shot under a few themes, stitched by `tools/hero-set`; `tools/rebuild-visuals`
 remakes every picture in this file after a change to the widget's look.)
-
-<p align="center"><a href="#gallery">Gallery</a> · <a href="#what-it-does">What it does</a> · <a href="#install">Install</a> · <a href="#supported-headphones">Supported headphones</a> · <a href="#add-your-own-headphones">Add yours</a> · <a href="#in-the-panel">In the panel</a> · <a href="#settings">Settings</a></p>
 
 ## What it does
 
