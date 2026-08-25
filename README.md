@@ -4,12 +4,13 @@
 
 <p align="center"><b>Battery and noise control for your wireless headphones, in the Omarchy bar.</b></p>
 
+Copy this into a terminal and run it:
+
 ```bash
 omarchy plugin add https://github.com/ncr/omarchy-headphones --enable
 ```
 
-Headphones not on the list? [Add yours](#add-your-own-headphones) — a
-helper script and a pull request.
+Headphones not on the list? [Add yours](#add-your-own-headphones).
 
 <p align="center"><a href="#install">Install</a> · <a href="#what-it-does">What it does</a> · <a href="#supported-headphones">Supported headphones</a> · <a href="#in-the-panel">In the panel</a> · <a href="#settings">Settings</a> · <a href="#gallery">Gallery</a> · <a href="#add-your-own-headphones">Add your headphones</a></p>
 
