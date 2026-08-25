@@ -5,7 +5,7 @@
   "version": "1.0.4",
   "author": "Jacek Becela",
   "license": "MIT",
-  "description": "JBL, Sony, Nothing, Soundcore and Xiaomi headphones in the bar: battery and noise control, one icon per connected set. Earbuds show left, right and case levels; over-ear sets one figure. Off / ANC / Ambient switching, the ambient level on Sony and Soundcore, ANC strength and low latency on Nothing, and the A2DP codec where PipeWire offers a choice. Any other headphones with Google Fast Pair or a BlueZ battery get the battery meter.",
+  "description": "Battery and noise control for your wireless headphones, in the bar. JBL, Sony, Nothing, Soundcore and Xiaomi: Off / ANC / Ambient, the ambient level on Sony and Soundcore, ANC strength and low latency on Nothing, and the A2DP codec where PipeWire offers a choice. Earbuds show left, right and case; over-ear sets one figure; one icon per connected set. Other headphones get the battery meter over Google Fast Pair or BlueZ.",
   "kinds": [
     "service",
     "bar-widget"
@@ -17,7 +17,7 @@
   },
   "barWidget": {
     "displayName": "Omaphones",
-    "description": "JBL, Sony, Nothing, Soundcore and Xiaomi headphones in the bar: battery and noise control, one icon per connected set. Earbuds show left, right and case levels; over-ear sets one figure. Off / ANC / Ambient switching, the ambient level on Sony and Soundcore, ANC strength and low latency on Nothing, and the A2DP codec where PipeWire offers a choice. Any other headphones with Google Fast Pair or a BlueZ battery get the battery meter.",
+    "description": "Battery and noise control for your wireless headphones, in the bar. JBL, Sony, Nothing, Soundcore and Xiaomi: Off / ANC / Ambient, the ambient level on Sony and Soundcore, ANC strength and low latency on Nothing, and the A2DP codec where PipeWire offers a choice. Earbuds show left, right and case; over-ear sets one figure; one icon per connected set. Other headphones get the battery meter over Google Fast Pair or BlueZ.",
     "category": "Audio",
     "aliases": [
       "jbl",
