@@ -5,7 +5,7 @@
   "version": "1.0.4",
   "author": "Jacek Becela",
   "license": "MIT",
-  "description": "Battery and noise control for wireless headphones in the bar. Works with: JBL, Sony, Nothing, Xiaomi, and other headphones that support Google Fast Pair or standard Bluetooth battery reporting. Earbuds show left, right and case levels; ANC / Ambient switching, ANC strength and low latency on Nothing, A2DP codec choice. One icon per connected set.",
+  "description": "JBL, Sony, Nothing, Soundcore and Xiaomi headphones in the bar: battery and noise control, one icon per connected set. Earbuds show left, right and case levels; over-ear sets one figure. Off / ANC / Ambient switching, the ambient level on Sony and Soundcore, ANC strength and low latency on Nothing, and the A2DP codec where PipeWire offers a choice. Any other headphones with Google Fast Pair or a BlueZ battery get the battery meter.",
   "kinds": [
     "service",
     "bar-widget"
@@ -17,9 +17,14 @@
   },
   "barWidget": {
     "displayName": "Omaphones",
-    "description": "Battery and noise control for wireless headphones in the bar. Works with: JBL, Sony, Nothing, Xiaomi, and other headphones that support Google Fast Pair or standard Bluetooth battery reporting. Earbuds show left, right and case levels; ANC / Ambient switching, ANC strength and low latency on Nothing, A2DP codec choice. One icon per connected set.",
+    "description": "JBL, Sony, Nothing, Soundcore and Xiaomi headphones in the bar: battery and noise control, one icon per connected set. Earbuds show left, right and case levels; over-ear sets one figure. Off / ANC / Ambient switching, the ambient level on Sony and Soundcore, ANC strength and low latency on Nothing, and the A2DP codec where PipeWire offers a choice. Any other headphones with Google Fast Pair or a BlueZ battery get the battery meter.",
     "category": "Audio",
     "aliases": [
+      "jbl",
+      "sony",
+      "nothing",
+      "soundcore",
+      "xiaomi",
       "headphones",
       "earbuds",
       "headset",

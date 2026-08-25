@@ -745,15 +745,15 @@ Turn `useModeControl` off first: SPP is one holder, like Sony's UUID.
 ## Nothing NT Link — the Nothing X protocol on RFCOMM channel 15
 
 A fourth channel, and the first one read from other people's work rather than
-off a headset on this desk: nobody here owns a Nothing device. What follows is
-what three clients agree on — [r-witz/omarchy-nothing-ear](https://github.com/r-witz/omarchy-nothing-ear)
+off a headset on this desk. What follows is what three clients agree on —
+[r-witz/omarchy-nothing-ear](https://github.com/r-witz/omarchy-nothing-ear)
 (Nothing Ear and Headphone (1), the bridge's battery and latency handling is
 theirs), [DaanHessen/earctl](https://github.com/DaanHessen/earctl) (the command
 table, many models), and the Ear (a) trace that came with
-[pull request #2](https://github.com/ncr/omarchy-headphones/pull/2) (the SDP
-UUID, the frame layout confirmed on the wire). Where they differ, both readings
-are handled below. Treat every byte here as reported rather than confirmed until
-someone with the earbuds runs the probe.
+[pull request #2](https://github.com/ncr/omarchy-headphones/pull/2) by
+[@Jenesaispas69](https://github.com/Jenesaispas69), who ran it on the
+hardware (the SDP UUID, the frame layout confirmed on the wire, the gallery
+screenshot). Where the three differ, both readings are handled below.
 
 ```
 aeac4a03-dff5-498f-843a-34487cf133eb   NT Link   <- Ear (a); the Ear (2), Ear, Ear (stick) and

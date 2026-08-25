@@ -1,5 +1,11 @@
 # Omaphones — wireless headphones in the Omarchy bar
 
+**Works with JBL · Sony · Nothing · Soundcore · Xiaomi** — battery and noise
+control in the bar, one icon per set. Any other headphones with Google Fast
+Pair, or a battery BlueZ can read, get the battery meter; noise control needs
+a bridge for the brand, and [adding one](#add-your-own-headphones) is the
+pull request this repo is built for.
+
 <p align="center"><a href="#what-it-does">What it does</a> · <a href="#install">Install</a> · <a href="#supported-headphones">Supported headphones</a> · <a href="#add-your-own-headphones">Add yours</a> · <a href="#in-the-panel">In the panel</a> · <a href="#settings">Settings</a> · <a href="#gallery">Gallery</a></p>
 
 > [!TIP]
@@ -13,9 +19,10 @@
   headphones, filling up as they charge. Readable from the bar without opening
   anything.
 - **Noise control** — Off / ANC / Ambient / TalkThru, from the panel or a key.
-  JBL, Sony, Nothing and Xiaomi Buds 5 Pro today; built to learn your brand.
-  Sony adds the ambient level and Focus on Voice; Nothing the ANC strength
-  (Low / Mid / High / Adaptive) and a low-latency switch.
+  JBL, Sony, Nothing, Soundcore and Xiaomi Buds 5 Pro today; built to learn
+  your brand. Sony and Soundcore add the ambient level with Focus on Voice or
+  wind noise reduction; Nothing the ANC strength (Low / Mid / High / Adaptive)
+  and a low-latency switch.
 - **Codec** — which A2DP codec carries the audio (SBC, AAC, LDAC…), for any
   set whose card PipeWire offers a choice on.
 - **Several headphones at once** — one icon per connected set, each with its own
@@ -59,7 +66,8 @@ again — along with its settings, so note them first if you changed any.
 | Sony WH-CH720N (over-ear)   | <img src="docs/icons/yes.svg" width="14" alt="yes"> one figure        | <img src="docs/icons/yes.svg" width="14" alt="yes"> Off · ANC · Ambient (level, Focus on Voice) | [@ncr](https://github.com/ncr) |
 | Soundcore Space 2 (over-ear)| <img src="docs/icons/yes.svg" width="14" alt="yes"> one figure        | <img src="docs/icons/yes.svg" width="14" alt="yes"> Off · ANC · Ambient (level, wind noise reduction) | [@Sovego](https://github.com/Sovego) |
 | Xiaomi Buds 5 Pro (earbuds) | <img src="docs/icons/yes.svg" width="14" alt="yes"> one figure        | <img src="docs/icons/yes.svg" width="14" alt="yes"> Off · ANC · Ambient                          | [@KentoNion](https://github.com/KentoNion)|
-| Nothing Ear (a) · Ear · Headphone (1) | <img src="docs/icons/unknown.svg" width="14" alt="untested"> left, right, case (one figure on Headphone (1)) | <img src="docs/icons/unknown.svg" width="14" alt="untested"> Off · ANC (Low / Mid / High / Adaptive) · Ambient · low latency | untested here — written from [PR #2](https://github.com/ncr/omarchy-headphones/pull/2) and [omarchy-nothing-ear](https://github.com/r-witz/omarchy-nothing-ear); a confirmation is welcome |
+| Nothing Ear (a) (earbuds)   | <img src="docs/icons/yes.svg" width="14" alt="yes"> left, right, case | <img src="docs/icons/yes.svg" width="14" alt="yes"> Off · ANC (Low / Mid / High / Adaptive) · Ambient · low latency | [@Jenesaispas69](https://github.com/Jenesaispas69) |
+| Nothing Ear · Headphone (1) | <img src="docs/icons/yes.svg" width="14" alt="yes"> expected (one figure on Headphone (1)) | <img src="docs/icons/yes.svg" width="14" alt="yes"> expected — same protocol, per [omarchy-nothing-ear](https://github.com/r-witz/omarchy-nothing-ear) | — |
 | other Fast Pair headphones  | <img src="docs/icons/yes.svg" width="14" alt="yes"> expected          | <img src="docs/icons/unknown.svg" width="14" alt="untested">                                    | —                              |
 
 Battery works on anything that serves the Google Fast Pair Message Stream
@@ -226,11 +234,11 @@ row in the table above; an agent gets the steps from
 </tr>
 <tr>
 <td width="50%"><img src="docs/gallery/soundcore-space-2.png" alt="Soundcore Space 2: one battery, Off / ANC / Ambient" width="100%"></td>
-<td width="50%"></td>
+<td width="50%"><img src="docs/gallery/nothing-ear-a.png" alt="Nothing Ear (a): left, right and case, and the mode row" width="100%"></td>
 </tr>
 <tr>
 <td align="center">Soundcore Space 2 — <a href="https://github.com/Sovego">@Sovego</a></td>
-<td align="center"></td>
+<td align="center">Nothing Ear (a) — <a href="https://github.com/Jenesaispas69">@Jenesaispas69</a></td>
 </tr>
 </table>
 
