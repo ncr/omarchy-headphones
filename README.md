@@ -4,10 +4,11 @@
 
 <p align="center"><b>Battery levels and noise-cancellation control for Bluetooth headphones, in the Omarchy bar.</b></p>
 
-To install, copy this into a terminal and run it:
+To install or update, copy the line you need into a terminal and run it:
 
 ```bash
-omarchy plugin add https://github.com/ncr/omarchy-headphones --enable
+omarchy plugin add https://github.com/ncr/omarchy-headphones --enable       # first time
+omarchy plugin update io.github.ncr.omaphones --yes && omarchy restart shell  # already installed
 ```
 
 Headphones not on the list? [Add yours](#add-your-own-headphones).
