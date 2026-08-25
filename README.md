@@ -1,10 +1,12 @@
-# Omaphones — wireless headphones in the Omarchy bar
+# Omaphones
 
-**Works with JBL · Sony · Nothing · Soundcore · Xiaomi** — battery and noise
-control in the bar, one icon per set. Any other headphones with Google Fast
-Pair, or a battery BlueZ can read, get the battery meter; noise control needs
-a bridge for the brand, and [adding one](#add-your-own-headphones) is the
-pull request this repo is built for.
+<p align="center"><b>JBL</b> &nbsp;·&nbsp; <b>Sony</b> &nbsp;·&nbsp; <b>Nothing</b> &nbsp;·&nbsp; <b>Soundcore</b> &nbsp;·&nbsp; <b>Xiaomi</b></p>
+
+Wireless headphones in the Omarchy bar: battery and noise control, one icon
+per set. The brands above have their noise control driven over the vendor's
+own channel; any other headphones with Google Fast Pair, or a battery BlueZ
+can read, get the battery meter — and [adding a brand](#add-your-own-headphones)
+is the pull request this repo is built for.
 
 <p align="center"><a href="#what-it-does">What it does</a> · <a href="#install">Install</a> · <a href="#supported-headphones">Supported headphones</a> · <a href="#add-your-own-headphones">Add yours</a> · <a href="#in-the-panel">In the panel</a> · <a href="#settings">Settings</a> · <a href="#gallery">Gallery</a></p>
 

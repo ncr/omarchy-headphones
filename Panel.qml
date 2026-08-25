@@ -549,6 +549,10 @@ Panel {
           implicitHeight: hero.implicitHeight
 
           readonly property color iconTint: root.low ? root.urgent : root.foreground
+          // The same mark the bar draws for this device, by the same rule:
+          // earbuds once a left and a right have reported, headphones for a
+          // headset and for a set that has not said yet.
+          readonly property bool earbuds: root.singleLevel < 0 && root.perBud
 
           PanelHero {
             id: hero
@@ -559,12 +563,22 @@ Panel {
             fontFamily: root.fontFamily
             iconOpacity: root.connected ? 1.0 : 0.5
 
+            // Drawn rather than a font glyph, so the hero shows the pair of
+            // earbuds or the headphones the bar icon shows. The box takes the
+            // room a display-size glyph would, so the header's height stays;
+            // the mark inside paints the four fifths of it a glyph does.
             iconComponent: Component {
-              Text {
-                text: Model.HEADPHONES_GLYPH
-                color: header.iconTint
-                font.family: hero.fontFamily
-                font.pixelSize: Style.font.display
+              Item {
+                implicitWidth: Math.round(Style.font.display)
+                implicitHeight: Math.round(Style.font.display * 1.15)
+
+                DeviceGlyph {
+                  width: Math.round(Style.font.display * 0.85)
+                  height: width
+                  anchors.centerIn: parent
+                  earbuds: header.earbuds
+                  tint: header.iconTint
+                }
               }
             }
           }
