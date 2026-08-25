@@ -2,10 +2,10 @@
   "schemaVersion": 1,
   "id": "io.github.ncr.omaphones",
   "name": "Omaphones",
-  "version": "1.0.4",
+  "version": "1.1.0",
   "author": "Jacek Becela",
   "license": "MIT",
-  "description": "Battery levels and noise-cancellation control for Bluetooth headphones, in the Omarchy bar. JBL, Sony, Nothing, Soundcore and Xiaomi: Off / ANC / Ambient, the ambient level on Sony and Soundcore, ANC strength and low latency on Nothing, and the A2DP codec where PipeWire offers a choice. Earbuds show left, right and case; over-ear sets one figure; one icon per connected set. Other headphones get the battery meter over Google Fast Pair or BlueZ.",
+  "description": "Battery levels and noise-cancellation control for Bluetooth headphones, in the Omarchy bar. JBL, Sony, Nothing, Soundcore, Xiaomi; battery on anything with Google Fast Pair or BlueZ.",
   "kinds": [
     "service",
     "bar-widget"
@@ -17,7 +17,7 @@
   },
   "barWidget": {
     "displayName": "Omaphones",
-    "description": "Battery levels and noise-cancellation control for Bluetooth headphones, in the Omarchy bar. JBL, Sony, Nothing, Soundcore and Xiaomi: Off / ANC / Ambient, the ambient level on Sony and Soundcore, ANC strength and low latency on Nothing, and the A2DP codec where PipeWire offers a choice. Earbuds show left, right and case; over-ear sets one figure; one icon per connected set. Other headphones get the battery meter over Google Fast Pair or BlueZ.",
+    "description": "One icon per connected set, filling with its battery; the panel shows left, right and case, and switches Off / ANC / Ambient — with the ambient level on Sony and Soundcore, ANC strength and low latency on Nothing, and the A2DP codec where PipeWire offers one.",
     "category": "Audio",
     "aliases": [
       "jbl",
@@ -57,14 +57,14 @@
         "type": "boolean",
         "label": "Read battery over Google Fast Pair",
         "defaultValue": true,
-        "description": "Left, right and case levels over the Fast Pair channel. Off: BlueZ's single figure only, and no JBL noise control — its BLE address is announced on this channel. Sony is unaffected."
+        "description": "Left, right and case levels over the Fast Pair channel. Off: BlueZ's single figure only, and no JBL noise control — its BLE address is announced on this channel. Sony, Nothing, Soundcore and Xiaomi are unaffected: they serve their own channels."
       },
       {
         "key": "useModeControl",
         "type": "boolean",
-        "label": "Noise control (ANC / Ambient)",
+        "label": "Noise cancellation (Off / ANC / Ambient)",
         "defaultValue": true,
-        "description": "The MODE row: Off / ANC / Ambient, following changes made on the device too — plus the ANC strength and the low-latency switch on Nothing. Works on Sony MDR v2 headsets, Nothing earbuds and headphones, Xiaomi Buds 5 Pro, and some JBL earbuds (JBL needs Fast Pair above). Hidden when the device answers for none."
+        "description": "The MODE row, following changes made on the device too — plus the ambient level on Sony and Soundcore, and the ANC strength and low-latency switch on Nothing. Works on Sony MDR v2, Nothing, Soundcore, Xiaomi Buds 5 Pro, and some JBL earbuds (JBL needs Fast Pair above). Hidden when the device answers for none."
       },
       {
         "key": "lowBatteryThreshold",
