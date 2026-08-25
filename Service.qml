@@ -562,22 +562,6 @@ Item {
       return root.writeLatency(root.followerFor(which), on)
     }
 
-    // The A2DP codec PipeWire negotiated for the link — "aac", "sbc", "ldac" —
-    // and the ones the card offers, one per line. Empty while the device is not
-    // connected or the card has not been read yet.
-    function codec(): string { return root.codecOf(root.primary) }
-    function codecFor(which: string): string { return root.codecOf(root.followerFor(which)) }
-    function codecs(): string { return root.codecsOf(root.primary) }
-    function codecsFor(which: string): string { return root.codecsOf(root.followerFor(which)) }
-
-    // Asks PipeWire for a codec the card offers. "ok" the change was handed
-    // over — `codec` a moment later says what it settled on — and
-    // "unavailable" for a codec the card does not list.
-    function setCodec(key: string): string { return root.writeCodec(root.primary, key) }
-    function setCodecFor(key: string, which: string): string {
-      return root.writeCodec(root.followerFor(which), key)
-    }
-
     // The three components, each -1 when it reports nothing. All three read -1
     // on a headset with one battery for the whole set: it has no left earbud,
     // and `battery` above is where its figure lives.
@@ -655,21 +639,6 @@ Item {
 
   function writeLatency(follower, on) {
     return follower && follower.setLatency(Model.asBool(on, false)) ? "ok" : "unavailable"
-  }
-
-  function codecOf(follower) {
-    return follower && follower.connected ? follower.activeCodec : ""
-  }
-
-  function codecsOf(follower) {
-    if (!follower || !follower.connected) return ""
-    var keys = []
-    for (var i = 0; i < follower.codecOptions.length; i++) keys.push(follower.codecOptions[i].key)
-    return keys.join("\n")
-  }
-
-  function writeCodec(follower, key) {
-    return follower && follower.setCodec(String(key)) ? "ok" : "unavailable"
   }
 
   function chargingOf(follower) {

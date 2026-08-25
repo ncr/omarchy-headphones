@@ -845,8 +845,7 @@ three seconds and the battery every fifth poll.
 **The codec flag** (`29`) is the device's own codec mode — `00` standard, `01`
 LHDC, `02` LDAC. r-witz reports it and deliberately never writes it: the
 firmware acknowledges a value without applying it, and the codec actually used
-is whatever the host negotiated. The widget's codec row is PipeWire's (see
-README) and leaves this alone.
+is whatever the host negotiated. The widget leaves it alone.
 
 ### In the widget
 

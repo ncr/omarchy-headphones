@@ -17,7 +17,7 @@
   },
   "barWidget": {
     "displayName": "Omaphones",
-    "description": "One icon per connected set, filling with its battery; the panel shows left, right and case, and switches Off / ANC / Ambient — with the ambient level on Sony and Soundcore, ANC strength and low latency on Nothing, and the A2DP codec where PipeWire offers one.",
+    "description": "One icon per connected set, filling with its battery; the panel shows left, right and case, and switches Off / ANC / Ambient — with the ambient level on Sony and Soundcore, ANC strength and low latency on Nothing.",
     "category": "Audio",
     "aliases": [
       "jbl",

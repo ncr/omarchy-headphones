@@ -82,8 +82,7 @@ Panel {
     "Talking to the left one first",
     "Bridging the vendor gap",
     "Pairing fast, judging faster",
-    "Keeping the case in the loop",
-    "Codecs, sorted by taste"
+    "Keeping the case in the loop"
   ]
   readonly property bool rotatingPhrases: connected
   readonly property string heroPhrase: activePhrases[phraseIndex % activePhrases.length]
@@ -144,12 +143,6 @@ Panel {
   // and its position.
   readonly property bool latencyKnown: current ? current.latencyKnown : false
   readonly property bool latencyEnabled: current ? current.latencyEnabled : false
-  // The A2DP codec, any brand: what PipeWire offers for this link and what it
-  // negotiated. `codecChoice` is the follower's answer to "is there more than
-  // one", which is the only case worth a row.
-  readonly property var codecOptions: current ? current.codecOptions : []
-  readonly property string activeCodec: current ? current.activeCodec : ""
-  readonly property bool codecChoice: current ? current.codecChoice : false
   // The case's last reading, kept after the case closed (Nothing).
   readonly property bool caseStale: current ? current.caseStale : false
   // The row is a control, so it appears only when there is something to control:
@@ -167,7 +160,6 @@ Panel {
   // of the six settings Nothing offers. Only under ANC is one of them lit.
   readonly property bool levelRowVisible: modeRowVisible && ancLevelOptions.length > 0
   readonly property bool latencyRowVisible: modeRowVisible && latencyKnown
-  readonly property bool codecRowVisible: connected && codecChoice
 
   // The level waiting on the debounce below, and -1 with nothing waiting.
   property int pendingAmbientLevel: -1
@@ -235,14 +227,6 @@ Panel {
     return out
   }
 
-  // The codec chips, from whatever PipeWire listed for this card.
-  readonly property var codecChipOptions: {
-    var out = []
-    for (var i = 0; i < codecOptions.length; i++)
-      out.push({ value: codecOptions[i].key, label: codecOptions[i].label })
-    return out
-  }
-
   readonly property string ancHint: {
     var parts = []
     for (var i = 0; i < ancOptions.length; i++)
@@ -264,7 +248,6 @@ Panel {
   // that offered them would be describing a widget you do not have.
   readonly property string keyHint: {
     var parts = ["r Refresh"]
-    if (codecRowVisible) parts.push("c Codec")
     if (followed.length > 1) parts.push(", . Device")
     parts.push("b Bluetooth", "v Volume", "tab Next panel")
     return parts.join(" · ")
@@ -474,20 +457,6 @@ Panel {
     return current.setLatency(!latencyEnabled)
   }
 
-  function setCodec(key) {
-    if (!codecRowVisible || !current) return false
-    return current.setCodec(key)
-  }
-
-  // The next codec along, wrapping — for the c key, which has no chip to name.
-  function cycleCodec() {
-    if (!codecRowVisible || codecOptions.length === 0) return false
-    var index = -1
-    for (var i = 0; i < codecOptions.length; i++)
-      if (codecOptions[i].key === activeCodec) index = i
-    return setCodec(codecOptions[(index + 1) % codecOptions.length].key)
-  }
-
   // Opening the panel is when someone wants the truth about a reading that may
   // have gone stale in the case. The device on screen is the one asked; the
   // others are refreshed when you walk to them.
@@ -574,7 +543,6 @@ Panel {
         else if (t === "]") root.stepAmbientLevel(1)
         else if (t === "f" || t === "F") root.toggleAmbientVoice()
         else if (t === "g" || t === "G") root.toggleLatency()
-        else if (t === "c" || t === "C") root.cycleCodec()
         // The two device keys, punctuation for the same reason the brackets
         // are: every letter here already belongs to a mode or to a panel, and
         // , and . sit next to each other under the hand that is on the keys.
@@ -918,36 +886,6 @@ Panel {
           font.family: root.fontFamily
           font.pixelSize: Style.font.caption
           wrapMode: Text.WordWrap
-        }
-
-        // ---- Codec — which A2DP codec carries the audio. PipeWire's choice,
-        //      not the device's, so this row belongs to every brand; it is
-        //      drawn only when the card offers more than one. Switching one
-        //      rebuilds the stream, so the sound drops for a moment.
-        Column {
-          width: parent.width
-          visible: root.codecRowVisible
-          spacing: Style.space(8)
-
-          PanelSectionHeader {
-            width: parent.width
-            text: "CODEC"
-            foreground: root.foreground
-            fontFamily: root.fontFamily
-          }
-
-          ButtonGroup {
-            width: parent.width
-            options: root.codecChipOptions
-            value: root.activeCodec
-            foreground: root.foreground
-            background: Color.background
-            fontFamily: root.fontFamily
-            fontSize: Style.font.bodySmall
-            // The selection follows what PipeWire reports, not the click: a
-            // profile it refuses leaves the chip where it was.
-            onChanged: function(key) { root.setCodec(key) }
-          }
         }
 
         PanelSeparator {

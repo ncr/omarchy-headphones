@@ -255,19 +255,6 @@ Item {
   readonly property string ambientVoiceLabel: controlBackend === "soundcore"
     ? "Wind noise reduction" : "Focus on voice"
 
-  // ---- The A2DP codec, which is the host's to choose: PipeWire negotiates it
-  //      and offers one card profile per codec both sides can do. Read with
-  //      `pactl list cards` when the device connects, when the panel opens, and
-  //      after a change; changed with `pactl set-card-profile`. A card with one
-  //      codec on offer has nothing to choose, and the panel draws no row.
-  //      This is about the link, not the device, so it is the same for every
-  //      brand — and nothing to do with the vendor channel's own codec flag,
-  //      which Nothing's firmware acknowledges without acting on.
-  property var codecState: ({ options: [], active: "" })
-  readonly property var codecOptions: Array.isArray(codecState.options) ? codecState.options : []
-  readonly property string activeCodec: String(codecState.active || "")
-  readonly property bool codecChoice: connected && codecOptions.length > 1
-
   readonly property int bluezLevel: Model.batteryLevel(device)
   // The bar carries one number: the headset's own figure where there is only
   // one, otherwise the earbud that dies first, or BlueZ's rounded single figure
@@ -416,7 +403,6 @@ Item {
     }
     if (ancRestart.running) { ancRestart.stop(); ancEnabled = true }
     if (classicRestart.running) { classicRestart.stop(); classicEnabled = true }
-    probeCodecs()
     if (!useFastPair || !service) return
     // The service cycles this device's channel and leaves every other device's
     // alone; it says whether the request went out at all, because a reader that
@@ -437,9 +423,6 @@ Item {
   function refreshIfStale() {
     if (!connected) return
     if (readingStamp === 0 || Date.now() - readingStamp > stalerThanMs) refresh()
-    // Someone may have changed the codec elsewhere since the last look, and one
-    // pactl call on opening the panel is cheap.
-    probeCodecs()
   }
 
   // The Classic-channel bridge is live for this backend: the one place a write
@@ -498,32 +481,6 @@ Item {
   function setLatency(on) {
     if (!latencyKnown || !classicBridge.running) return false
     classicBridge.write("latency " + (on ? "on" : "off") + "\n")
-    return true
-  }
-
-  // ---- The codec, through PipeWire. One probe at a time, started by hand
-  //      rather than by a `running` binding, for the reason the UUID probe is:
-  //      a process that exits the moment it has printed must not be re-armed
-  //      by a condition that is still true when it does.
-  function probeCodecs() {
-    if (!connected || address === "") {
-      codecState = ({ options: [], active: "" })
-      return
-    }
-    if (codecProbe.running) return
-    codecProbe.command = ["pactl", "list", "cards"]
-    codecProbe.running = true
-  }
-
-  // True when the change was handed to PipeWire, which may still refuse it —
-  // the probe that follows says what the card settled on. A codec the card does
-  // not offer is not a write.
-  function setCodec(key) {
-    if (!connected || codecSet.running) return false
-    var profile = Model.codecProfile(codecState, key)
-    if (profile === "") return false
-    codecSet.command = ["pactl", "set-card-profile", Model.cardNameFor(address), profile]
-    codecSet.running = true
     return true
   }
 
@@ -623,15 +580,8 @@ Item {
       // What the device serves is only known while it is here to be asked, and a
       // list left behind would keep a bridge armed for a device in its case.
       deviceUuids = []
-      codecState = ({ options: [], active: "" })
-      codecProbeDelay.stop()
     }
-    if (connected) {
-      probeUuids()
-      // PipeWire builds the card a moment after BlueZ reports the connection;
-      // asked straight away, the list would be empty.
-      codecProbeDelay.restart()
-    }
+    if (connected) probeUuids()
     checkLowBattery()
   }
 
@@ -643,43 +593,8 @@ Item {
   Component.onCompleted: {
     if (connected && address !== "" && service) service.rememberAddress(address)
     probeUuids()
-    if (connected) probeCodecs()
     checkLowBattery()
   }
-
-  Timer {
-    id: codecProbeDelay
-    interval: 2500
-    repeat: false
-    onTriggered: follower.probeCodecs()
-  }
-
-  Process {
-    id: codecProbe
-    stdout: StdioCollector { id: codecProbeOut; waitForEnd: true }
-    onExited: function(exitCode, exitStatus) {
-      // A pactl that failed says nothing about the card; an empty list is
-      // exactly that, and hides the row.
-      follower.codecState = exitCode === 0
-        ? Model.parseCardProfiles(codecProbeOut.text, follower.address)
-        : ({ options: [], active: "" })
-    }
-  }
-
-  // PipeWire answers set-card-profile before the new stream is up, and the
-  // sink it rebuilds takes a moment to name its codec: ask again shortly.
-  Process {
-    id: codecSet
-    onExited: codecSettle.restart()
-  }
-
-  Timer {
-    id: codecSettle
-    interval: 1500
-    repeat: false
-    onTriggered: follower.probeCodecs()
-  }
-
   // A refresh that never lands must not hold the per-earbud rows on screen for
   // ever: after this long the channel is treated as gone and BlueZ's figure
   // takes over again.

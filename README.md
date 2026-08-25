@@ -53,8 +53,6 @@ Headphones not on the list? [Add yours](#add-your-own-headphones).
   your brand. Sony and Soundcore add the ambient level with Focus on Voice or
   wind noise reduction; Nothing the ANC strength (Low / Mid / High / Adaptive)
   and a low-latency switch.
-- **Codec** — which A2DP codec carries the audio (SBC, AAC, LDAC…), for any
-  set whose card PipeWire offers a choice on.
 - **Several headphones at once** — one icon per connected set, each with its own
   panel.
 - **Low-battery notification** that names the earbud.
@@ -156,7 +154,6 @@ Keys, while the panel is open (the panel lists them itself, bottom rows):
 | `f` | Focus on voice (Sony) / wind noise reduction (Soundcore) on / off |
 | `1` `2` `3` `4` | ANC strength: Low · Mid · High · Adaptive (Nothing) — turns ANC on at it |
 | `g` | Low latency on / off (Nothing) |
-| `c` | Next codec, where the card offers more than one |
 | `r` | Ask the device again |
 | `,` `.` | Previous / next connected set |
 | `b` `v` | Bluetooth panel / Audio panel |
@@ -176,7 +173,6 @@ Everything is reachable over IPC — `omarchy-shell omaphones <method>`:
 | `ambientVoice` · `setAmbientVoice on\|off` | `on` / `off` — Focus on voice (Sony), wind noise reduction (Soundcore) |
 | `ancLevel` · `setAncLevel <l>` | `low` `mid` `high` `adaptive` (Nothing); setting one turns ANC on |
 | `latency` · `setLatency on\|off` | `on` / `off` (Nothing) |
-| `codec` · `codecs` · `setCodec <c>` | the codec in use, the ones on offer (one per line), pick one |
 | `refresh` | ask the device again |
 | `open` · `close` · `toggle` | the panel |
 
@@ -189,13 +185,6 @@ introspection calls (`bleAddress`, `panelRect`) for the tools in `tools/`.
 
 What it deliberately does not do — connect, volume, MAC addresses, equalisers —
 lives in the stock panels a keypress away (`b`, `v`).
-
-The CODEC row is PipeWire's, not the headphones': it lists the A2DP profiles
-`pactl list cards` shows for the set's card, one per codec, and appears only
-when there is more than one to choose from. A card that offers a single
-`a2dp-sink` profile — which is what a stock BlueZ, without codec switching
-enabled, gives most headphones — has no row. Switching rebuilds the stream, so
-the sound drops for a moment.
 
 ## Settings
 
@@ -218,7 +207,7 @@ and booleans), or the widget's entry in `~/.config/omarchy/shell.json`.
 - [Bluetooth-Battery-Meter](https://github.com/maniacx/Bluetooth-Battery-Meter) — the clearest reading of the Fast Pair battery bytes.
 - [bluetooth-py](https://github.com/GroupXyz2/bluetooth-py) — the JBL command numbers.
 - [Gadgetbridge](https://codeberg.org/Freeyourgadget/Gadgetbridge) and [mos9527/SonyHeadphonesClient](https://github.com/mos9527/SonyHeadphonesClient) — the Sony frame format; the two disagree about the WH-CH720N, and the hardware settled it here.
-- [r-witz/omarchy-nothing-ear](https://github.com/r-witz/omarchy-nothing-ear) — the Nothing protocol as a working Omarchy widget: battery components, the latency switch, the case cache, and the codec row; [DaanHessen/earctl](https://github.com/DaanHessen/earctl) — the command table; [@Jenesaispas69](https://github.com/Jenesaispas69)'s [PR #2](https://github.com/ncr/omarchy-headphones/pull/2) — the NT Link UUID and the frame layout from an Ear (a).
+- [r-witz/omarchy-nothing-ear](https://github.com/r-witz/omarchy-nothing-ear) — the Nothing protocol as a working Omarchy widget: battery components, the latency switch and the case cache; [DaanHessen/earctl](https://github.com/DaanHessen/earctl) — the command table; [@Jenesaispas69](https://github.com/Jenesaispas69)'s [PR #2](https://github.com/ncr/omarchy-headphones/pull/2) — the NT Link UUID and the frame layout from an Ear (a).
 
 ## Licence
 
