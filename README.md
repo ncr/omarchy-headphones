@@ -4,16 +4,23 @@
 
 <p align="center"><b>Battery levels and noise-cancellation control for Bluetooth headphones, in the Omarchy bar.</b></p>
 
-To install or update, copy the line you need into a terminal and run it:
+**Install** — copy into a terminal and run:
 
 ```bash
-omarchy plugin add https://github.com/ncr/omarchy-headphones --enable       # first time
-omarchy plugin update io.github.ncr.omaphones --yes && omarchy restart shell  # already installed
+omarchy plugin add https://github.com/ncr/omarchy-headphones --enable
 ```
+
+**Update** an installed copy:
+
+```bash
+omarchy plugin update io.github.ncr.omaphones --yes && omarchy restart shell
+```
+
+Needs Omarchy 4.0 or later; everything else the plugin uses ships with it.
 
 Headphones not on the list? [Add yours](#add-your-own-headphones).
 
-<p align="center"><a href="#install">Install</a> · <a href="#what-it-does">What it does</a> · <a href="#supported-headphones">Supported headphones</a> · <a href="#in-the-panel">In the panel</a> · <a href="#settings">Settings</a> · <a href="#gallery">Gallery</a> · <a href="#add-your-own-headphones">Add your headphones</a></p>
+<p align="center"><a href="#what-it-does">What it does</a> · <a href="#supported-headphones">Supported headphones</a> · <a href="#in-the-panel">In the panel</a> · <a href="#settings">Settings</a> · <a href="#gallery">Gallery</a> · <a href="#add-your-own-headphones">Add your headphones</a></p>
 
 ## Gallery
 
@@ -63,26 +70,6 @@ same idea, built for Apple's own protocol, and the plugin this one is modelled o
   <img src="docs/hero-light.webp" alt="The Omarchy bar with two sets connected — one icon each — and the JBL panel open: left, right and case, and noise control; the picture cycles through a few Omarchy themes" width="100%">
 </picture>
 
-## Install
-
-```bash
-omarchy plugin add https://github.com/ncr/omarchy-headphones --enable
-```
-
-Needs Omarchy 4.0 or later; everything else the plugin uses ships with it.
-
-The widget is live as soon as the command returns — no shell restart. Updating an older version (`omarchy plugin update io.github.ncr.omaphones`) is
-the one exception: run `omarchy restart shell` once afterwards, or the old code
-keeps running.
-
-Connect the headphones and the widget appears; it hides while nothing is
-connected. `omarchy-shell omaphones status` tells you what it believes. If a
-helper could not start, the panel prints why; fix it and press `r` in the panel
-(or `omarchy-shell omaphones refreshFor <which>`) rather than waiting — a failed helper is
-retried on a growing pause that can reach five minutes, and `r` brings the
-next try forward. `omarchy plugin remove io.github.ncr.omaphones` takes it out
-again — along with its settings, so note them first if you changed any.
-
 ## Supported headphones
 
 | Device                      | Battery                                                               | Noise control                                                                                   | Confirmed by                   |
@@ -94,15 +81,6 @@ again — along with its settings, so note them first if you changed any.
 | Nothing Ear (a) (earbuds)   | <img src="docs/icons/yes.svg" width="14" alt="yes"> left, right, case | <img src="docs/icons/yes.svg" width="14" alt="yes"> Off · ANC (Low / Mid / High / Adaptive) · Ambient · low latency | [@Jenesaispas69](https://github.com/Jenesaispas69) |
 | Nothing Ear · Headphone (1) | <img src="docs/icons/yes.svg" width="14" alt="yes"> expected (one figure on Headphone (1)) | <img src="docs/icons/yes.svg" width="14" alt="yes"> expected — same protocol, per [omarchy-nothing-ear](https://github.com/r-witz/omarchy-nothing-ear) | — |
 | other Fast Pair headphones  | <img src="docs/icons/yes.svg" width="14" alt="yes"> expected          | <img src="docs/icons/unknown.svg" width="14" alt="untested">                                    | —                              |
-
-Battery works on anything that serves the Google Fast Pair Message Stream
-(`bluetoothctl info <address>` lists `df21fe2c-…`) — most headphones do — and
-falls back to BlueZ's single figure otherwise. Noise control needs the
-vendor's own channel: Sony MDR v2 (`956c7b26-…`), Nothing NT Link
-(`aeac4a03-…`, RFCOMM channel 15), Soundcore's vendor RFCOMM (`0cf12d31-…`),
-Compact GAIA on SPP for Xiaomi Buds 5 Pro (`00001100-d102-…` in the SDP
-record), and JBL over BLE. Nothing's channel carries the battery too, which is
-what the panel shows when there is no Fast Pair stream to read it from.
 
 ## Add your own headphones
 
