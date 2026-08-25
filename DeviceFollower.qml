@@ -157,10 +157,12 @@ Item {
   readonly property string sonyBridgePath: Qt.resolvedUrl("sony-bridge").toString().replace(/^file:\/\//, "")
   readonly property string nothingBridgePath: Qt.resolvedUrl("nothing-bridge").toString().replace(/^file:\/\//, "")
   readonly property string xiaomiBridgePath: Qt.resolvedUrl("xiaomi-bridge").toString().replace(/^file:\/\//, "")
+  readonly property string soundcoreBridgePath: Qt.resolvedUrl("soundcore-bridge").toString().replace(/^file:\/\//, "")
   readonly property string classicBridgePath: {
     if (controlBackend === "sony") return sonyBridgePath
     if (controlBackend === "nothing") return nothingBridgePath
     if (controlBackend === "xiaomi") return xiaomiBridgePath
+    if (controlBackend === "soundcore") return soundcoreBridgePath
     return ""
   }
   property var ancState: ({})
@@ -242,6 +244,16 @@ Item {
   // device for the backend in play — the Fast Pair model for the JBL bridge, the
   // Classic address for the others.
   readonly property string ancBackoffKey: classicBackend ? address : modelId
+
+  // ---- The Ambient dial's range and the switch beside it, which differ by
+  //      brand: Sony's dial runs 0-20 and its switch lifts voices out of the
+  //      room; Soundcore's runs 1-5 and its switch cuts wind noise. Both are
+  //      "how much comes through, and one filter on it", so they share a row
+  //      and the panel takes the numbers and the label from here.
+  readonly property int ambientMin: controlBackend === "soundcore" ? 1 : 0
+  readonly property int ambientMax: controlBackend === "soundcore" ? 5 : 20
+  readonly property string ambientVoiceLabel: controlBackend === "soundcore"
+    ? "Wind noise reduction" : "Focus on voice"
 
   // ---- The A2DP codec, which is the host's to choose: PipeWire negotiates it
   //      and offers one card profile per codec both sides can do. Read with
@@ -453,17 +465,19 @@ Item {
   // to ambient as part of it, because the level is stored only by a set that
   // carries it: sending a level while Noise Cancelling is on changes nothing.
   function setAmbientLevel(value) {
-    if (!classicLive("sony")) return false
-    var level = Math.max(0, Math.min(20, Math.round(Number(value))))
+    if (!classicLive("sony") && !classicLive("soundcore")) return false
+    var level = Math.max(ambientMin, Math.min(ambientMax, Math.round(Number(value))))
     if (!isFinite(level)) return false
     classicBridge.write("level " + level + "\n")
     return true
   }
 
-  // Focus on Voice: the headset lifts speech out of what Ambient lets through.
-  // Sony only, the same as the level, and switched on its own — the headset
-  // keeps it with the ambient setting, so this does not disturb the amount.
+  // Focus on Voice (Sony) / Wind Noise Reduction (Soundcore)
   function setAmbientVoice(on) {
+    if (classicLive("soundcore")) {
+      classicBridge.write("wind " + (on ? "on" : "off") + "\n")
+      return true
+    }
     if (!classicLive("sony")) return false
     classicBridge.write("voice " + (on ? "on" : "off") + "\n")
     return true

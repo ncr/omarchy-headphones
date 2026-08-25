@@ -505,9 +505,9 @@ Item {
       return root.writeMode(root.followerFor(which), mode)
     }
 
-    // The Ambient dial, 0-20, on devices that have one (Sony). -1 while nothing
-    // has said, which is also what a JBL pair reads as: its Ambient Aware is a
-    // mode, not an amount.
+    // The Ambient dial, on devices that have one: 0-20 on Sony, 1-5 on
+    // Soundcore. -1 while nothing has said, which is also what a JBL pair reads
+    // as: its Ambient Aware is a mode, not an amount.
     function ambientLevel(): string { return String(root.primary ? root.primary.ambientLevel : -1) }
     function ambientLevelFor(which: string): string { return root.levelOf(which, "ambientLevel") }
 

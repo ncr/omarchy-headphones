@@ -437,6 +437,7 @@ function readerLevel(state, key) {
 var SONY_MDR_V2_UUID = "956c7b26-d49a-4ba8-b03f-b17d393cb6e2"
 var NOTHING_NT_LINK_UUID = "aeac4a03-dff5-498f-843a-34487cf133eb"
 var CSR_GAIA_UUID = "00001100-d102-11e1-9b23-00025b00a5a5"
+var SOUNDCORE_UUID_PREFIX = "0cf12d31-fac3-4553-bd80-d6832e7"
 
 // The UUIDs `bluetoothctl info <address>` printed, lowercased.
 // Quickshell.Bluetooth exposes no uuids property, so the SDP record is read the
@@ -456,30 +457,33 @@ function uuidsFromBluetoothctl(text) {
   return out
 }
 
-// "sony", "nothing", "xiaomi", "jbl" or "" — the backend to run for this
-// device, and the empty string for a device no path can reach. SDP UUIDs win
-// because they come from the device's own record: Sony first, then Nothing,
-// then CSR GAIA (Xiaomi / QCC on SPP). A known BLE address only says the
-// Message Stream is up, which every Fast Pair device does whether or not it
-// answers a mode query, so it is last.
+// "sony", "nothing", "xiaomi", "soundcore", "jbl" or "" — the backend to run
+// for this device, and the empty string for a device no path can reach. SDP
+// UUIDs win because they come from the device's own record: Sony first, then
+// Nothing, then CSR GAIA (Xiaomi / QCC on SPP), then Soundcore's vendor
+// channel. A known BLE address only says the Message Stream is up, which every
+// Fast Pair device does whether or not it answers a mode query, so it is last.
 function controlBackend(uuids, bleAddress) {
   var list = uuids || []
   var nothing = false
   var gaia = false
+  var soundcore = false
   for (var i = 0; i < list.length; i++) {
     var id = str(list[i]).trim().toLowerCase()
     if (id === SONY_MDR_V2_UUID) return "sony"
     if (id === NOTHING_NT_LINK_UUID) nothing = true
     if (id === CSR_GAIA_UUID) gaia = true
+    if (id.indexOf(SOUNDCORE_UUID_PREFIX) === 0) soundcore = true
   }
   if (nothing) return "nothing"
   if (gaia) return "xiaomi"
+  if (soundcore) return "soundcore"
   return str(bleAddress).trim() !== "" ? "jbl" : ""
 }
 
 // The backends whose bridge takes the Classic address and serves the device's
 // own channel — everything but JBL, whose bridge dials a BLE address.
-var CLASSIC_BACKENDS = ["sony", "nothing", "xiaomi"]
+var CLASSIC_BACKENDS = ["sony", "nothing", "xiaomi", "soundcore"]
 
 function isClassicBackend(backend) {
   return CLASSIC_BACKENDS.indexOf(str(backend)) !== -1

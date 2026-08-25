@@ -1,0 +1,467 @@
+#!/usr/bin/env python3
+"""Hold one Soundcore RFCOMM link and mirror the headphones' listening mode.
+
+    soundcore-bridge <classic-address>
+
+Prints one JSON object per line, and reads one command per line:
+
+    stdout   {"modes": true, "mode": "anc", "available": ["off","anc","ambient"]}
+             {"modes": false, "error": "..."}
+    stdin    set off | set anc | set ambient
+
+Exit codes, which the shell-side service reads to decide what to do next:
+
+    0   clean stop: SIGTERM/SIGINT, or the widget closed the pipe
+    1   transient: the profile never connected, the handshake went unanswered,
+        or the channel closed under us. Says nothing about the headphones, so
+        the service retries with a growing pause
+    3   linked but silent: handshake worked, but no sound mode state was returned.
+        This device speaks the vendor channel but not this part of it, so the
+        service parks the address
+    4   setup failure: bad arguments, or python-dbus/PyGObject missing. About
+        this machine, not about the headphones
+"""
+import ctypes
+import json
+import os
+import re
+import signal
+import struct
+import sys
+
+try:
+    import dbus
+    import dbus.mainloop.glib
+    import dbus.service
+    from gi.repository import GLib
+except ImportError as error:
+    sys.stdout.write(json.dumps({
+        "modes": False,
+        "error": "missing python dependency %s"
+                 % (getattr(error, "name", None) or error),
+    }) + "\n")
+    sys.stdout.flush()
+    sys.exit(4)
+
+try:
+    from gi.repository import GLibUnix
+    unix_signal_add = GLibUnix.signal_add
+except ImportError:
+    unix_signal_add = GLib.unix_signal_add
+
+SOUNDCORE_UUID_PREFIX = "0cf12d31-fac3-4553-bd80-d6832e7"
+DEFAULT_UUID = "0cf12d31-fac3-4553-bd80-d6832e700000"
+PROFILE_PATH = "/io/github/ncr/omaphones/soundcore"
+
+# Framing constants
+OUTBOUND_HDR = bytes([0x08, 0xEE, 0x00, 0x00, 0x00])
+
+CMD_STATE_UPDATE = (0x01, 0x01)
+CMD_SOUND_MODES_NOTIFY = (0x06, 0x01)
+CMD_SOUND_MODES_SET = (0x06, 0x81)
+
+MODE_FROM_BYTE = {0x00: "anc", 0x01: "ambient", 0x02: "off"}
+BYTE_FROM_MODE = {name: byte for byte, name in MODE_FROM_BYTE.items()}
+AVAILABLE = ["off", "anc", "ambient"]
+
+ADDRESS = re.compile(r"^([0-9A-Fa-f]{2}:){5}[0-9A-Fa-f]{2}$")
+
+USAGE = "usage: soundcore-bridge <classic-address>"
+
+EXIT_TRANSIENT = 1
+EXIT_UNSUPPORTED = 3
+EXIT_SETUP = 4
+
+REPLY_TIMEOUT = 5
+CONNECT_TIMEOUT = 30
+CONNECT_DELAY = 500
+CONNECT_RETRY = 1500
+CONNECT_ATTEMPTS = 10
+INIT_TIMEOUT = 2000
+INIT_ATTEMPTS = 3
+GET_TIMEOUT = 3000
+
+
+def emit(payload):
+    try:
+        sys.stdout.write(json.dumps(payload, separators=(",", ":")) + "\n")
+        sys.stdout.flush()
+    except (BrokenPipeError, ValueError):
+        os._exit(0)
+
+
+def arm_parent_death_signal():
+    try:
+        libc = ctypes.CDLL("libc.so.6", use_errno=True)
+        libc.prctl(1, signal.SIGTERM)
+    except Exception:
+        return
+    if os.getppid() == 1:
+        os._exit(0)
+
+
+def calc_checksum(data: bytes) -> int:
+    return sum(data) & 0xFF
+
+
+def make_packet(cmd: tuple[int, int], body: bytes = b"") -> bytes:
+    total_len = 5 + 2 + 2 + len(body) + 1
+    raw = OUTBOUND_HDR + bytes([cmd[0], cmd[1], total_len & 0xFF, (total_len >> 8) & 0xFF]) + body
+    return raw + bytes([calc_checksum(raw)])
+
+
+def find_device_path_and_uuid(bus, address):
+    wanted = address.upper()
+    objects = dbus.Interface(bus.get_object("org.bluez", "/"),
+                             "org.freedesktop.DBus.ObjectManager").GetManagedObjects()
+    for path, interfaces in objects.items():
+        device = interfaces.get("org.bluez.Device1")
+        if device and str(device.get("Address", "")).upper() == wanted:
+            uuids = [str(u).lower() for u in device.get("UUIDs", [])]
+            for u in uuids:
+                if u.startswith(SOUNDCORE_UUID_PREFIX):
+                    return str(path), u
+            return str(path), DEFAULT_UUID
+    return None, None
+
+
+class Bridge:
+    def __init__(self, bus, address, loop):
+        self.bus = bus
+        self.address = address
+        self.loop = loop
+        self.exit_code = None
+        self.device = None
+        self.manager = None
+        self.registered = False
+        self.target_uuid = None
+
+        self.fd = None
+        self.watch = None
+        self.buffer = bytearray()
+
+        self.handshake_seen = False
+        self.mode_seen = False
+        self.mode = ""
+        self.last_line = None
+        # Default 6-byte params: [mode, 0x1f, 0xff, 0x00, 0x00, 0x01]
+        self.sound_mode_params = [0x00, 0x1F, 0xFF, 0x00, 0x00, 0x01]
+        self.pending = ""
+
+    def finish(self, code, message=None):
+        if self.exit_code is not None:
+            return False
+        self.exit_code = code
+        if message:
+            emit({"modes": False, "error": message})
+        self.loop.quit()
+        return False
+
+    def unregister(self):
+        if self.watch is not None:
+            try:
+                GLib.source_remove(self.watch)
+            except Exception:
+                pass
+            self.watch = None
+        if self.fd is not None:
+            try:
+                os.close(self.fd)
+            except OSError:
+                pass
+            self.fd = None
+        if self.manager is not None and self.registered:
+            try:
+                self.manager.UnregisterProfile(PROFILE_PATH, timeout=REPLY_TIMEOUT)
+            except dbus.DBusException:
+                pass
+            self.registered = False
+
+    def register(self):
+        try:
+            device_path, target_uuid = find_device_path_and_uuid(self.bus, self.address)
+        except dbus.DBusException as error:
+            return self.finish(EXIT_TRANSIENT,
+                               "cannot reach BlueZ: %s" % error.get_dbus_message())
+        if not device_path:
+            return self.finish(EXIT_TRANSIENT,
+                               "no paired device with address %s" % self.address)
+        self.target_uuid = target_uuid or DEFAULT_UUID
+        self.device = dbus.Interface(
+            self.bus.get_object("org.bluez", device_path), "org.bluez.Device1")
+        self.manager = dbus.Interface(
+            self.bus.get_object("org.bluez", "/org/bluez"), "org.bluez.ProfileManager1")
+        try:
+            self.manager.RegisterProfile(PROFILE_PATH, self.target_uuid, {
+                "Name": "Omaphones Soundcore",
+                "Role": "client",
+                "Channel": dbus.UInt16(0),
+                "RequireAuthentication": dbus.Boolean(False),
+                "RequireAuthorization": dbus.Boolean(False),
+                "AutoConnect": dbus.Boolean(False),
+            }, timeout=REPLY_TIMEOUT)
+        except dbus.DBusException as error:
+            return self.finish(EXIT_TRANSIENT,
+                               "cannot register the Soundcore profile: %s"
+                               % error.get_dbus_message())
+        self.registered = True
+        GLib.timeout_add(CONNECT_DELAY, self.connect, 0)
+        return False
+
+    def connect(self, attempt):
+        if self.exit_code is not None or self.fd is not None:
+            return False
+
+        def failed(error):
+            if self.exit_code is not None or self.fd is not None:
+                return
+            if attempt + 1 < CONNECT_ATTEMPTS:
+                GLib.timeout_add(CONNECT_RETRY, self.connect, attempt + 1)
+                return
+            self.finish(EXIT_TRANSIENT, "cannot open the Soundcore channel: %s"
+                        % error.get_dbus_message())
+
+        try:
+            self.device.ConnectProfile(self.target_uuid, reply_handler=lambda: None,
+                                       error_handler=failed, timeout=CONNECT_TIMEOUT)
+        except dbus.DBusException as error:
+            failed(error)
+        return False
+
+    def opened(self, fd):
+        if self.fd is not None:
+            try:
+                os.close(fd)
+            except OSError:
+                pass
+            return
+        self.fd = fd
+        self.watch = GLib.io_add_watch(fd, GLib.PRIORITY_DEFAULT,
+                                       GLib.IO_IN | GLib.IO_HUP | GLib.IO_ERR,
+                                       self.on_io)
+        self.send_handshake(1)
+
+    def write(self, payload):
+        if self.fd is None:
+            return
+        try:
+            written = 0
+            while written < len(payload):
+                written += os.write(self.fd, payload[written:])
+        except OSError as error:
+            self.finish(EXIT_TRANSIENT, "the Soundcore channel closed: %s" % error)
+
+    def send_handshake(self, attempt):
+        if self.exit_code is not None or self.handshake_seen:
+            return False
+        if attempt > INIT_ATTEMPTS:
+            return self.finish(EXIT_TRANSIENT,
+                               "the Soundcore headphones did not answer the handshake")
+        self.write(make_packet(CMD_STATE_UPDATE))
+        GLib.timeout_add(INIT_TIMEOUT, self.send_handshake, attempt + 1)
+        return False
+
+    def on_get_timeout(self):
+        if self.exit_code is not None or self.mode_seen:
+            return False
+        return self.finish(EXIT_UNSUPPORTED,
+                           "the headphones did not answer the listening-mode query")
+
+    def on_io(self, _fd, condition):
+        if condition & (GLib.IO_HUP | GLib.IO_ERR):
+            self.finish(EXIT_TRANSIENT, "the Soundcore channel closed")
+            return False
+        try:
+            data = os.read(self.fd, 4096)
+        except OSError as error:
+            self.finish(EXIT_TRANSIENT, "the Soundcore channel closed: %s" % error)
+            return False
+        if not data:
+            self.finish(EXIT_TRANSIENT, "the Soundcore channel closed")
+            return False
+        self.buffer += data
+        self.parse_buffer()
+        return True
+
+    def parse_buffer(self):
+        while len(self.buffer) >= 9:
+            if not (self.buffer[0] == 0x09 and self.buffer[1] == 0xFF):
+                idx = self.buffer.find(b"\x09\xff")
+                if idx == -1:
+                    self.buffer = bytearray()
+                    break
+                self.buffer = self.buffer[idx:]
+                if len(self.buffer) < 9:
+                    break
+            cmd = (self.buffer[5], self.buffer[6])
+            total_len = self.buffer[7] | (self.buffer[8] << 8)
+            if len(self.buffer) < total_len:
+                break
+            packet = bytes(self.buffer[:total_len])
+            self.buffer = self.buffer[total_len:]
+            
+            # Checksum check
+            if calc_checksum(packet[:-1]) != packet[-1]:
+                continue
+                
+            body = packet[9:-1]
+            self.on_packet(cmd, body)
+            if self.exit_code is not None:
+                break
+
+    def on_packet(self, cmd, body):
+        if cmd == CMD_STATE_UPDATE:
+            self.handshake_seen = True
+            # State update packet: mode is at byte offset 71 (when body >= 75)
+            if len(body) >= 75:
+                mode_byte = body[71]
+                if len(body) >= 77:
+                    self.sound_mode_params = list(body[71:77])
+                else:
+                    self.sound_mode_params[0] = mode_byte
+                self.on_mode_byte(mode_byte)
+            else:
+                self.on_get_timeout()
+        elif cmd == CMD_SOUND_MODES_NOTIFY:
+            if len(body) >= 1:
+                mode_byte = body[0]
+                if len(body) >= 6:
+                    self.sound_mode_params = list(body[:6])
+                else:
+                    self.sound_mode_params[0] = mode_byte
+                self.on_mode_byte(mode_byte)
+
+    def on_mode_byte(self, mode_byte):
+        first = not self.mode_seen
+        self.mode_seen = True
+        self.mode = MODE_FROM_BYTE.get(mode_byte, "")
+        line = {
+            "modes": True,
+            "mode": self.mode,
+            "available": AVAILABLE,
+            "level": int(self.sound_mode_params[5]),
+            "voice": bool(self.sound_mode_params[4]),
+        }
+        if first or line != self.last_line:
+            self.last_line = line
+            emit(line)
+
+    def command(self, line):
+        parts = line.strip().split()
+        if not parts or not self.mode_seen:
+            return
+        if parts[0] == "set" and len(parts) > 1:
+            wanted = parts[1].lower()
+            byte = BYTE_FROM_MODE.get(wanted)
+            if byte is not None:
+                body = list(self.sound_mode_params)
+                body[0] = byte
+                self.write(make_packet(CMD_SOUND_MODES_SET, bytes(body)))
+        elif parts[0] == "level" and len(parts) > 1:
+            try:
+                val = max(1, min(5, int(round(float(parts[1])))))
+                body = list(self.sound_mode_params)
+                body[5] = val
+                self.write(make_packet(CMD_SOUND_MODES_SET, bytes(body)))
+                self.sound_mode_params = body
+                self.on_mode_byte(self.sound_mode_params[0])
+            except (ValueError, TypeError):
+                pass
+        elif parts[0] in ("voice", "wind") and len(parts) > 1:
+            on = parts[1].lower() in ("1", "on", "true", "yes")
+            body = list(self.sound_mode_params)
+            body[4] = 1 if on else 0
+            self.write(make_packet(CMD_SOUND_MODES_SET, bytes(body)))
+            self.sound_mode_params = body
+            self.on_mode_byte(self.sound_mode_params[0])
+
+    def on_stdin(self, _fd, condition):
+        if condition & (GLib.IO_HUP | GLib.IO_ERR):
+            self.finish(0)
+            return False
+        try:
+            chunk = os.read(0, 4096)
+        except OSError:
+            self.finish(0)
+            return False
+        if not chunk:
+            self.finish(0)
+            return False
+        self.pending += chunk.decode("utf-8", "replace")
+        while "\n" in self.pending:
+            line, self.pending = self.pending.split("\n", 1)
+            self.command(line)
+        return True
+
+    def listen_to_stdin(self):
+        GLib.io_add_watch(0, GLib.PRIORITY_DEFAULT,
+                          GLib.IO_IN | GLib.IO_HUP | GLib.IO_ERR, self.on_stdin)
+
+
+def main():
+    arm_parent_death_signal()
+    argv = sys.argv[1:]
+    address = argv[0].strip() if argv else ""
+    if argv and argv[0] in ("-h", "--help"):
+        print(USAGE)
+        return 0
+    if not argv or not ADDRESS.match(address):
+        emit({"modes": False,
+              "error": "%s (not a Bluetooth address: %r)" % (USAGE, address)})
+        sys.exit(EXIT_SETUP)
+    address = address.upper()
+
+    dbus.mainloop.glib.DBusGMainLoop(set_as_default=True)
+    try:
+        bus = dbus.SystemBus()
+    except dbus.DBusException as error:
+        emit({"modes": False, "error": "no system bus: %s" % error.get_dbus_message()})
+        sys.exit(EXIT_TRANSIENT)
+
+    loop = GLib.MainLoop()
+    bridge = Bridge(bus, address, loop)
+
+    class Profile(dbus.service.Object):
+        @dbus.service.method("org.bluez.Profile1", in_signature="", out_signature="")
+        def Release(self):
+            bridge.finish(EXIT_TRANSIENT, "BlueZ released the Soundcore profile")
+
+        @dbus.service.method("org.bluez.Profile1", in_signature="oha{sv}",
+                             out_signature="")
+        def NewConnection(self, _path, fd, _properties):
+            bridge.opened(fd.take())
+
+        @dbus.service.method("org.bluez.Profile1", in_signature="o", out_signature="")
+        def RequestDisconnection(self, _path):
+            bridge.finish(EXIT_TRANSIENT, "the Soundcore channel closed")
+
+    Profile(bus, PROFILE_PATH)
+    bridge.listen_to_stdin()
+    bridge.register()
+
+    def stop(*_args):
+        bridge.finish(0)
+        return False
+
+    unix_signal_add(GLib.PRIORITY_DEFAULT, signal.SIGTERM, stop)
+    unix_signal_add(GLib.PRIORITY_DEFAULT, signal.SIGINT, stop)
+
+    try:
+        if bridge.exit_code is None:
+            loop.run()
+    finally:
+        bridge.unregister()
+    sys.exit(bridge.exit_code or 0)
+
+
+if __name__ == "__main__":
+    arm_parent_death_signal()
+    try:
+        main()
+    except SystemExit:
+        raise
+    except KeyboardInterrupt:
+        pass
+    except BaseException as error:
+        emit({"modes": False, "error": "%s: %s" % (type(error).__name__, error)})
+        sys.exit(EXIT_TRANSIENT)

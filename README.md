@@ -57,6 +57,7 @@ again — along with its settings, so note them first if you changed any.
 |:----------------------------|:----------------------------------------------------------------------|:------------------------------------------------------------------------------------------------|:-------------------------------|
 | JBL TUNE230NC TWS (earbuds) | <img src="docs/icons/yes.svg" width="14" alt="yes"> left, right, case | <img src="docs/icons/yes.svg" width="14" alt="yes"> Off · ANC · Ambient · TalkThru              | [@ncr](https://github.com/ncr) |
 | Sony WH-CH720N (over-ear)   | <img src="docs/icons/yes.svg" width="14" alt="yes"> one figure        | <img src="docs/icons/yes.svg" width="14" alt="yes"> Off · ANC · Ambient (level, Focus on Voice) | [@ncr](https://github.com/ncr) |
+| Soundcore Space 2 (over-ear)| <img src="docs/icons/yes.svg" width="14" alt="yes"> one figure        | <img src="docs/icons/yes.svg" width="14" alt="yes"> Off · ANC · Ambient (level, wind noise reduction) | [@Sovego](https://github.com/Sovego) |
 | Xiaomi Buds 5 Pro (earbuds) | <img src="docs/icons/yes.svg" width="14" alt="yes"> one figure        | <img src="docs/icons/yes.svg" width="14" alt="yes"> Off · ANC · Ambient                          | [@KentoNion](https://github.com/KentoNion)|
 | Nothing Ear (a) · Ear · Headphone (1) | <img src="docs/icons/unknown.svg" width="14" alt="untested"> left, right, case (one figure on Headphone (1)) | <img src="docs/icons/unknown.svg" width="14" alt="untested"> Off · ANC (Low / Mid / High / Adaptive) · Ambient · low latency | untested here — written from [PR #2](https://github.com/ncr/omarchy-headphones/pull/2) and [omarchy-nothing-ear](https://github.com/r-witz/omarchy-nothing-ear); a confirmation is welcome |
 | other Fast Pair headphones  | <img src="docs/icons/yes.svg" width="14" alt="yes"> expected          | <img src="docs/icons/unknown.svg" width="14" alt="untested">                                    | —                              |
@@ -65,10 +66,10 @@ Battery works on anything that serves the Google Fast Pair Message Stream
 (`bluetoothctl info <address>` lists `df21fe2c-…`) — most headphones do — and
 falls back to BlueZ's single figure otherwise. Noise control needs the
 vendor's own channel: Sony MDR v2 (`956c7b26-…`), Nothing NT Link
-(`aeac4a03-…`, RFCOMM channel 15), Compact GAIA on SPP for Xiaomi Buds 5 Pro
-(`00001100-d102-…` in the SDP record), and JBL over BLE. Nothing's channel
-carries the battery too, which is what the panel shows when there is no Fast
-Pair stream to read it from.
+(`aeac4a03-…`, RFCOMM channel 15), Soundcore's vendor RFCOMM (`0cf12d31-…`),
+Compact GAIA on SPP for Xiaomi Buds 5 Pro (`00001100-d102-…` in the SDP
+record), and JBL over BLE. Nothing's channel carries the battery too, which is
+what the panel shows when there is no Fast Pair stream to read it from.
 
 ## Add your own headphones
 
@@ -142,8 +143,8 @@ Keys, while the panel is open (the panel lists them itself, bottom rows):
 | Key | Does |
 |:--|:--|
 | `o` `n` `a` `t` | Off · ANC · Ambient · TalkThru — only the modes this device has |
-| `[` `]` | Ambient level down / up (Sony) |
-| `f` | Focus on voice on / off (Sony) |
+| `[` `]` | Ambient level down / up (Sony 0-20, Soundcore 1-5) |
+| `f` | Focus on voice (Sony) / wind noise reduction (Soundcore) on / off |
 | `1` `2` `3` `4` | ANC strength: Low · Mid · High · Adaptive (Nothing) — turns ANC on at it |
 | `g` | Low latency on / off (Nothing) |
 | `c` | Next codec, where the card offers more than one |
@@ -162,8 +163,8 @@ Everything is reachable over IPC — `omarchy-shell omaphones <method>`:
 | `battery` · `left` · `right` · `batteryCase` | a level 0-100, or `-1` |
 | `charging` | which parts say they are charging |
 | `mode` · `setMode <m>` | `off` `anc` `ambient` `talkthru`, or `pending` / `unsupported` · `ok` / `busy` / `unavailable` |
-| `ambientLevel` · `setAmbientLevel <n>` | 0-20 (Sony) |
-| `ambientVoice` · `setAmbientVoice on\|off` | `on` / `off` (Sony) |
+| `ambientLevel` · `setAmbientLevel <n>` | 0-20 (Sony), 1-5 (Soundcore) |
+| `ambientVoice` · `setAmbientVoice on\|off` | `on` / `off` — Focus on voice (Sony), wind noise reduction (Soundcore) |
 | `ancLevel` · `setAncLevel <l>` | `low` `mid` `high` `adaptive` (Nothing); setting one turns ANC on |
 | `latency` · `setLatency on\|off` | `on` / `off` (Nothing) |
 | `codec` · `codecs` · `setCodec <c>` | the codec in use, the ones on offer (one per line), pick one |
@@ -222,6 +223,14 @@ row in the table above; an agent gets the steps from
 <tr>
 <td align="center">JBL TUNE230NC TWS — <a href="https://github.com/ncr">@ncr</a></td>
 <td align="center">Sony WH-CH720N — <a href="https://github.com/ncr">@ncr</a></td>
+</tr>
+<tr>
+<td width="50%"><img src="docs/gallery/soundcore-space-2.png" alt="Soundcore Space 2: one battery, Off / ANC / Ambient" width="100%"></td>
+<td width="50%"></td>
+</tr>
+<tr>
+<td align="center">Soundcore Space 2 — <a href="https://github.com/Sovego">@Sovego</a></td>
+<td align="center"></td>
 </tr>
 </table>
 

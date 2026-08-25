@@ -597,12 +597,20 @@ Deno.test("controlBackend picks the protocol the device advertises", () => {
   assertEquals(Model.controlBackend(xiaomi, ""), "xiaomi");
   assertEquals(Model.controlBackend(xiaomi, "48:B4:41:00:00:01"), "xiaomi");
   assertEquals(Model.controlBackend([Model.CSR_GAIA_UUID.toUpperCase()], ""), "xiaomi");
+  // Soundcore vendor UUID in SDP record picks soundcore backend.
+  const soundcore = [
+    "00001101-0000-1000-8000-00805f9b34fb",
+    "0cf12d31-fac3-4553-bd80-d6832e7d1402",
+  ];
+  assertEquals(Model.controlBackend(soundcore, ""), "soundcore");
+  assertEquals(Model.controlBackend(soundcore, "48:B4:41:00:00:01"), "soundcore");
+  assertEquals(Model.controlBackend(["0CF12D31-FAC3-4553-BD80-D6832E7D1402"], ""), "soundcore");
   // Sony still wins when both vendor UUIDs are listed.
   assertEquals(
     Model.controlBackend([Model.CSR_GAIA_UUID, Model.SONY_MDR_V2_UUID], ""),
     "sony",
   );
-  // No Sony or GAIA UUID: the BLE address from the Message Stream is what is left.
+  // No Sony, GAIA or Soundcore UUID: the BLE address from the Message Stream is what is left.
   assertEquals(Model.controlBackend([], "48:B4:41:00:00:01"), "jbl");
   assertEquals(Model.controlBackend(null, "48:B4:41:00:00:01"), "jbl");
   // Nothing to reach the device with.
@@ -667,6 +675,7 @@ Deno.test("controlBackend picks nothing from the NT Link UUID", () => {
   assertEquals(Model.isClassicBackend("nothing"), true);
   assertEquals(Model.isClassicBackend("sony"), true);
   assertEquals(Model.isClassicBackend("xiaomi"), true);
+  assertEquals(Model.isClassicBackend("soundcore"), true);
   assertEquals(Model.isClassicBackend("jbl"), false);
   assertEquals(Model.isClassicBackend(""), false);
 });

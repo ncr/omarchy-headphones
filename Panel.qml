@@ -106,6 +106,11 @@ Panel {
   readonly property int ambientLevel: current ? current.ambientLevel : -1
   readonly property bool ambientVoice: current ? current.ambientVoice : false
   readonly property bool ambientControls: current ? current.ambientControls : false
+  // The dial's range and the switch's name, which differ by brand (Sony 0-20
+  // and Focus on voice; Soundcore 1-5 and Wind noise reduction).
+  readonly property int ambientMin: current ? current.ambientMin : 0
+  readonly property int ambientMax: current ? current.ambientMax : 20
+  readonly property string ambientVoiceLabel: current ? current.ambientVoiceLabel : "Focus on voice"
   // ANC strength, Nothing only: which strengths the device grades its noise
   // cancelling in, and the one it is at (or was last at).
   readonly property var ancLevels: current ? current.ancLevels : []
@@ -221,7 +226,8 @@ Panel {
     // they are named only then: a hint that listed them the rest of the time
     // would be offering keys that do nothing. Same for the strengths and the
     // latency switch.
-    if (ambientRowVisible) parts.push("[ ] Level", "f Voice")
+    if (ambientRowVisible)
+      parts.push("[ ] Level", ambientVoiceLabel === "Focus on voice" ? "f Voice" : "f Wind")
     for (var j = 0; j < ancLevelOptions.length; j++)
       if (levelRowVisible) parts.push(ancLevelOptions[j].key + " " + ancLevelOptions[j].label)
     if (latencyRowVisible) parts.push("g Latency")
@@ -344,7 +350,7 @@ Panel {
   // last value asked for is the one that goes out.
   function setAmbientLevel(value) {
     if (!current) return false
-    pendingAmbientLevel = Model.clamp(value, 0, 20)
+    pendingAmbientLevel = Model.clamp(value, ambientMin, ambientMax)
     askedAmbientLevel = pendingAmbientLevel
     ambientWrite.restart()
     return true
@@ -760,8 +766,8 @@ Panel {
               id: ambientSlider
               bar: root.bar
               width: parent.width
-              minimum: 0
-              maximum: 20
+              minimum: root.ambientMin
+              maximum: root.ambientMax
               step: 1
               integer: true
               // What the headset last said, or the figure asked for while it
@@ -769,7 +775,7 @@ Panel {
               // the same way the mode buttons follow it.
               value: root.askedAmbientLevel >= 0
                 ? root.askedAmbientLevel
-                : Math.max(0, root.ambientLevel)
+                : Math.max(root.ambientMin, root.ambientLevel)
 
               onMoved: function(value) { root.setAmbientLevel(value) }
             }
@@ -780,7 +786,7 @@ Panel {
 
               Text {
                 id: voiceLabel
-                text: "Focus on voice"
+                text: root.ambientVoiceLabel
                 color: root.foreground
                 font.family: root.fontFamily
                 font.pixelSize: Style.font.body
