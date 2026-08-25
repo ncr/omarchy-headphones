@@ -4,7 +4,7 @@
 
 <p align="center"><b>Battery and noise control for your wireless headphones, in the Omarchy bar.</b></p>
 
-Copy this into a terminal and run it:
+To install, copy this into a terminal and run it:
 
 ```bash
 omarchy plugin add https://github.com/ncr/omarchy-headphones --enable
