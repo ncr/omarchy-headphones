@@ -2,7 +2,7 @@
 
 <p align="center"><b>JBL</b> &nbsp;·&nbsp; <b>Sony</b> &nbsp;·&nbsp; <b>Nothing</b> &nbsp;·&nbsp; <b>Soundcore</b> &nbsp;·&nbsp; <b>Xiaomi</b></p>
 
-<p align="center"><b>Battery and noise control for your wireless headphones, in the Omarchy bar.</b></p>
+<p align="center"><b>Battery levels and noise control for wireless headphones, in the Omarchy bar.</b></p>
 
 To install, copy this into a terminal and run it:
 
