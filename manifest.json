@@ -5,7 +5,7 @@
   "version": "1.0.4",
   "author": "Jacek Becela",
   "license": "MIT",
-  "description": "Battery levels and noise-cancellation control for Bluetooth headphones. JBL, Sony, Nothing, Soundcore and Xiaomi: Off / ANC / Ambient, the ambient level on Sony and Soundcore, ANC strength and low latency on Nothing, and the A2DP codec where PipeWire offers a choice. Earbuds show left, right and case; over-ear sets one figure; one icon per connected set. Other headphones get the battery meter over Google Fast Pair or BlueZ.",
+  "description": "Battery levels and noise-cancellation control for Bluetooth headphones, in the Omarchy bar. JBL, Sony, Nothing, Soundcore and Xiaomi: Off / ANC / Ambient, the ambient level on Sony and Soundcore, ANC strength and low latency on Nothing, and the A2DP codec where PipeWire offers a choice. Earbuds show left, right and case; over-ear sets one figure; one icon per connected set. Other headphones get the battery meter over Google Fast Pair or BlueZ.",
   "kinds": [
     "service",
     "bar-widget"
@@ -17,7 +17,7 @@
   },
   "barWidget": {
     "displayName": "Omaphones",
-    "description": "Battery levels and noise-cancellation control for Bluetooth headphones. JBL, Sony, Nothing, Soundcore and Xiaomi: Off / ANC / Ambient, the ambient level on Sony and Soundcore, ANC strength and low latency on Nothing, and the A2DP codec where PipeWire offers a choice. Earbuds show left, right and case; over-ear sets one figure; one icon per connected set. Other headphones get the battery meter over Google Fast Pair or BlueZ.",
+    "description": "Battery levels and noise-cancellation control for Bluetooth headphones, in the Omarchy bar. JBL, Sony, Nothing, Soundcore and Xiaomi: Off / ANC / Ambient, the ambient level on Sony and Soundcore, ANC strength and low latency on Nothing, and the A2DP codec where PipeWire offers a choice. Earbuds show left, right and case; over-ear sets one figure; one icon per connected set. Other headphones get the battery meter over Google Fast Pair or BlueZ.",
     "category": "Audio",
     "aliases": [
       "jbl",
