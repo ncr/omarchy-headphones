@@ -642,6 +642,35 @@ The widget's own bridge holds the same profile, so turn `useModeControl` off
 before running the probe, or BlueZ will refuse the registration to whichever
 asks second.
 
+### WH-1000XM5
+
+Confirmed on a **Sony WH-1000XM5** (`AC:80:0A:14:69:53`, modalias
+`usb:v054Cp0DF0d0251`). It serves the same MDR v2 UUID (`956c7b26-…`) and the
+Fast Pair Message Stream (`df21fe2c-…`). Battery is one figure for the set.
+The inquired type and the 7-byte layout are the CH720N's; these are the bytes
+it sent.
+
+Handshake, `CONNECT_RET_PROTOCOL_INFO`, 8 bytes so v2:
+
+```
+01 00 03 00 20 16 00 00
+```
+
+The CH720N's reply was `01 00 03 00 10 02 00 00` — same length, different
+capability bytes, same generation.
+
+```
+->  66 17                       GET
+<-  67 17 01 01 01 00 14        RET: changed, on, ambient, normal, level 20
+->  66 15                       GET
+<-  ACK, then nothing
+->  66 22                       GET
+<-  ACK, then nothing
+```
+
+SETs built on that `0x17` block were applied: Off, ANC and Ambient each
+landed. No other inquired type was answered, and nothing else was sent.
+
 ## Xiaomi Buds 5 Pro — Compact GAIA on SPP
 
 A third device and a third protocol, confirmed on **Xiaomi Buds 5 Pro**

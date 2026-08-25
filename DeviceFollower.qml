@@ -153,11 +153,11 @@ Item {
   //      same lines and end the same four ways, so one Process runs whichever
   //      of them the backend names; only the JBL one, which dials a BLE address
   //      the reader announces, has a lifecycle of its own.
-  readonly property string jblBridgePath: Qt.resolvedUrl("jbl-bridge").toString().replace(/^file:\/\//, "")
-  readonly property string sonyBridgePath: Qt.resolvedUrl("sony-bridge").toString().replace(/^file:\/\//, "")
-  readonly property string nothingBridgePath: Qt.resolvedUrl("nothing-bridge").toString().replace(/^file:\/\//, "")
-  readonly property string xiaomiBridgePath: Qt.resolvedUrl("xiaomi-bridge").toString().replace(/^file:\/\//, "")
-  readonly property string soundcoreBridgePath: Qt.resolvedUrl("soundcore-bridge").toString().replace(/^file:\/\//, "")
+  readonly property string jblBridgePath: service ? service.jblBridgePath : ""
+  readonly property string sonyBridgePath: service ? service.sonyBridgePath : ""
+  readonly property string nothingBridgePath: service ? service.nothingBridgePath : ""
+  readonly property string xiaomiBridgePath: service ? service.xiaomiBridgePath : ""
+  readonly property string soundcoreBridgePath: service ? service.soundcoreBridgePath : ""
   readonly property string classicBridgePath: {
     if (controlBackend === "sony") return sonyBridgePath
     if (controlBackend === "nothing") return nothingBridgePath
@@ -182,6 +182,18 @@ Item {
   property string ancRunError: ""
   property string ancErrorRaw: ""
   property bool classicEnabled: true
+  // Same delayed arm as jblArmed: `command` and `running` both depend on the
+  // SDP probe, and QML does not promise which binding settles first. Seen live
+  // on a WH-1000XM5, the Process started as QList("", address) before the
+  // UUIDs arrived and then never ran sony-bridge.
+  readonly property bool classicWanted: useModeControl && classicEnabled && connected
+    && classicBridgePath !== ""
+    && !addressParked
+  property bool classicArmed: false
+  onClassicWantedChanged: {
+    if (!classicWanted) { classicArmed = false; return }
+    Qt.callLater(function () { classicArmed = follower.classicWanted })
+  }
 
   // What this device serves, read once per connection with `bluetoothctl info`.
   // Empty while it is not connected, or while the probe is still out.
@@ -378,7 +390,7 @@ Item {
       return
     }
     if (uuidProbe.running) return
-    uuidProbe.command = ["bluetoothctl", "info", address]
+    uuidProbe.command = ["/usr/bin/bluetoothctl", "info", address]
     uuidProbe.running = true
   }
 
@@ -689,10 +701,10 @@ Item {
   // session.
   Process {
     id: classicBridge
-    running: follower.useModeControl && follower.classicEnabled && follower.connected
-      && follower.classicBridgePath !== ""
-      && !follower.addressParked
-    command: [follower.classicBridgePath, follower.address]
+    running: follower.classicArmed
+    command: follower.classicBridgePath !== ""
+      ? [follower.classicBridgePath, follower.address]
+      : ["true"]
     stdinEnabled: true
     stdout: SplitParser {
       onRead: function(line) { follower.applyAncLine(line) }

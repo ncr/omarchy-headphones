@@ -164,6 +164,14 @@ Item {
   //      The mode bridges stay with their followers. Each of those is a link to
   //      one device and collides with nothing.
   readonly property string readerPath: Qt.resolvedUrl("gfps-reader").toString().replace(/^file:\/\//, "")
+  // Resolved here so every follower gets the same absolute path. DeviceFollower
+  // used to resolve them itself, and a Process whose command was bound before
+  // the UUID probe settled started as QList("", address).
+  readonly property string jblBridgePath: Qt.resolvedUrl("jbl-bridge").toString().replace(/^file:\/\//, "")
+  readonly property string sonyBridgePath: Qt.resolvedUrl("sony-bridge").toString().replace(/^file:\/\//, "")
+  readonly property string nothingBridgePath: Qt.resolvedUrl("nothing-bridge").toString().replace(/^file:\/\//, "")
+  readonly property string xiaomiBridgePath: Qt.resolvedUrl("xiaomi-bridge").toString().replace(/^file:\/\//, "")
+  readonly property string soundcoreBridgePath: Qt.resolvedUrl("soundcore-bridge").toString().replace(/^file:\/\//, "")
   // The devices the reader is asked to hold a channel open for. A follower for
   // a device that is not connected is kept so the widget can name what it is
   // waiting for, but it has nothing to open.
