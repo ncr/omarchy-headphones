@@ -16,8 +16,6 @@ omarchy plugin add https://github.com/ncr/omarchy-headphones --enable
 omarchy plugin update io.github.ncr.omaphones --yes && omarchy restart shell
 ```
 
-Needs Omarchy 4.0 or later; everything else the plugin uses ships with it.
-
 Headphones not on the list? [Add yours](#add-your-own-headphones).
 
 <p align="center"><a href="#what-it-does">What it does</a> · <a href="#supported-headphones">Supported headphones</a> · <a href="#in-the-panel">In the panel</a> · <a href="#settings">Settings</a> · <a href="#gallery">Gallery</a> · <a href="#add-your-own-headphones">Add your headphones</a></p>
