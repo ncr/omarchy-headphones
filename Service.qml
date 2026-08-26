@@ -257,9 +257,27 @@ Item {
     return false
   }
 
+  // The reader takes its addresses from the command line, and `running` and
+  // `command` are both bound to readerAddresses. QML does not promise which of
+  // the two settles first, and seen live it was `running`: the process launched
+  // as QList(readerPath) with no address at all, and readerFollowing was then
+  // set from a list the reader never heard. The first device to connect was
+  // never followed — a JBL pair drawn as headphones off BlueZ's one figure, with
+  // no BLE address for its bridge — while a second one arrived by `follow` on
+  // stdin and worked. Armed one event-loop turn later instead, the same as
+  // jblArmed and classicArmed in DeviceFollower, so the command has caught up
+  // by the time the process starts.
+  readonly property bool readerWanted: root.useFastPair && root.readerAddresses.length > 0
+    && root.readerEnabled
+  property bool readerArmed: false
+  onReaderWantedChanged: {
+    if (!readerWanted) { readerArmed = false; return }
+    Qt.callLater(function () { readerArmed = root.readerWanted })
+  }
+
   Process {
     id: gfpsReader
-    running: root.useFastPair && root.readerAddresses.length > 0 && root.readerEnabled
+    running: root.readerArmed
     command: [root.readerPath].concat(root.readerAddresses)
     stdinEnabled: true
     stdout: SplitParser {
