@@ -167,7 +167,26 @@ Item {
   }
   property var ancState: ({})
   property bool ancEnabled: true
+  // ---- Not before the Classic link has settled. bluetoothd 5.87 died with
+  //      SIGSEGV in device_found_callback (src/adapter.c:7602, a jump through
+  //      a pointer into the heap) 42–46 s after a JBL pair connected, five
+  //      times out of five when the BLE bridge had its link up by then, and
+  //      never with the bridge kept off — nor once when the bridge dialled a
+  //      pair that had been connected for a quarter of an hour (2026-08-26).
+  //      Whatever the earbuds do at that mark, bluetoothd survives it as long
+  //      as no BLE link is up, so the bridge waits it out. Counted from the
+  //      follower's own sighting of `connected`, which a shell restarted under
+  //      a long-connected pair also waits: it has no way to know how long ago.
+  readonly property int jblSettleMs: 90000
+  property bool jblSettled: false
+  Timer {
+    id: jblSettle
+    interval: follower.jblSettleMs
+    repeat: false
+    onTriggered: follower.jblSettled = true
+  }
   readonly property bool jblWanted: useModeControl && useFastPair && ancEnabled && connected
+    && jblSettled
     && controlBackend === "jbl"
     && bleAddress !== ""
     && modeSupportKnown !== 0
@@ -578,6 +597,9 @@ Item {
   // device that was already connected when the shell started merely appears,
   // and `primed` absorbs what it says.
   onConnectedChanged: {
+    jblSettled = false
+    jblSettle.stop()
+    if (connected) jblSettle.restart()
     if (connected && address !== "" && service) service.rememberAddress(address)
     if (connected && sawDisconnected) primed = true
     if (!connected) {
@@ -603,6 +625,7 @@ Item {
   // time, and that fires neither handler above — both are changes, and there was
   // no change.
   Component.onCompleted: {
+    if (connected) jblSettle.restart()
     if (connected && address !== "" && service) service.rememberAddress(address)
     probeUuids()
     checkLowBattery()
