@@ -327,6 +327,17 @@ a shell pipeline block-buffer, which is why `tools/jbl-anc` pipes through
 `sed -u` and a line-buffered `grep`. And the BLE address rotates, so the bridge
 is restarted whenever the Message Stream reports a new one.
 
+A third, and it is bluetoothd's rather than the earbuds'. bluez 5.87 as shipped
+(Arch 5.87-2) dies with SIGSEGV in `device_found_callback` whenever some D-Bus
+client runs discovery with a UUID filter and a device advertises a matching
+UUID — the earbuds' Fast Pair `FE2C`, for one. `is_filter_match()` in
+`src/adapter.c` hands `queue_find()` its arguments swapped and calls the UUID
+string as a function; upstream fixed it six days after the release, in commit
+`82af2beaf` (bluez/bluez#2282). Nothing in this plugin scans or sets a filter,
+and the crash restarts bluetoothd and drops every headset regardless. Until
+a bluez with that commit ships, the one-line patch rebuilt into the distro's
+package is the fix.
+
 A third, and it is bluetoothd's rather than the earbuds'. On bluez 5.87 a BLE
 link held to the earbuds during their first minute on the Classic link killed
 bluetoothd: SIGSEGV in `device_found_callback` (`src/adapter.c:7602`, a jump
