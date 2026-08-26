@@ -338,16 +338,6 @@ and the crash restarts bluetoothd and drops every headset regardless. Until
 a bluez with that commit ships, the one-line patch rebuilt into the distro's
 package is the fix.
 
-A third, and it is bluetoothd's rather than the earbuds'. On bluez 5.87 a BLE
-link held to the earbuds during their first minute on the Classic link killed
-bluetoothd: SIGSEGV in `device_found_callback` (`src/adapter.c:7602`, a jump
-through a pointer into the heap), 42–46 s after the connect, five times out of
-five on 2026-08-26 — and never with the bridge kept off, nor when it dialled a
-pair that had been connected for a quarter of an hour. So the bridge waits 90 s
-after the earbuds connect before its first dial. They advertise less by then,
-and `btgatt-client` may need a few attempts before one lands: on a JBL pair the
-mode row arrives a minute or three after the battery rows, not seconds.
-
 What the bridge's exit code means, because the answer to "does this model speak
 the protocol" is only some of the ways it can end:
 
