@@ -39,9 +39,6 @@ Headphones not on the list? [Add yours](#add-your-own-headphones).
 <td align="center">Soundcore Space 2 — <a href="https://github.com/Sovego">@Sovego</a></td>
 <td align="center">Nothing Ear (a) — <a href="https://github.com/Jenesaispas69">@Jenesaispas69</a></td>
 </tr>
-</table>
-
-<table>
 <tr>
 <td width="50%"><img src="docs/gallery/sony-wh-1000xm5.png" alt="Sony WH-1000XM5: one battery, Off / ANC / Ambient, the ambient level slider and the Focus on voice switch" width="100%"></td>
 <td width="50%"></td>
