@@ -80,6 +80,7 @@ CONNECT_ATTEMPTS = 10
 INIT_TIMEOUT = 2000
 INIT_ATTEMPTS = 3
 GET_TIMEOUT = 3000
+CONFIRM_DELAY = 400
 
 
 def emit(payload):
@@ -141,6 +142,9 @@ class Bridge:
         self.buffer = bytearray()
 
         self.handshake_seen = False
+        # Set once the device has answered a 06 01 of its own accord or on
+        # request. Only those devices are asked again after a write.
+        self.query_answered = False
         self.mode_seen = False
         self.mode = ""
         self.last_line = None
@@ -322,7 +326,21 @@ class Bridge:
                 self.on_mode_byte(mode_byte)
             else:
                 self.on_get_timeout()
+            # That offset is model-dependent: 71 on the Space 2, 69 on the Space
+            # One Pro. Read at the wrong one the mode comes out as a neighbouring
+            # setting, and the next `set` posts those five neighbours back as the
+            # mode parameters, quietly overwriting the wind and custom levels
+            # their owner chose in the phone app.
+            #
+            # There is no way to tell from the packet which offset is right —
+            # the neighbouring bytes are switches, so the one at 71 reads as a
+            # perfectly plausible 0, 1 or 2 most of the time. So ask 06 01,
+            # which answers with the six bytes and nothing around them, and let
+            # its reply stand over whatever the offset produced. A device that
+            # does not answer keeps exactly the behaviour it has today.
+            self.write(make_packet(CMD_SOUND_MODES_NOTIFY))
         elif cmd == CMD_SOUND_MODES_NOTIFY:
+            self.query_answered = True
             if len(body) >= 1:
                 mode_byte = body[0]
                 if len(body) >= 6:
@@ -346,6 +364,20 @@ class Bridge:
             self.last_line = line
             emit(line)
 
+    # The Space 2 answers a set with an ACK and an unsolicited 06 01, so the
+    # row follows along on its own. The Space One Pro sends the ACK alone, and
+    # nothing arrives to update it: the headphones change and the panel goes on
+    # showing the mode they were in. Asking afterwards costs one small frame and
+    # makes the row report what the device did rather than what it was told.
+    #
+    # Only asked of a device that has already answered a 06 01, so this sends
+    # nothing to a headset that has not shown it speaks that frame.
+    def confirm(self):
+        if not self.query_answered:
+            return
+        GLib.timeout_add(CONFIRM_DELAY, lambda: (
+            self.write(make_packet(CMD_SOUND_MODES_NOTIFY)), False)[1])
+
     def command(self, line):
         parts = line.strip().split()
         if not parts or not self.mode_seen:
@@ -357,12 +389,14 @@ class Bridge:
                 body = list(self.sound_mode_params)
                 body[0] = byte
                 self.write(make_packet(CMD_SOUND_MODES_SET, bytes(body)))
+                self.confirm()
         elif parts[0] == "level" and len(parts) > 1:
             try:
                 val = max(1, min(5, int(round(float(parts[1])))))
                 body = list(self.sound_mode_params)
                 body[5] = val
                 self.write(make_packet(CMD_SOUND_MODES_SET, bytes(body)))
+                self.confirm()
                 self.sound_mode_params = body
                 self.on_mode_byte(self.sound_mode_params[0])
             except (ValueError, TypeError):
@@ -372,6 +406,7 @@ class Bridge:
             body = list(self.sound_mode_params)
             body[4] = 1 if on else 0
             self.write(make_packet(CMD_SOUND_MODES_SET, bytes(body)))
+            self.confirm()
             self.sound_mode_params = body
             self.on_mode_byte(self.sound_mode_params[0])
 

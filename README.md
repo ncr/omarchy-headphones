@@ -41,11 +41,11 @@ Headphones not on the list? [Add yours](#add-your-own-headphones).
 </tr>
 <tr>
 <td width="50%"><img src="docs/gallery/sony-wh-1000xm5.png" alt="Sony WH-1000XM5: one battery, Off / ANC / Ambient, the ambient level slider and the Focus on voice switch" width="100%"></td>
-<td width="50%"></td>
+<td width="50%"><img src="docs/gallery/soundcore-space-one-pro.png" alt="soundcore Space One Pro: one battery, Off / ANC / Ambient, the ambient level slider and the Wind noise reduction switch" width="100%"></td>
 </tr>
 <tr>
 <td align="center">Sony WH-1000XM5 — <a href="https://github.com/huynguyendinhquang">@huynguyendinhquang</a></td>
-<td></td>
+<td align="center">soundcore Space One Pro — <a href="https://github.com/sasiruLK">@sasiruLK</a></td>
 </tr>
 </table>
 
@@ -85,6 +85,7 @@ same idea, built for Apple's own protocol, and the plugin this one is modelled o
 | Xiaomi Buds 5 Pro (earbuds) | <img src="docs/icons/yes.svg" width="14" alt="yes"> one figure        | <img src="docs/icons/yes.svg" width="14" alt="yes"> Off · ANC · Ambient                          | [@KentoNion](https://github.com/KentoNion)|
 | Nothing Ear (a) (earbuds)   | <img src="docs/icons/yes.svg" width="14" alt="yes"> left, right, case | <img src="docs/icons/yes.svg" width="14" alt="yes"> Off · ANC (Low / Mid / High / Adaptive) · Ambient · low latency | [@Jenesaispas69](https://github.com/Jenesaispas69) |
 | Nothing Ear · Headphone (1) | <img src="docs/icons/yes.svg" width="14" alt="yes"> expected (one figure on Headphone (1)) | <img src="docs/icons/yes.svg" width="14" alt="yes"> expected — same protocol, per [omarchy-nothing-ear](https://github.com/r-witz/omarchy-nothing-ear) | — |
+| soundcore Space One Pro (A3062, over-ear) | <img src="docs/icons/yes.svg" width="14" alt="yes"> one figure | <img src="docs/icons/yes.svg" width="14" alt="yes"> Off · ANC · Ambient (level, wind noise reduction) | [@sasiruLK](https://github.com/sasiruLK) |
 | other Fast Pair headphones  | <img src="docs/icons/yes.svg" width="14" alt="yes"> expected          | <img src="docs/icons/unknown.svg" width="14" alt="untested">                                    | —                              |
 
 ## Add your own headphones
