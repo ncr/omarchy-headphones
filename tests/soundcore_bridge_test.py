@@ -47,13 +47,26 @@ def state_payload(length, offset, six):
     return bytes(body)
 
 
+class FakeGLib:
+    """Records what the bridge schedules; the test decides when it fires."""
+
+    def __init__(self):
+        self.timers = []
+
+    def timeout_add(self, ms, fn, *args):
+        self.timers.append((ms, fn, args))
+        return len(self.timers)
+
+
 class Session:
-    """One bridge with its two effects captured."""
+    """One bridge with its effects captured: frames out, lines out, timers."""
 
     def __init__(self, uuid):
         self.sent = []
         self.lines = []
+        self.glib = FakeGLib()
         bridge_module.emit = self.lines.append
+        bridge_module.GLib = self.glib
         loop = type("Loop", (), {"quit": lambda self: None})()
         self.bridge = bridge_module.Bridge(None, "84:9D:4B:B0:2D:00", loop)
         self.bridge.model = bridge_module.model_for(uuid)
@@ -65,6 +78,16 @@ class Session:
 
     def command(self, line):
         self.bridge.command(line)
+
+    @property
+    def timers(self):
+        return [ms for ms, _fn, _args in self.glib.timers]
+
+    def fire(self):
+        """Run every scheduled timer, in order, once."""
+        pending, self.glib.timers = self.glib.timers, []
+        for _ms, fn, args in pending:
+            fn(*args)
 
 
 class ModelLookup(unittest.TestCase):
@@ -119,6 +142,8 @@ class Space2(unittest.TestCase):
         self.assertEqual([(l["mode"], l["level"], l["voice"]) for l in s.lines],
                          [("ambient", 3, False), ("anc", 3, False),
                           ("anc", 5, False), ("anc", 5, True)])
+        # Nothing was scheduled to go out later, either.
+        self.assertEqual(s.timers, [])
         self.assertIsNone(s.bridge.exit_code)
 
     def test_short_state_is_unsupported(self):
@@ -128,17 +153,82 @@ class Space2(unittest.TestCase):
         self.assertEqual(s.bridge.exit_code, bridge_module.EXIT_UNSUPPORTED)
 
 
+class SpaceOnePro(unittest.TestCase):
+    """b3062 — sasiruLK, PR #5. Frozen: change this only with a One Pro in hand."""
+
+    UUID = "0cf12d31-fac3-4553-bd80-d6832e7b3062"
+    # 95-byte payload, the six bytes at 69..75: off, level 5. The 0x31 padding
+    # puts a plausible-looking 0x01 at 71 — read there, this is "ambient".
+    SIX = [0x02, 0x50, 0x01, 0x01, 0x00, 0x05]
+    STATE = state_payload(95, 69, SIX)
+
+    def test_frozen_session(self):
+        s = Session(self.UUID)
+        QUERY = bridge_module.CMD_SOUND_MODES_NOTIFY
+        SET = bridge_module.CMD_SOUND_MODES_SET
+        make = bridge_module.make_packet
+
+        s.receive(inbound((0x01, 0x01), self.STATE))
+        # Read at 69, then asked to confirm.
+        self.assertEqual(s.lines, [{"modes": True, "mode": "off",
+                                    "available": ["off", "anc", "ambient"],
+                                    "level": 5, "voice": False}])
+        self.assertEqual(s.sent, [make(QUERY)])
+        s.receive(inbound((0x06, 0x01), self.SIX))
+        self.assertEqual(len(s.lines), 1)                # same state, no repeat
+
+        # A set is followed by an ACK only; the bridge asks 400 ms later and
+        # the reply, not the optimism, is what reaches the panel.
+        s.command("set ambient")
+        s.receive(inbound((0x06, 0x81), []))
+        self.assertEqual(len(s.lines), 1)
+        self.assertEqual(s.timers, [400])
+        s.fire()
+        s.receive(inbound((0x06, 0x01), [0x01, 0x50, 0x01, 0x01, 0x00, 0x05]))
+
+        self.assertEqual(s.sent, [
+            make(QUERY),
+            make(SET, bytes([0x01, 0x50, 0x01, 0x01, 0x00, 0x05])),
+            make(QUERY),
+        ])
+        self.assertEqual([(l["mode"], l["level"]) for l in s.lines],
+                         [("off", 5), ("ambient", 5)])
+        self.assertIsNone(s.bridge.exit_code)
+
+
 class Unknown(unittest.TestCase):
     """A model nobody has held. Not frozen — this is the row that may change."""
 
     UUID = bridge_module.DEFAULT_UUID
-    STATE = state_payload(103, 71, [0x02, 0x1F, 0xFF, 0x00, 0x00, 0x01])
+    # Six bytes at 69, as on the One Pro, so 71 reads a plausible wrong mode.
+    SIX = [0x02, 0x50, 0x01, 0x01, 0x00, 0x05]
+    STATE = state_payload(95, 69, SIX)
 
-    def test_reads_at_71(self):
+    def test_reply_stands_over_the_offset(self):
         s = Session(self.UUID)
+        QUERY = bridge_module.CMD_SOUND_MODES_NOTIFY
+        SET = bridge_module.CMD_SOUND_MODES_SET
+        make = bridge_module.make_packet
+
         s.receive(inbound((0x01, 0x01), self.STATE))
-        self.assertEqual(s.lines[0]["mode"], "off")
-        self.assertEqual(s.sent, [])
+        self.assertEqual(s.lines[0]["mode"], "ambient")   # 71: the wrong byte
+        self.assertEqual(s.sent, [make(QUERY)])
+        s.receive(inbound((0x06, 0x01), self.SIX))
+        self.assertEqual(s.lines[-1]["mode"], "off")      # corrected
+        # And the write carries the reply's five bytes, not the neighbours'.
+        s.command("set anc")
+        self.assertEqual(s.sent[-1], make(SET, bytes([0x00, 0x50, 0x01, 0x01, 0x00, 0x05])))
+        self.assertEqual(s.timers, [400])
+
+    def test_silent_device_is_asked_once(self):
+        s = Session(self.UUID)
+        QUERY = bridge_module.CMD_SOUND_MODES_NOTIFY
+        make = bridge_module.make_packet
+        s.receive(inbound((0x01, 0x01), state_payload(103, 71, [0x01, 0x1F, 0xFF, 0, 0, 3])))
+        s.command("set anc")
+        # Never answered 06 01, so nothing is asked after the write.
+        self.assertEqual([f for f in s.sent if f == make(QUERY)], [make(QUERY)])
+        self.assertEqual(s.timers, [])
 
 
 if __name__ == "__main__":

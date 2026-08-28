@@ -71,10 +71,17 @@ CMD_SOUND_MODES_SET = (0x06, 0x81)
 #   query    ask 06 01 for those six bytes after the state, and again after
 #            each write; its reply stands over whatever the offset produced
 MODELS = {
-    # Space 2 — Sovego, PR #3.
+    # Space 2 — Sovego, PR #3. Never asked 06 01: it emits one unprompted
+    # after a mode change, but whether it answers a request is untested.
     "d1402": {"name": "Space 2", "offset": 71, "query": False},
+    # Space One Pro (A3062) — sasiruLK, PR #5. The six bytes sit two to the
+    # left, the width OpenSCQ30's A3062 parser gives the fields ahead of them,
+    # and a request for 06 01 is answered.
+    "b3062": {"name": "Space One Pro", "offset": 69, "query": True},
 }
-UNKNOWN = {"name": "", "offset": 71, "query": False}
+# A model nobody has held is read at the Space 2's offset and then asked, so
+# a block that sits elsewhere is corrected by the reply before anyone clicks.
+UNKNOWN = {"name": "", "offset": 71, "query": True}
 
 MODE_FROM_BYTE = {0x00: "anc", 0x01: "ambient", 0x02: "off"}
 BYTE_FROM_MODE = {name: byte for byte, name in MODE_FROM_BYTE.items()}
@@ -96,6 +103,7 @@ CONNECT_ATTEMPTS = 10
 INIT_TIMEOUT = 2000
 INIT_ATTEMPTS = 3
 GET_TIMEOUT = 3000
+CONFIRM_DELAY = 400
 
 
 def emit(payload):
@@ -163,6 +171,9 @@ class Bridge:
         self.buffer = bytearray()
 
         self.handshake_seen = False
+        # Set once the device has answered a 06 01 of its own accord or on
+        # request. Only those devices are asked again after a write.
+        self.query_answered = False
         self.mode_seen = False
         self.mode = ""
         self.last_line = None
@@ -346,9 +357,15 @@ class Bridge:
                 self.on_mode_byte(mode_byte)
             else:
                 self.on_get_timeout()
+            # A row that says `query` asks 06 01, which answers with the six
+            # bytes and nothing around them, and lets that reply stand over
+            # whatever the offset produced: an offset read at the wrong place
+            # gives a plausible mode from a neighbouring switch, and the next
+            # `set` posts five neighbours back as mode parameters.
             if self.model["query"]:
                 self.write(make_packet(CMD_SOUND_MODES_NOTIFY))
         elif cmd == CMD_SOUND_MODES_NOTIFY:
+            self.query_answered = True
             if len(body) >= 1:
                 mode_byte = body[0]
                 if len(body) >= 6:
@@ -372,6 +389,21 @@ class Bridge:
             self.last_line = line
             emit(line)
 
+    # The Space 2 answers a set with an ACK and an unsolicited 06 01, so the
+    # row follows along on its own. The Space One Pro sends the ACK alone, and
+    # nothing arrives to update it: the headphones change and the panel goes on
+    # showing the mode they were in. Asking afterwards costs one small frame and
+    # makes the row report what the device did rather than what it was told.
+    #
+    # Only for a row that says `query`, and only once the device has answered
+    # a 06 01, so this sends nothing to a headset that has not shown it speaks
+    # that frame.
+    def confirm(self):
+        if not self.model["query"] or not self.query_answered:
+            return
+        GLib.timeout_add(CONFIRM_DELAY, lambda: (
+            self.write(make_packet(CMD_SOUND_MODES_NOTIFY)), False)[1])
+
     def command(self, line):
         parts = line.strip().split()
         if not parts or not self.mode_seen:
@@ -383,12 +415,14 @@ class Bridge:
                 body = list(self.sound_mode_params)
                 body[0] = byte
                 self.write(make_packet(CMD_SOUND_MODES_SET, bytes(body)))
+                self.confirm()
         elif parts[0] == "level" and len(parts) > 1:
             try:
                 val = max(1, min(5, int(round(float(parts[1])))))
                 body = list(self.sound_mode_params)
                 body[5] = val
                 self.write(make_packet(CMD_SOUND_MODES_SET, bytes(body)))
+                self.confirm()
                 self.sound_mode_params = body
                 self.on_mode_byte(self.sound_mode_params[0])
             except (ValueError, TypeError):
@@ -398,6 +432,7 @@ class Bridge:
             body = list(self.sound_mode_params)
             body[4] = 1 if on else 0
             self.write(make_packet(CMD_SOUND_MODES_SET, bytes(body)))
+            self.confirm()
             self.sound_mode_params = body
             self.on_mode_byte(self.sound_mode_params[0])
 
