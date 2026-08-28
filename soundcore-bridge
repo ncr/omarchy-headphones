@@ -60,6 +60,22 @@ CMD_STATE_UPDATE = (0x01, 0x01)
 CMD_SOUND_MODES_NOTIFY = (0x06, 0x01)
 CMD_SOUND_MODES_SET = (0x06, 0x81)
 
+# What each model was seen to do on the wire, keyed by the model id at the
+# end of its vendor UUID (`d1402` in `...d6832e7d1402`). A row is somebody's
+# headphones, verified on hardware; UNKNOWN is what a model nobody has held
+# yet gets. Adding a model means adding a row, or changing UNKNOWN — never
+# editing another row, which is another owner's working headset.
+# tests/soundcore_bridge_test.py pins every row's outbound frames.
+#
+#   offset   where the six sound-mode bytes sit in the 01 01 state payload
+#   query    ask 06 01 for those six bytes after the state, and again after
+#            each write; its reply stands over whatever the offset produced
+MODELS = {
+    # Space 2 — Sovego, PR #3.
+    "d1402": {"name": "Space 2", "offset": 71, "query": False},
+}
+UNKNOWN = {"name": "", "offset": 71, "query": False}
+
 MODE_FROM_BYTE = {0x00: "anc", 0x01: "ambient", 0x02: "off"}
 BYTE_FROM_MODE = {name: byte for byte, name in MODE_FROM_BYTE.items()}
 AVAILABLE = ["off", "anc", "ambient"]
@@ -110,6 +126,11 @@ def make_packet(cmd: tuple[int, int], body: bytes = b"") -> bytes:
     return raw + bytes([calc_checksum(raw)])
 
 
+def model_for(uuid):
+    """The MODELS row for a vendor UUID, or UNKNOWN."""
+    return MODELS.get(uuid.lower()[len(SOUNDCORE_UUID_PREFIX):], UNKNOWN)
+
+
 def find_device_path_and_uuid(bus, address):
     wanted = address.upper()
     objects = dbus.Interface(bus.get_object("org.bluez", "/"),
@@ -135,6 +156,7 @@ class Bridge:
         self.manager = None
         self.registered = False
         self.target_uuid = None
+        self.model = UNKNOWN
 
         self.fd = None
         self.watch = None
@@ -187,6 +209,7 @@ class Bridge:
             return self.finish(EXIT_TRANSIENT,
                                "no paired device with address %s" % self.address)
         self.target_uuid = target_uuid or DEFAULT_UUID
+        self.model = model_for(self.target_uuid)
         self.device = dbus.Interface(
             self.bus.get_object("org.bluez", device_path), "org.bluez.Device1")
         self.manager = dbus.Interface(
@@ -312,16 +335,19 @@ class Bridge:
     def on_packet(self, cmd, body):
         if cmd == CMD_STATE_UPDATE:
             self.handshake_seen = True
-            # State update packet: mode is at byte offset 71 (when body >= 75)
-            if len(body) >= 75:
-                mode_byte = body[71]
-                if len(body) >= 77:
-                    self.sound_mode_params = list(body[71:77])
+            # The six sound-mode bytes sit where this model's row says.
+            at = self.model["offset"]
+            if len(body) >= at + 4:
+                mode_byte = body[at]
+                if len(body) >= at + 6:
+                    self.sound_mode_params = list(body[at:at + 6])
                 else:
                     self.sound_mode_params[0] = mode_byte
                 self.on_mode_byte(mode_byte)
             else:
                 self.on_get_timeout()
+            if self.model["query"]:
+                self.write(make_packet(CMD_SOUND_MODES_NOTIFY))
         elif cmd == CMD_SOUND_MODES_NOTIFY:
             if len(body) >= 1:
                 mode_byte = body[0]
