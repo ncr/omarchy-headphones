@@ -92,7 +92,8 @@ try:
 except ImportError:
     unix_signal_add = GLib.unix_signal_add
 
-UUID = "956c7b26-d49a-4ba8-b03f-b17d393cb6e2"
+UUID_V2 = "956c7b26-d49a-4ba8-b03f-b17d393cb6e2"
+UUID_V1 = "96cc203e-5068-46ad-b32d-e316f5e069ba"
 PROFILE_PATH = "/io/github/ncr/omaphones/sony"
 
 # Framing. HDR and TRL are never escaped, which is what makes "scan to the next
@@ -103,20 +104,24 @@ DATA_MDR, DATA_MDR_NO2, ACK = 0x0C, 0x0E, 0x01
 CONNECT_RET_PROTOCOL_INFO = 0x01
 NCASM_GET, NCASM_RET, NCASM_SET, NCASM_NTFY = 0x66, 0x67, 0x68, 0x69
 
-# The NC/ASM variants worth asking a headset about, in the order they are asked.
-# 0x17 first because it is the one the CH720N answers; 0x15 is what Gadgetbridge
-# believes that model uses; 0x22 covers the ambient-only models. Anything else
-# in Sony's table either does not exist on a headset with these three modes or
-# is a superset we would decode wrongly.
-CANDIDATES = (0x17, 0x15, 0x22)
+# The NC/ASM variants worth asking a headset about.
+# v2: 0x17 first because it is the one the CH720N answers; 0x15 is what
+# Gadgetbridge believes that model uses; 0x22 covers the ambient-only models.
+# v1: 0x02 = NC + ASM (WH-1000XM4 etc.), 0x01 = NC only, 0x03 = ASM only.
+CANDIDATES_V2 = (0x17, 0x15, 0x22)
+CANDIDATES_V1 = (0x02, 0x01, 0x03)
 
 # What each variant can actually do, which is what the panel draws buttons for.
 # 0x22 (ASM_SEAMLESS) is an ambient-only control: its master switch turns the
 # ambient pass-through on and off, and there is no noise cancelling to select.
+# 0x02 is the v1 NC+ASM variant; 0x01 NC-only; 0x03 ASM-only.
 AVAILABLE = {
     0x17: ["off", "anc", "ambient"],
     0x15: ["off", "anc", "ambient"],
     0x22: ["off", "ambient"],
+    0x02: ["off", "anc", "ambient"],
+    0x01: ["off", "anc"],
+    0x03: ["off", "ambient"],
 }
 
 # NcValue, the field only the 0x15 layout carries. 0x02 is ON_DUAL, the value a
@@ -128,7 +133,7 @@ MAX_LEVEL = 20
 
 ADDRESS = re.compile(r"^([0-9A-Fa-f]{2}:){5}[0-9A-Fa-f]{2}$")
 
-USAGE = "usage: sony-bridge <classic-address>"
+USAGE = "usage: sony-bridge <classic-address> [<rfcomm-uuid>]"
 
 EXIT_TRANSIENT = 1
 EXIT_UNSUPPORTED = 3
@@ -260,26 +265,66 @@ def decode(frame):
 def parse_ncasm(payload):
     """The listening-mode state carried by a RET (0x67) or NTFY (0x69).
 
-    Focus-on-voice and the ambient level are the last two bytes of every one of
-    the three layouts, which is why they are read from the tail rather than from
-    an index that depends on the variant.
+    For v2: Focus-on-voice and the ambient level are the last two bytes of every
+    one of the three layouts, which is why they are read from the tail rather
+    than from an index that depends on the variant.
+
+    For v1: the 7-byte NcAsmParam struct — [type, ncAsmEffect, ncType, ncValue,
+    asmType, asmId, asmValue] — is decoded per type. ncAsmEffect 0=off 1=on,
+    ncValue 0=off 1=ambient 2=anc.
     """
     if len(payload) < 6 or payload[0] not in (NCASM_RET, NCASM_NTFY):
         return None
     inquired = payload[1]
-    if inquired not in CANDIDATES:
+    all_candidates = set(CANDIDATES_V2) | set(CANDIDATES_V1)
+    if inquired not in all_candidates:
         return None
+    if inquired in CANDIDATES_V1:
+        return parse_ncasm_v1(payload)
+    if inquired in CANDIDATES_V2:
+        return parse_ncasm_v2(payload)
+    return None
+
+
+def parse_ncasm_v2(payload):
+    inquired = payload[1]
     on = payload[3] == 0x01
-    # On 0x22 the master switch *is* the ambient switch; the other two layouts
-    # carry the NC-versus-ambient choice in the byte after it.
     ambient = True if inquired == 0x22 else (len(payload) > 4 and payload[4] == 0x01)
     return {
         "inquired": inquired,
         "mode": "off" if not on else ("ambient" if ambient else "anc"),
         "voice": payload[-2] == 0x01,
         "level": payload[-1],
-        # Only the 0x15 layout has it, at the index the ambient fields follow.
         "ncValue": payload[5] if inquired == 0x15 and len(payload) > 7 else None,
+    }
+
+
+def parse_ncasm_v1(payload):
+    """Parse v1 NcAsmParam: 7 bytes after the command byte."""
+    if len(payload) < 8:
+        return None
+    itype = payload[1]
+    effect = payload[2]
+    nc_type = payload[3]
+    nc_value = payload[4]
+    asm_id = payload[6]
+    asm_value = payload[7]
+
+    if itype == 0x01:  # NC only
+        mode = "off" if nc_value == 0 else "anc"
+    elif itype == 0x03:  # ASM only
+        mode = "off" if effect == 0x00 else "ambient"
+    else:  # 0x02 NC+ASM
+        on = effect == 0x01
+        ambient = nc_value == 0x01
+        mode = "off" if not on else ("ambient" if ambient else "anc")
+
+    return {
+        "inquired": itype,
+        "mode": mode,
+        "voice": asm_id == 0x01,
+        "level": asm_value,
+        "ncValue": nc_value,
     }
 
 
@@ -297,7 +342,7 @@ def find_device_path(bus, address):
 class Bridge:
     """The whole conversation: registration, handshake, probe, then mirroring."""
 
-    def __init__(self, bus, address, loop):
+    def __init__(self, bus, address, uuid, loop):
         self.bus = bus
         self.address = address
         self.loop = loop
@@ -305,6 +350,10 @@ class Bridge:
         self.device = None
         self.manager = None
         self.registered = False
+
+        # The UUID this bridge registered for, and what we learn about the protocol.
+        self.uuid = uuid
+        self.candidates = CANDIDATES_V2  # may switch to v1 after handshake
 
         # The channel.
         self.fd = None
@@ -390,7 +439,7 @@ class Bridge:
         self.manager = dbus.Interface(
             self.bus.get_object("org.bluez", "/org/bluez"), "org.bluez.ProfileManager1")
         try:
-            self.manager.RegisterProfile(PROFILE_PATH, UUID, {
+            self.manager.RegisterProfile(PROFILE_PATH, self.uuid, {
                 "Name": "Omaphones Sony",
                 "Role": "client",
                 "RequireAuthentication": dbus.Boolean(False),
@@ -428,7 +477,7 @@ class Bridge:
                         % error.get_dbus_message())
 
         try:
-            self.device.ConnectProfile(UUID, reply_handler=lambda: None,
+            self.device.ConnectProfile(self.uuid, reply_handler=lambda: None,
                                        error_handler=failed, timeout=CONNECT_TIMEOUT)
         except dbus.DBusException as error:
             failed(error)
@@ -472,11 +521,11 @@ class Bridge:
         """Ask the next candidate inquired type, or give up on this headset."""
         if self.exit_code is not None or self.inquired is not None:
             return False
-        if candidate >= len(CANDIDATES):
+        if candidate >= len(self.candidates):
             return self.finish(EXIT_UNSUPPORTED,
                                "the headset did not answer the listening-mode query")
         self.candidate = candidate
-        self.push(bytes([NCASM_GET, CANDIDATES[candidate]]))
+        self.push(bytes([NCASM_GET, self.candidates[candidate]]))
         GLib.timeout_add(CANDIDATE_TIMEOUT, self.next_candidate, candidate)
         return False
 
@@ -579,9 +628,12 @@ class Bridge:
         if payload[0] == CONNECT_RET_PROTOCOL_INFO:
             if not self.protocol_seen:
                 self.protocol_seen = True
-                # The length is the protocol generation (8 bytes is v2). We ask
-                # the same questions either way, so it is not worth refusing a
-                # headset over — what settles the layout is the RET below.
+                # 8 bytes = v2, 4 bytes = v1. Switch candidates accordingly:
+                # the same command bytes work but the inquired types differ.
+                if len(payload) >= 8:
+                    self.candidates = CANDIDATES_V2
+                else:
+                    self.candidates = CANDIDATES_V1
                 self.probe(0)
             return
         state = parse_ncasm(payload)
@@ -613,24 +665,22 @@ class Bridge:
     # -- commands ---------------------------------------------------------
 
     def set_frame(self, mode, level, voice):
-        """The SET block for the variant this headset answered with.
-
-        The ambient level and the focus-on-voice flag are carried in every mode,
-        and the headset stores them and only applies them in ambient — so a
-        change of mode has to repeat the stored values rather than send zeroes.
-        """
+        """The SET block for the variant this headset answered with."""
         on = 1 if mode != "off" else 0
-        ambient = 1 if mode == "ambient" else 0
         level = max(0, min(MAX_LEVEL, int(level)))
         voice = 1 if voice else 0
+        # v1 protocol (WH-1000XM4 etc.)
+        if self.candidates == CANDIDATES_V1:
+            nc_value = 0 if not on else (1 if mode == "ambient" else 2)
+            return bytes([NCASM_SET, 0x02, on, 0x02, nc_value, 0x01, voice, level])
+        # v2 protocol
         if self.inquired == 0x15:
-            return bytes([NCASM_SET, 0x15, 0x01, on, ambient,
+            return bytes([NCASM_SET, 0x15, 0x01, on, on and (mode == "ambient"),
                           self.nc_value, voice, level])
         if self.inquired == 0x22:
-            # Ambient-only: the master switch is the ambient switch, so "anc"
-            # never reaches here (it is not in this variant's available list).
             return bytes([NCASM_SET, 0x22, 0x01, on, voice, level])
-        return bytes([NCASM_SET, 0x17, 0x01, on, ambient, voice, level])
+        return bytes([NCASM_SET, 0x17, 0x01, on, on and (mode == "ambient"),
+                      voice, level])
 
     def command(self, line):
         """One line from the widget. Unknown or impossible ones are ignored.
@@ -694,15 +744,16 @@ def main():
     argv = sys.argv[1:]
     address = argv[0].strip() if argv else ""
     if argv and argv[0] in ("-h", "--help"):
-        # A person asking for the usage gets plain text and a clean exit, the
-        # same as jbl-bridge; everything else below is for the widget.
         print(USAGE)
         return 0
+    # Optional second argument: the RFCOMM UUID. Defaults to v2.
+    uuid_arg = argv[1].strip() if len(argv) > 1 else ""
+    if uuid_arg and not re.match(r"^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$", uuid_arg, re.IGNORECASE):
+        emit({"modes": False,
+              "error": "%s (not a UUID: %r)" % (USAGE, uuid_arg)})
+        sys.exit(EXIT_SETUP)
+    uuid = uuid_arg or UUID_V2
     if not argv or not ADDRESS.match(address):
-        # There is no other interactive use of this program: the widget is the
-        # only caller, so anything that is not an address is a setup failure,
-        # reported in the shape the panel reads and with the exit code that
-        # parks it rather than retrying.
         emit({"modes": False,
               "error": "%s (not a Bluetooth address: %r)" % (USAGE, address)})
         sys.exit(EXIT_SETUP)
@@ -715,7 +766,7 @@ def main():
         sys.exit(EXIT_TRANSIENT)
 
     loop = GLib.MainLoop()
-    bridge = Bridge(bus, address, loop)
+    bridge = Bridge(bus, address, uuid, loop)
 
     class Profile(dbus.service.Object):
         @dbus.service.method("org.bluez.Profile1", in_signature="", out_signature="")

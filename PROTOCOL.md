@@ -682,6 +682,55 @@ capability bytes, same generation.
 SETs built on that `0x17` block were applied: Off, ANC and Ambient each
 landed. No other inquired type was answered, and nothing else was sent.
 
+### WH-1000XM4
+
+Confirmed on a **Sony WH-1000XM4** (`94:DB:56:D0:F0:F0`, modalias
+`usb:v054Cp0D58d0301`). It serves the MDR v1 UUID (`96cc203e-…`) and the
+Fast Pair Message Stream (`df21fe2c-…`). Battery is one figure for the set.
+The protocol is v1, not v2 — the handshake answers with 4 bytes, and the NC/ASM
+command bytes (`0x66`–`0x69`) are the same but the inquired types and payload
+layout differ.
+
+Handshake, `CONNECT_RET_PROTOCOL_INFO`, 4 bytes so v1:
+
+```
+01 00 70 00
+```
+
+The three candidate inquired types were asked: 0x02 (NC+ASM, answered), 0x01
+(NC-only, ignored), 0x03 (ASM-only, ignored). The answering payload is the v1
+`NcAsmParam` struct — 7 bytes after the command byte:
+
+```
+idx: 0    1     2             3       4        5       6       7
+     cmd  type ncAsmEffect   ncType  ncValue  asmType asmId   asmValue
+```
+
+| field | values |
+|---|---|
+| `ncAsmEffect` | `0x00` off, `0x01` on |
+| `ncType` | `0x02` (`DUAL_SINGLE_OFF`) — the v1 enum; the headset always reports this |
+| `ncValue` | `0x00` off, `0x01` SINGLE (ambient), `0x02` DUAL (noise cancelling) |
+| `asmId` | `0x00` normal, `0x01` voice |
+| `asmValue` | ambient level, `0x00`-`0x14` (0-20) |
+
+What the headset actually said:
+
+```
+->  66 02                       GET NC+ASM
+<-  67 02 01 02 02 01 00 00     RET: on, DUAL_SINGLE_OFF, nc=NC, asm normal, level 0
+```
+
+Off / ANC / Ambient each set and were confirmed on the headset; the NTFY
+(`0x69`) follows a SET with the new state. The ambient level and Focus on Voice
+are in the payload and the headset ACKs them in the SET, but the reply carries
+the pre-existing stored values — the headset stores them but does not apply them
+from the bridge's writes, the same way the v2 protocol stores the level and only
+applies it on an ambient SET.
+
+The bridge registers the v1 UUID (`96cc203e-…`) and uses a single candidate
+`0x02`; the handshake's 4-byte reply switches the bridge to v1 mode.
+
 ## Xiaomi Buds 5 Pro — Compact GAIA on SPP
 
 A third device and a third protocol, confirmed on **Xiaomi Buds 5 Pro**

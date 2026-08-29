@@ -200,6 +200,7 @@ Item {
   property var deviceUuids: []
   readonly property string controlBackend: Model.controlBackend(deviceUuids, bleAddress)
   readonly property bool classicBackend: Model.isClassicBackend(controlBackend)
+  readonly property string sonyUuid: controlBackend === "sony" ? Model.sonyUuidFor(deviceUuids) : ""
 
   readonly property bool ancSupported: ancState.modes === true
   readonly property string ancMode: String(ancState.mode || "")
@@ -703,7 +704,9 @@ Item {
     id: classicBridge
     running: follower.classicArmed
     command: follower.classicBridgePath !== ""
-      ? [follower.classicBridgePath, follower.address]
+      ? (follower.controlBackend === "sony" && follower.sonyUuid !== ""
+        ? [follower.classicBridgePath, follower.address, follower.sonyUuid]
+        : [follower.classicBridgePath, follower.address])
       : ["true"]
     stdinEnabled: true
     stdout: SplitParser {

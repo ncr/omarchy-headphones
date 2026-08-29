@@ -435,6 +435,7 @@ function readerLevel(state, key) {
 // on the Fast Pair Message Stream, so knowing that address is what makes that
 // path possible at all.
 var SONY_MDR_V2_UUID = "956c7b26-d49a-4ba8-b03f-b17d393cb6e2"
+var SONY_MDR_V1_UUID = "96cc203e-5068-46ad-b32d-e316f5e069ba"
 var NOTHING_NT_LINK_UUID = "aeac4a03-dff5-498f-843a-34487cf133eb"
 var CSR_GAIA_UUID = "00001100-d102-11e1-9b23-00025b00a5a5"
 var SOUNDCORE_UUID_PREFIX = "0cf12d31-fac3-4553-bd80-d6832e7"
@@ -471,6 +472,7 @@ function controlBackend(uuids, bleAddress) {
   for (var i = 0; i < list.length; i++) {
     var id = str(list[i]).trim().toLowerCase()
     if (id === SONY_MDR_V2_UUID) return "sony"
+    if (id === SONY_MDR_V1_UUID) return "sony"
     if (id === NOTHING_NT_LINK_UUID) nothing = true
     if (id === CSR_GAIA_UUID) gaia = true
     if (id.indexOf(SOUNDCORE_UUID_PREFIX) === 0) soundcore = true
@@ -487,6 +489,22 @@ var CLASSIC_BACKENDS = ["sony", "nothing", "xiaomi", "soundcore"]
 
 function isClassicBackend(backend) {
   return CLASSIC_BACKENDS.indexOf(str(backend)) !== -1
+}
+
+// Which Sony MDR UUID this device serves, or "" for none. The v2 UUID wins
+// where a device advertises both (uncommon but possible), but either lands on
+// "sony" and the bridge takes the UUID as an argument.
+function sonyUuidFor(uuids) {
+  var list = uuids || []
+  for (var i = 0; i < list.length; i++) {
+    var id = str(list[i]).trim().toLowerCase()
+    if (id === SONY_MDR_V2_UUID) return SONY_MDR_V2_UUID
+  }
+  for (var j = 0; j < list.length; j++) {
+    var id2 = str(list[j]).trim().toLowerCase()
+    if (id2 === SONY_MDR_V1_UUID) return SONY_MDR_V1_UUID
+  }
+  return ""
 }
 
 // The order the panel draws them in, and the only names a bridge may use.
