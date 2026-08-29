@@ -47,6 +47,14 @@ Headphones not on the list? [Add yours](#add-your-own-headphones).
 <td align="center">Sony WH-1000XM5 — <a href="https://github.com/huynguyendinhquang">@huynguyendinhquang</a></td>
 <td align="center">soundcore Space One Pro — <a href="https://github.com/sasiruLK">@sasiruLK</a></td>
 </tr>
+<tr>
+<td width="50%"><img src="docs/gallery/sony-wh-1000xm4.png" alt="Sony WH-1000XM4: one battery, Off / ANC / Ambient" width="100%"></td>
+<td width="50%"></td>
+</tr>
+<tr>
+<td align="center">Sony WH-1000XM4 — <a href="https://github.com/seth-reee">@seth-reee</a></td>
+<td align="center"></td>
+</tr>
 </table>
 
 ## What it does
@@ -81,6 +89,7 @@ same idea, built for Apple's own protocol, and the plugin this one is modelled o
 | JBL TUNE230NC TWS (earbuds) | <img src="docs/icons/yes.svg" width="14" alt="yes"> left, right, case | <img src="docs/icons/yes.svg" width="14" alt="yes"> Off · ANC · Ambient · TalkThru              | [@ncr](https://github.com/ncr) |
 | Sony WH-CH720N (over-ear)   | <img src="docs/icons/yes.svg" width="14" alt="yes"> one figure        | <img src="docs/icons/yes.svg" width="14" alt="yes"> Off · ANC · Ambient (level, Focus on Voice) | [@ncr](https://github.com/ncr) |
 | Sony WH-1000XM5 (over-ear)  | <img src="docs/icons/yes.svg" width="14" alt="yes"> one figure        | <img src="docs/icons/yes.svg" width="14" alt="yes"> Off · ANC · Ambient (level, Focus on Voice) | [@huynguyendinhquang](https://github.com/huynguyendinhquang) |
+| Sony WH-1000XM4 (over-ear)  | <img src="docs/icons/yes.svg" width="14" alt="yes"> one figure        | <img src="docs/icons/yes.svg" width="14" alt="yes"> Off · ANC · Ambient                          | [@seth-reee](https://github.com/seth-reee) |
 | Soundcore Space 2 (over-ear)| <img src="docs/icons/yes.svg" width="14" alt="yes"> one figure        | <img src="docs/icons/yes.svg" width="14" alt="yes"> Off · ANC · Ambient (level, wind noise reduction) | [@Sovego](https://github.com/Sovego) |
 | Xiaomi Buds 5 Pro (earbuds) | <img src="docs/icons/yes.svg" width="14" alt="yes"> one figure        | <img src="docs/icons/yes.svg" width="14" alt="yes"> Off · ANC · Ambient                          | [@KentoNion](https://github.com/KentoNion)|
 | Nothing Ear (a) (earbuds)   | <img src="docs/icons/yes.svg" width="14" alt="yes"> left, right, case | <img src="docs/icons/yes.svg" width="14" alt="yes"> Off · ANC (Low / Mid / High / Adaptive) · Ambient · low latency | [@Jenesaispas69](https://github.com/Jenesaispas69) |
@@ -105,8 +114,9 @@ open a pull request against `github.com/ncr/omarchy-headphones` with the result.
    what they serve: `bluetoothctl devices` for the address, `bluetoothctl info
    <address>` for the UUIDs — `df21fe2c-2515-4fdb-8886-f12c4d67927c` is the
    Google Fast Pair Message Stream (battery), `956c7b26-d49a-4ba8-b03f-b17d393cb6e2`
-   is Sony MDR v2 (noise control), `aeac4a03-dff5-498f-843a-34487cf133eb` is
-   Nothing NT Link; JBL earbuds are probed over BLE by the plugin itself.
+   is Sony MDR v2 and `96cc203e-5068-46ad-b32d-e316f5e069ba` Sony MDR v1 (both
+   noise control), `aeac4a03-dff5-498f-843a-34487cf133eb` is Nothing NT Link;
+   JBL earbuds are probed over BLE by the plugin itself.
 2. If battery and the mode row both already work, nothing needs
    writing: the pull request is my device's row in the table in `README.md` —
    device, two ticks, my GitHub handle — plus the screenshot from step 4.
@@ -118,15 +128,34 @@ open a pull request against `github.com/ncr/omarchy-headphones` with the result.
    `sony-bridge` with the same stdout/stdin/exit-code contract, add its UUID to
    `controlBackend()` in `Model.js` and its path to `classicBridgePath` in
    `DeviceFollower.qml`, test it on my headphones with `omarchy restart shell`,
-   and add my device to the table. Run the unit suite (`deno test --allow-read
-   tests/model.test.js`) if you touched `Model.js`, `python -m unittest
-   tests/soundcore_bridge_test.py` if you touched `soundcore-bridge` — a second
-   model of a brand gets its own row in the bridge's `MODELS` table and its own
-   case there, and leaves the earlier rows' frames as they are — and note what
-   the device answered in `PROTOCOL.md`. Ship only what you saw the headphones answer —
-   no guessed bytes. Mind that any file written inside the plugin directory
-   reloads the plugin at once — edit elsewhere and move files in, as the tools
-   in `tools/` do.
+   and add my device to the table, noting what the device answered in
+   `PROTOCOL.md`.
+
+   Two rules hold whatever brand this is, and a pull request that breaks either
+   will be sent back:
+
+   **A new model may not change what an existing one is sent.** Somebody else's
+   headphones work today on frames nobody can retest without owning them. So a
+   model gets its own row — `MODELS` in `soundcore-bridge`, an inquired type in
+   `sony-bridge` — and adding it adds a row; it does not edit another one, and
+   it does not turn a value that was always sent into one that is now decided.
+   Where something must be decided, let it widen rather than narrow: prefer
+   asking one more question to asking one fewer.
+
+   **Ship only what you saw the headphones answer — no guessed bytes.** A
+   variant from a vendor table that your headset never answered stays out, in
+   the code and in `PROTOCOL.md` both.
+
+   Pin it with a test, which is how the two rules survive the next pull request:
+   `python -m unittest tests/sony_bridge_test.py` if you touched `sony-bridge`,
+   `tests/soundcore_bridge_test.py` for `soundcore-bridge`, `deno test
+   --allow-read tests/model.test.js` if you touched `Model.js`. Each bridge test
+   scripts one session per model and asserts the exact frames — add your model's
+   case, leave the others' bytes alone, and run the lot. A bridge with no test
+   file yet is the moment to write one, modelled on those two.
+
+   Mind that any file written inside the plugin directory reloads the plugin at
+   once — edit elsewhere and move files in, as the tools in `tools/` do.
 4. Take the screenshot: `tools/gallery-shot <which>` — the `gallery-screenshot`
    skill in `.claude/skills/` has the steps — and add it to the Gallery at the
    bottom of `README.md` with the device name and my handle. The screenshot is

@@ -200,6 +200,11 @@ Item {
   property var deviceUuids: []
   readonly property string controlBackend: Model.controlBackend(deviceUuids, bleAddress)
   readonly property bool classicBackend: Model.isClassicBackend(controlBackend)
+  // Which of Sony's two MDR services this device serves. Both read as "sony",
+  // and both come out of the same UUID list, so this is non-empty exactly when
+  // controlBackend is "sony": the bridge is sent an address, or an address and
+  // a UUID, and never a UUID belonging to some other brand's bridge.
+  readonly property string sonyUuid: controlBackend === "sony" ? Model.sonyUuidFor(deviceUuids) : ""
 
   readonly property bool ancSupported: ancState.modes === true
   readonly property string ancMode: String(ancState.mode || "")
@@ -702,9 +707,13 @@ Item {
   Process {
     id: classicBridge
     running: follower.classicArmed
-    command: follower.classicBridgePath !== ""
-      ? [follower.classicBridgePath, follower.address]
-      : ["true"]
+    // Every classic bridge takes the address; sony-bridge takes the UUID after
+    // it, and defaults to v2 without one, which is what it was always sent.
+    command: follower.classicBridgePath === ""
+      ? ["true"]
+      : (follower.sonyUuid !== ""
+        ? [follower.classicBridgePath, follower.address, follower.sonyUuid]
+        : [follower.classicBridgePath, follower.address])
     stdinEnabled: true
     stdout: SplitParser {
       onRead: function(line) { follower.applyAncLine(line) }

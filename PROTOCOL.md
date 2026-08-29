@@ -44,7 +44,7 @@ half of the widget's listening mode:
 | UUID | What it is | Answers? |
 |---|---|---|
 | `956c7b26-d49a-4ba8-b03f-b17d393cb6e2` | Sony MDR protocol v2 — served by the WH-CH720N and by the current WH/WF range | **Yes — listening mode**, [last section](#sony-mdr-v2--the-listening-mode-on-the-wh-ch720n) |
-| `96cc203e-5068-46ad-b32d-e316f5e069ba` | Sony MDR protocol v1, the older headsets | not tested here — no v1 device on this desk |
+| `96cc203e-5068-46ad-b32d-e316f5e069ba` | Sony MDR protocol v1, the older headsets | **Yes — listening mode**, [the WH-1000XM4](#wh-1000xm4) |
 
 ## Fast Pair Message Stream — this is where the battery lives
 
@@ -403,7 +403,7 @@ A different headset and a different protocol, on a channel Sony serves itself:
 
 ```
 956c7b26-d49a-4ba8-b03f-b17d393cb6e2   MDR protocol v2   <- WH-CH720N, WH-1000XM5, WF-1000XM5…
-96cc203e-5068-46ad-b32d-e316f5e069ba   MDR protocol v1   the older range, untested here
+96cc203e-5068-46ad-b32d-e316f5e069ba   MDR protocol v1   <- WH-1000XM4, the older range
 ```
 
 Nothing had to be reverse engineered for this one. The frame format is in
@@ -681,6 +681,80 @@ capability bytes, same generation.
 
 SETs built on that `0x17` block were applied: Off, ANC and Ambient each
 landed. No other inquired type was answered, and nothing else was sent.
+
+### WH-1000XM4
+
+Confirmed on a **Sony WH-1000XM4** (`94:DB:56:D0:F0:F0`, modalias
+`usb:v054Cp0D58d0301`). It serves the MDR v1 UUID (`96cc203e-…`) and the
+Fast Pair Message Stream (`df21fe2c-…`). Battery is one figure for the set.
+The protocol is v1, not v2 — the handshake answers with 4 bytes, and the NC/ASM
+command bytes (`0x66`–`0x69`) are the same but the inquired types and payload
+layout differ.
+
+Handshake, `CONNECT_RET_PROTOCOL_INFO`, 4 bytes so v1:
+
+```
+01 00 70 00
+```
+
+The answering payload is the v1 `NcAsmParam` struct — 7 bytes after the command
+byte:
+
+```
+idx: 0    1     2             3       4        5       6       7
+     cmd  type ncAsmEffect   ncType  ncValue  asmType asmId   asmValue
+```
+
+| field | values |
+|---|---|
+| `ncAsmEffect` | `0x00` off, `0x01` on |
+| `ncType` | `0x02` (`DUAL_SINGLE_OFF`) — the v1 enum; the headset always reports this |
+| `ncValue` | `0x00` off, `0x01` SINGLE (ambient), `0x02` DUAL (noise cancelling) |
+| `asmType` | `0x01` — the only value seen; the bridge writes back what it read |
+| `asmId` | `0x00` normal, `0x01` voice |
+| `asmValue` | ambient level, `0x00`-`0x14` (0-20) |
+
+What the headset actually said:
+
+```
+->  66 02                       GET NC+ASM
+<-  67 02 01 02 02 01 00 00     RET: on, DUAL_SINGLE_OFF, nc=NC, asm normal, level 0
+```
+
+The SET (`0x68`) is that block written back, with `ncAsmEffect` and `ncValue`
+carrying the mode and everything else echoed as the headset reported it:
+
+```
+->  68 02 00 02 00 01 00 00     SET off
+->  68 02 01 02 02 01 00 00     SET ANC
+->  68 02 01 02 01 01 00 00     SET ambient
+```
+
+Off / ANC / Ambient each set and were confirmed on the headset; the NTFY
+(`0x69`) follows a SET with the new state. The ambient level and Focus on Voice
+are in the payload and the headset ACKs them in the SET, but the reply carries
+the pre-existing stored values — the headset stores them but does not apply them
+from the bridge's writes, the same way the v2 protocol stores the level and only
+applies it on an ambient SET.
+
+Sony's v1 table also numbers an NC-only `0x01` and an ambient-only `0x03`. Both
+were asked on this headset and neither was answered, so neither is in the
+bridge: their block lengths are unconfirmed, and a variant nobody has seen
+answered would be a guess sent to somebody's working headphones.
+
+What the bridge does with all this: `sonyUuidFor()` in `Model.js` picks which of
+the two UUIDs to hand it, and the bridge registers that one — that is all the
+UUID decides. The handshake's length **orders** the questions, `0x02` first on a
+4-byte reply and `0x17` first on an 8-byte one, and never shortens the list: a
+headset that replies short is still asked `0x17`, `0x15` and `0x22` before it is
+given up on, because two models answer `0x17` today and neither may be lost to a
+guess about a third. What settles the layout is the type that answers — the
+numbers do not collide across the two generations, so a `0x02` block is read as
+v1 and a `0x17` block as v2, whatever the UUID and the handshake suggested. Once
+a type has answered, a block of any other type is dropped.
+
+`tests/sony_bridge_test.py` pins one session per model — this one, the CH720N
+and the WH-1000XM5 — frame for frame.
 
 ## Xiaomi Buds 5 Pro — Compact GAIA on SPP
 

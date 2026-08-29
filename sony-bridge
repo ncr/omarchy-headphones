@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
-"""Hold one Sony MDR v2 RFCOMM link and mirror the headset's listening mode.
+"""Hold one Sony MDR RFCOMM link and mirror the headset's listening mode.
 
-    sony-bridge <classic-address>
+    sony-bridge <classic-address> [<rfcomm-uuid>]
 
 Prints one JSON object per line, and reads one command per line:
 
@@ -23,12 +23,15 @@ Exit codes, which the shell-side service reads to decide what to do next:
         this machine, not about the headset
 
 Why a bridge at all, and why one per device: the mode lives behind Sony's own
-RFCOMM service (UUID 956c7b26-…, "MDR protocol v2"), the same channel carries
-our commands and the headset's unsolicited notifications, and BlueZ hands the
-socket to whoever registered the org.bluez.Profile1 for that UUID — one holder,
+RFCOMM service (UUID 956c7b26-… for MDR v2, 96cc203e-… for v1), the same
+channel carries our commands and the headset's unsolicited notifications, and
+BlueZ hands the socket
+to whoever registered the org.bluez.Profile1 for that UUID — one holder,
 like the Fast Pair reader. So one process owns the channel, the widget talks to
 it through a pipe, and pressing the NC/AMB button on the headset and clicking a
-mode in the panel are the same conversation.
+mode in the panel are the same conversation. Which of the two UUIDs to register
+is the optional second argument; without it the bridge registers v2, which is
+what every caller before the v1 headsets sent.
 
 This is the sibling of jbl-bridge, which does the same job for JBL earbuds over
 BLE GATT. Both write the same line shape, so the service does not care which one
@@ -43,17 +46,20 @@ tools/sony_probe.py, which is what these frames were read off:
     seq      one toggling bit. An ACK carries 1 - seq, never seq. Our own seq
              is whatever the last ACK told us, and only one command may be
              outstanding at a time
-    init     payload 00 00, answered with 01 …; an 8-byte answer means v2
+    init     payload 00 00, answered with 01 …; an 8-byte answer means v2, a
+             4-byte one v1
     modes    payload 66 <t> GET, 67 <t> RET, 68 <t> SET, 69 <t> NTFY, where <t>
              is the "inquired type" that decides the layout of the block
 
 The two things that only the hardware tells you, both handled below:
 
   * Which inquired type this model uses is not knowable in advance (the two
-    open implementations disagree about the CH720N), so the candidates 0x17,
-    0x15 and 0x22 are asked in turn and the one that answers wins. A wrong one
-    is ACKed and then ignored, which is why each gets a deadline rather than an
-    error.
+    open implementations disagree about the CH720N), so every candidate in
+    CANDIDATES is asked in turn and the one that answers wins. A wrong one is
+    ACKed and then ignored, which is why each gets a deadline rather than an
+    error. The handshake's length only orders that list — it never shortens it,
+    because a headset that answers today must still be asked its own question
+    tomorrow.
   * A SET is ACKed immediately but does not take effect immediately: a GET sent
     straight after still returns the old state, and about a third of a second
     later the headset sends the NTFY with the new one. So the NTFY is the
@@ -92,7 +98,9 @@ try:
 except ImportError:
     unix_signal_add = GLib.unix_signal_add
 
-UUID = "956c7b26-d49a-4ba8-b03f-b17d393cb6e2"
+UUID_V2 = "956c7b26-d49a-4ba8-b03f-b17d393cb6e2"
+UUID_V1 = "96cc203e-5068-46ad-b32d-e316f5e069ba"
+UUID = re.compile(r"^[0-9a-f]{8}(-[0-9a-f]{4}){3}-[0-9a-f]{12}$", re.IGNORECASE)
 PROFILE_PATH = "/io/github/ncr/omaphones/sony"
 
 # Framing. HDR and TRL are never escaped, which is what makes "scan to the next
@@ -103,12 +111,25 @@ DATA_MDR, DATA_MDR_NO2, ACK = 0x0C, 0x0E, 0x01
 CONNECT_RET_PROTOCOL_INFO = 0x01
 NCASM_GET, NCASM_RET, NCASM_SET, NCASM_NTFY = 0x66, 0x67, 0x68, 0x69
 
-# The NC/ASM variants worth asking a headset about, in the order they are asked.
-# 0x17 first because it is the one the CH720N answers; 0x15 is what Gadgetbridge
-# believes that model uses; 0x22 covers the ambient-only models. Anything else
-# in Sony's table either does not exist on a headset with these three modes or
-# is a superset we would decode wrongly.
-CANDIDATES = (0x17, 0x15, 0x22)
+# The NC/ASM variants worth asking a headset about. An inquired type belongs to
+# one MDR generation and names one block layout, and the number is unique across
+# both generations, so the answering type — not the UUID and not the handshake —
+# is what settles how a block is read and written. Anything else in Sony's table
+# either does not exist on a headset with these three modes or is a superset we
+# would decode wrongly.
+#
+#   v2  0x17  the one the CH720N and the WH-1000XM5 answer
+#       0x15  what Gadgetbridge believes the CH720N uses
+#       0x22  ASM_SEAMLESS, the ambient-only models
+#   v1  0x02  NC + ASM, the one the WH-1000XM4 answers
+#
+# Sony's v1 table also numbers an NC-only 0x01 and an ambient-only 0x03. Neither
+# is here: no headset on this desk or in a pull request has answered one, their
+# block lengths are unconfirmed, and a variant nobody has seen answered would be
+# a guess sent to somebody's working headphones.
+CANDIDATES_V2 = (0x17, 0x15, 0x22)
+CANDIDATES_V1 = (0x02,)
+CANDIDATES = CANDIDATES_V2 + CANDIDATES_V1
 
 # What each variant can actually do, which is what the panel draws buttons for.
 # 0x22 (ASM_SEAMLESS) is an ambient-only control: its master switch turns the
@@ -117,18 +138,20 @@ AVAILABLE = {
     0x17: ["off", "anc", "ambient"],
     0x15: ["off", "anc", "ambient"],
     0x22: ["off", "ambient"],
+    0x02: ["off", "anc", "ambient"],
 }
 
-# NcValue, the field only the 0x15 layout carries. 0x02 is ON_DUAL, the value a
-# two-microphone headset reports; it is only ever a fallback, because the value
-# the device itself last reported is preferred.
+# The byte a SET has to echo back rather than invent — 0x15's NcValue on v2,
+# ncType on v1. 0x02 is ON_DUAL on the one and DUAL_SINGLE_OFF on the other,
+# both what a two-microphone headset reports, and it is only ever a fallback:
+# the value the device itself last reported is preferred.
 NC_VALUE_DEFAULT = 0x02
 
 MAX_LEVEL = 20
 
 ADDRESS = re.compile(r"^([0-9A-Fa-f]{2}:){5}[0-9A-Fa-f]{2}$")
 
-USAGE = "usage: sony-bridge <classic-address>"
+USAGE = "usage: sony-bridge <classic-address> [<rfcomm-uuid>]"
 
 EXIT_TRANSIENT = 1
 EXIT_UNSUPPORTED = 3
@@ -257,18 +280,38 @@ def decode(frame):
     return dtype, seq, payload
 
 
-def parse_ncasm(payload):
+def parse_ncasm(payload, expect=None):
     """The listening-mode state carried by a RET (0x67) or NTFY (0x69).
+
+    `expect` is the inquired type this headset has already answered with, once
+    it has answered: after that, a block of any other type is dropped. Before
+    it, any candidate is allowed, because the probe is asking them in turn and
+    the answer is what settles it. Both generations' numbers are on the table at
+    that point, so a block is only ever read the way its own type says — never
+    the way the UUID or the handshake suggested.
+    """
+    if len(payload) < 2 or payload[0] not in (NCASM_RET, NCASM_NTFY):
+        return None
+    inquired = payload[1]
+    if expect is not None and inquired != expect:
+        return None
+    if inquired in CANDIDATES_V1:
+        return parse_ncasm_v1(payload)
+    if inquired in CANDIDATES_V2:
+        return parse_ncasm_v2(payload)
+    return None
+
+
+def parse_ncasm_v2(payload):
+    """The v2 block: 0x17 and 0x22 are 6 bytes, 0x15 is 8.
 
     Focus-on-voice and the ambient level are the last two bytes of every one of
     the three layouts, which is why they are read from the tail rather than from
     an index that depends on the variant.
     """
-    if len(payload) < 6 or payload[0] not in (NCASM_RET, NCASM_NTFY):
+    if len(payload) < 6:
         return None
     inquired = payload[1]
-    if inquired not in CANDIDATES:
-        return None
     on = payload[3] == 0x01
     # On 0x22 the master switch *is* the ambient switch; the other two layouts
     # carry the NC-versus-ambient choice in the byte after it.
@@ -280,6 +323,31 @@ def parse_ncasm(payload):
         "level": payload[-1],
         # Only the 0x15 layout has it, at the index the ambient fields follow.
         "ncValue": payload[5] if inquired == 0x15 and len(payload) > 7 else None,
+    }
+
+
+def parse_ncasm_v1(payload):
+    """The v1 block: NcAsmParam, 7 bytes after the command byte.
+
+        67 02  ncAsmEffect ncType ncValue  asmType asmId asmValue
+
+    A different shape from v2, not a different order: the master switch and the
+    NC-versus-ambient choice sit one byte earlier, ncType is an enum of its own,
+    and the level is at a fixed index rather than at the tail. Read by index,
+    because a 7-byte block gives the tail no meaning it does not already have.
+    """
+    if len(payload) < 8:
+        return None
+    on = payload[2] == 0x01
+    nc_value = payload[4]
+    return {
+        "inquired": payload[1],
+        # ncValue: 0 off, 1 SINGLE (ambient), 2 DUAL (noise cancelling).
+        "mode": "off" if not on else ("ambient" if nc_value == 0x01 else "anc"),
+        "voice": payload[6] == 0x01,      # asmId, 1 is voice
+        "level": payload[7],              # asmValue, 0-20
+        # ncType, the value a SET must echo back, the way 0x15's ncValue is.
+        "ncValue": payload[3],
     }
 
 
@@ -297,10 +365,14 @@ def find_device_path(bus, address):
 class Bridge:
     """The whole conversation: registration, handshake, probe, then mirroring."""
 
-    def __init__(self, bus, address, loop):
+    def __init__(self, bus, address, loop, uuid=UUID_V2):
         self.bus = bus
         self.address = address
         self.loop = loop
+        # Which of Sony's two RFCOMM services to register and connect. It says
+        # nothing about the block layout — the answering inquired type does —
+        # so a wrong guess here costs a connection, not a wrong frame.
+        self.uuid = uuid
         self.exit_code = None
         self.device = None
         self.manager = None
@@ -331,6 +403,9 @@ class Bridge:
 
         self.protocol_seen = False
         self.candidate = 0
+        # Every candidate, in the order they will be asked. The handshake
+        # reorders this list; nothing shortens it.
+        self.candidates = CANDIDATES
 
         # Whatever of a stdin line has arrived without its newline yet.
         self.pending = ""
@@ -390,7 +465,7 @@ class Bridge:
         self.manager = dbus.Interface(
             self.bus.get_object("org.bluez", "/org/bluez"), "org.bluez.ProfileManager1")
         try:
-            self.manager.RegisterProfile(PROFILE_PATH, UUID, {
+            self.manager.RegisterProfile(PROFILE_PATH, self.uuid, {
                 "Name": "Omaphones Sony",
                 "Role": "client",
                 "RequireAuthentication": dbus.Boolean(False),
@@ -428,7 +503,7 @@ class Bridge:
                         % error.get_dbus_message())
 
         try:
-            self.device.ConnectProfile(UUID, reply_handler=lambda: None,
+            self.device.ConnectProfile(self.uuid, reply_handler=lambda: None,
                                        error_handler=failed, timeout=CONNECT_TIMEOUT)
         except dbus.DBusException as error:
             failed(error)
@@ -472,11 +547,11 @@ class Bridge:
         """Ask the next candidate inquired type, or give up on this headset."""
         if self.exit_code is not None or self.inquired is not None:
             return False
-        if candidate >= len(CANDIDATES):
+        if candidate >= len(self.candidates):
             return self.finish(EXIT_UNSUPPORTED,
                                "the headset did not answer the listening-mode query")
         self.candidate = candidate
-        self.push(bytes([NCASM_GET, CANDIDATES[candidate]]))
+        self.push(bytes([NCASM_GET, self.candidates[candidate]]))
         GLib.timeout_add(CANDIDATE_TIMEOUT, self.next_candidate, candidate)
         return False
 
@@ -537,24 +612,30 @@ class Bridge:
             self.finish(EXIT_TRANSIENT, "the Sony channel closed")
             return False
         self.buffer += data
-        # One read is not one frame: several can arrive together and one can be
-        # split across two reads. 0x3C cannot occur inside a stuffed body, so
-        # "from the next 0x3E to the first 0x3C after it" is exact.
+        self.parse_buffer()
+        return self.exit_code is None
+
+    def parse_buffer(self):
+        """Every whole frame the buffer holds, in order.
+
+        One read is not one frame: several can arrive together and one can be
+        split across two reads. 0x3C cannot occur inside a stuffed body, so
+        "from the next 0x3E to the first 0x3C after it" is exact.
+        """
         while True:
             start = self.buffer.find(HDR)
             if start < 0:
                 self.buffer.clear()
-                break
+                return
             end = self.buffer.find(TRL, start + 1)
             if end < 0:
                 del self.buffer[:start]
-                break
+                return
             frame = bytes(self.buffer[start:end + 1])
             del self.buffer[:end + 1]
             self.on_frame(frame)
             if self.exit_code is not None:
-                return False
-        return True
+                return
 
     def on_frame(self, frame):
         decoded = decode(frame)
@@ -579,14 +660,29 @@ class Bridge:
         if payload[0] == CONNECT_RET_PROTOCOL_INFO:
             if not self.protocol_seen:
                 self.protocol_seen = True
-                # The length is the protocol generation (8 bytes is v2). We ask
-                # the same questions either way, so it is not worth refusing a
-                # headset over — what settles the layout is the RET below.
+                self.order_candidates(len(payload))
                 self.probe(0)
             return
-        state = parse_ncasm(payload)
+        state = parse_ncasm(payload, self.inquired)
         if state is not None:
             self.on_state(state)
+
+    def order_candidates(self, length):
+        """Ask the generation the handshake named first — and the other after.
+
+        The reply's length is the protocol generation: 8 bytes v2, 4 bytes v1.
+        That is a good hint and a bad rule. Two models answer 0x17 today, and a
+        headset that replies short — or replies with something nobody has seen —
+        must still be asked 0x17, 0x15 and 0x22 before it is given up on, or one
+        handshake byte is all it takes to lose a headset that works. So the
+        length moves the likely questions to the front and the rest stay behind
+        them: a headset that answers something pays nothing for the ones behind
+        it, and a headset that answers nothing sends three more frames before
+        the same verdict.
+        """
+        first = CANDIDATES_V1 if length < 8 else CANDIDATES_V2
+        rest = tuple(c for c in CANDIDATES if c not in first)
+        self.candidates = first + rest
 
     def on_state(self, state):
         """A RET or an NTFY: the headset's own account of its listening mode."""
@@ -623,6 +719,14 @@ class Bridge:
         ambient = 1 if mode == "ambient" else 0
         level = max(0, min(MAX_LEVEL, int(level)))
         voice = 1 if voice else 0
+        if self.inquired == 0x02:
+            # v1: the block the headset answered with, written back. ncValue
+            # carries the three-way choice here rather than a separate ambient
+            # flag, and asmType (0x01) is the only value the WH-1000XM4 was
+            # seen to take.
+            nc_value = 0 if not on else (1 if mode == "ambient" else 2)
+            return bytes([NCASM_SET, 0x02, on, self.nc_value, nc_value,
+                          0x01, voice, level])
         if self.inquired == 0x15:
             return bytes([NCASM_SET, 0x15, 0x01, on, ambient,
                           self.nc_value, voice, level])
@@ -707,6 +811,15 @@ def main():
               "error": "%s (not a Bluetooth address: %r)" % (USAGE, address)})
         sys.exit(EXIT_SETUP)
 
+    # The UUID is optional and defaults to v2, so a caller written before the v1
+    # headsets — an older DeviceFollower.qml against a newer bridge — asks for
+    # exactly what it used to.
+    uuid = argv[1].strip() if len(argv) > 1 else UUID_V2
+    if not UUID.match(uuid):
+        emit({"modes": False,
+              "error": "%s (not a UUID: %r)" % (USAGE, uuid)})
+        sys.exit(EXIT_SETUP)
+
     dbus.mainloop.glib.DBusGMainLoop(set_as_default=True)
     try:
         bus = dbus.SystemBus()
@@ -715,7 +828,7 @@ def main():
         sys.exit(EXIT_TRANSIENT)
 
     loop = GLib.MainLoop()
-    bridge = Bridge(bus, address, loop)
+    bridge = Bridge(bus, address, loop, uuid)
 
     class Profile(dbus.service.Object):
         @dbus.service.method("org.bluez.Profile1", in_signature="", out_signature="")

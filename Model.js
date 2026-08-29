@@ -434,7 +434,11 @@ function readerLevel(state, key) {
 // JBL's is a BLE GATT service at an address that rotates and is announced only
 // on the Fast Pair Message Stream, so knowing that address is what makes that
 // path possible at all.
+// Sony serves one of two: the current range answers on the v2 UUID, the older
+// one on v1. Both are the same bridge on the same kind of channel, and which of
+// them to register is the bridge's second argument.
 var SONY_MDR_V2_UUID = "956c7b26-d49a-4ba8-b03f-b17d393cb6e2"
+var SONY_MDR_V1_UUID = "96cc203e-5068-46ad-b32d-e316f5e069ba"
 var NOTHING_NT_LINK_UUID = "aeac4a03-dff5-498f-843a-34487cf133eb"
 var CSR_GAIA_UUID = "00001100-d102-11e1-9b23-00025b00a5a5"
 var SOUNDCORE_UUID_PREFIX = "0cf12d31-fac3-4553-bd80-d6832e7"
@@ -470,7 +474,7 @@ function controlBackend(uuids, bleAddress) {
   var soundcore = false
   for (var i = 0; i < list.length; i++) {
     var id = str(list[i]).trim().toLowerCase()
-    if (id === SONY_MDR_V2_UUID) return "sony"
+    if (id === SONY_MDR_V2_UUID || id === SONY_MDR_V1_UUID) return "sony"
     if (id === NOTHING_NT_LINK_UUID) nothing = true
     if (id === CSR_GAIA_UUID) gaia = true
     if (id.indexOf(SOUNDCORE_UUID_PREFIX) === 0) soundcore = true
@@ -487,6 +491,21 @@ var CLASSIC_BACKENDS = ["sony", "nothing", "xiaomi", "soundcore"]
 
 function isClassicBackend(backend) {
   return CLASSIC_BACKENDS.indexOf(str(backend)) !== -1
+}
+
+// Which Sony MDR UUID to hand the bridge, or "" for a device serving neither.
+// v2 wins where a device advertises both: v2 is what every Sony that works
+// today was connected on, and a device that serves both is reachable either
+// way, so the tested one is the one to keep sending.
+function sonyUuidFor(uuids) {
+  var list = uuids || []
+  var v1 = ""
+  for (var i = 0; i < list.length; i++) {
+    var id = str(list[i]).trim().toLowerCase()
+    if (id === SONY_MDR_V2_UUID) return SONY_MDR_V2_UUID
+    if (id === SONY_MDR_V1_UUID) v1 = SONY_MDR_V1_UUID
+  }
+  return v1
 }
 
 // The order the panel draws them in, and the only names a bridge may use.

@@ -619,6 +619,48 @@ Deno.test("controlBackend picks the protocol the device advertises", () => {
   assertEquals(Model.controlBackend([], "   "), "");
 });
 
+Deno.test("either Sony MDR UUID reaches the sony bridge", () => {
+  const v1 = ["0000110b-0000-1000-8000-00805f9b34fb", Model.SONY_MDR_V1_UUID];
+  assertEquals(Model.controlBackend(v1, ""), "sony");
+  assertEquals(Model.controlBackend([Model.SONY_MDR_V1_UUID.toUpperCase()], ""), "sony");
+  assertEquals(Model.controlBackend(v1, "48:B4:41:00:00:01"), "sony");
+});
+
+Deno.test("sonyUuidFor hands the bridge the generation to register", () => {
+  assertEquals(Model.sonyUuidFor([Model.SONY_MDR_V2_UUID]), Model.SONY_MDR_V2_UUID);
+  assertEquals(Model.sonyUuidFor([Model.SONY_MDR_V1_UUID]), Model.SONY_MDR_V1_UUID);
+  // Case and neighbours in the record change nothing.
+  assertEquals(
+    Model.sonyUuidFor(["0000110b-0000-1000-8000-00805f9b34fb",
+                       Model.SONY_MDR_V1_UUID.toUpperCase()]),
+    Model.SONY_MDR_V1_UUID,
+  );
+  // Both listed: v2 is what the working Sonys are connected on, whichever
+  // order the record prints them in.
+  assertEquals(
+    Model.sonyUuidFor([Model.SONY_MDR_V1_UUID, Model.SONY_MDR_V2_UUID]),
+    Model.SONY_MDR_V2_UUID,
+  );
+  assertEquals(
+    Model.sonyUuidFor([Model.SONY_MDR_V2_UUID, Model.SONY_MDR_V1_UUID]),
+    Model.SONY_MDR_V2_UUID,
+  );
+  // Not a Sony, and nothing at all.
+  assertEquals(Model.sonyUuidFor([Model.CSR_GAIA_UUID]), "");
+  assertEquals(Model.sonyUuidFor([]), "");
+  assertEquals(Model.sonyUuidFor(null), "");
+});
+
+// Whenever controlBackend says "sony", there is a UUID to hand the bridge —
+// DeviceFollower.qml passes one without checking, and an empty one would send
+// the bridge an argument it rejects.
+Deno.test("a sony device always has a UUID to register", () => {
+  for (const uuid of [Model.SONY_MDR_V2_UUID, Model.SONY_MDR_V1_UUID]) {
+    assertEquals(Model.controlBackend([uuid], ""), "sony");
+    assertEquals(Model.sonyUuidFor([uuid]) !== "", true);
+  }
+});
+
 Deno.test("modesAvailable defaults to the JBL four and filters what Sony names", () => {
   // The JBL bridge names none: its protocol has one fixed set of slots.
   assertEquals(Model.modesAvailable({ modes: true, mode: "anc" }), [
