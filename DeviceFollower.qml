@@ -128,11 +128,12 @@ Item {
   //      panel shows a mode and writes a mode, and which helper carries it is
   //      decided per device from the UUIDs in its SDP record.
   //
-  //        sony-bridge     Sony's MDR protocol v2, over an RFCOMM channel the
-  //                        headset itself serves. Deterministic: a device that
-  //                        advertises the UUID speaks the protocol, so this path
-  //                        needs no Fast Pair, no rotating address and no cache
-  //                        of which models answered.
+  //        sony-bridge     Sony's MDR protocol, v1 or v2, over an RFCOMM
+  //                        channel the headset itself serves. Deterministic: a
+  //                        device that advertises either UUID speaks it, so this
+  //                        path needs no Fast Pair, no rotating address and no
+  //                        cache of which models answered. Which of the two the
+  //                        bridge registers is its second argument.
   //        nothing-bridge  Nothing's NT Link, RFCOMM channel 15, same shape as
   //                        Sony's: the UUID in the record is the claim. Carries
   //                        the battery and the low-latency switch as well.

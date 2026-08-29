@@ -1,14 +1,20 @@
 #!/usr/bin/env python3
-"""Probe the Sony MDR v2 channel on a headset: init, then ask for the NC/ASM state.
+"""Probe the Sony MDR channel on a headset: init, then ask for the NC/ASM state.
 
-Usage: sony_probe.py <address> [seconds] [set:off|nc|ambient[:level[:voice]]]
+Usage: sony_probe.py <address> [seconds] [v1|v2] [set:off|nc|ambient[:level[:voice]]]
 
-Registers an org.bluez.Profile1 for the v2 UUID, lets BlueZ connect it, sends the
-protocol-info handshake, ACKs everything the device sends, asks NCASM_GET_PARAM
-with each candidate inquired type (0x17, 0x15, 0x22) and prints every decoded
-frame. The reply that echoes the type you asked for, and its payload length, is
-what a bridge must speak. Optional `set:` writes one mode after the GETs, using
-the layout the device answered with.
+Registers an org.bluez.Profile1 for the MDR UUID — v2 unless you say `v1`, which
+is the one the older headsets serve; `bluetoothctl info` says which your headset
+lists. Lets BlueZ connect it, sends the protocol-info handshake, ACKs everything
+the device sends, asks NCASM_GET_PARAM with every candidate inquired type (0x17,
+0x15, 0x22 on v2; 0x02 on v1) and prints every decoded frame. The reply that
+echoes the type you asked for, and its payload length, is what a bridge must
+speak. Optional `set:` writes one mode after the GETs, using the layout the
+device answered with.
+
+Both generations' types are asked whichever UUID you registered: the numbers do
+not collide, so what answers tells you the layout even if the handshake or the
+UUID suggested otherwise.
 """
 import os
 import struct
@@ -20,7 +26,8 @@ import dbus.mainloop.glib
 import dbus.service
 from gi.repository import GLib
 
-UUID = "956c7b26-d49a-4ba8-b03f-b17d393cb6e2"
+UUID_V2 = "956c7b26-d49a-4ba8-b03f-b17d393cb6e2"
+UUID_V1 = "96cc203e-5068-46ad-b32d-e316f5e069ba"
 PROFILE_PATH = "/io/github/ncr/omaphones/sonyprobe"
 START = time.monotonic()
 
@@ -69,11 +76,22 @@ def decode(frame):
 
 
 def parse_ncasm(p):
-    if len(p) < 6 or p[0] not in (0x67, 0x69) or p[1] not in (0x15, 0x17, 0x22):
+    if len(p) < 6 or p[0] not in (0x67, 0x69):
+        return None
+    # v1: NcAsmParam, read by index — ncAsmEffect, ncType, ncValue, asmType,
+    # asmId, asmValue after the type byte.
+    if p[1] == 0x02:
+        if len(p) < 8:
+            return None
+        on = p[2] == 0x01
+        return {"type": "0x02", "len": len(p), "gen": "v1",
+                "mode": "off" if not on else ("ambient" if p[4] == 0x01 else "nc"),
+                "ncType": "0x%02x" % p[3], "voice": p[6] == 0x01, "level": p[7]}
+    if p[1] not in (0x15, 0x17, 0x22):
         return None
     on = p[3] == 0x01
     ambient = True if p[1] == 0x22 else (p[4] == 0x01)
-    return {"type": "0x%02x" % p[1], "len": len(p),
+    return {"type": "0x%02x" % p[1], "len": len(p), "gen": "v2",
             "mode": "off" if not on else ("ambient" if ambient else "nc"),
             "voice": p[-2] == 0x01, "level": p[-1]}
 
@@ -155,17 +173,19 @@ class Link:
 
 def main():
     if len(sys.argv) < 2:
-        sys.exit("usage: sony_probe.py <address> [seconds] [set:off|nc|ambient[:level[:voice]]]")
+        sys.exit("usage: sony_probe.py <address> [seconds] [v1|v2] "
+                 "[set:off|nc|ambient[:level[:voice]]]")
     address = sys.argv[1]
-    seconds = int(sys.argv[2]) if len(sys.argv) > 2 else 25
-    setting = sys.argv[3] if len(sys.argv) > 3 else ""
+    rest = sys.argv[2:]
+    seconds = int(rest[0]) if rest and rest[0].isdigit() else 25
+    setting = next((a for a in rest if a.startswith("set:")), "")
+    uuid = UUID_V1 if "v1" in rest else UUID_V2
 
     link = {}
-    plan = [
-        (bytes([0x66, 0x17]), "NCASM_GET_PARAM 0x17"),
-        (bytes([0x66, 0x15]), "NCASM_GET_PARAM 0x15"),
-        (bytes([0x66, 0x22]), "NCASM_GET_PARAM 0x22"),
-    ]
+    # The likely generation first, the other behind it: a headset answers one
+    # type and ignores the rest, so asking all four costs nothing but frames.
+    types = [0x02, 0x17, 0x15, 0x22] if uuid == UUID_V1 else [0x17, 0x15, 0x22, 0x02]
+    plan = [(bytes([0x66, t]), "NCASM_GET_PARAM 0x%02x" % t) for t in types]
     if setting.startswith("set:"):
         parts = setting.split(":")[1:]
         mode = parts[0]
@@ -179,7 +199,11 @@ def main():
                 return None
             on = mode != "off"
             amb = mode == "ambient"
-            if t == 0x17:
+            if t == 0x02:
+                # v1: the mode is ncValue, and ncType is echoed as reported.
+                p = bytes([0x68, 0x02, int(on), 0x02, 0 if not on else (1 if amb else 2),
+                           0x01, int(voice), level])
+            elif t == 0x17:
                 p = bytes([0x68, 0x17, 0x01, int(on), int(on and amb), int(voice), level])
             elif t == 0x15:
                 p = bytes([0x68, 0x15, 0x01, int(on), int(on and amb), 0x02, int(voice), level])
@@ -187,7 +211,10 @@ def main():
                 p = bytes([0x68, 0x22, 0x01, int(on), int(voice), level])
             return (p, "NCASM_SET_PARAM %s" % mode)
         plan.append(build)
-        plan.append((bytes([0x66, 0x17]), "NCASM_GET_PARAM 0x17 (readback)"))
+        plan.append(lambda: (bytes([0x66, link["l"].answered_type]),
+                             "NCASM_GET_PARAM 0x%02x (readback)"
+                             % link["l"].answered_type)
+                    if link["l"].answered_type is not None else None)
 
     dbus.mainloop.glib.DBusGMainLoop(set_as_default=True)
     bus = dbus.SystemBus()
@@ -209,7 +236,7 @@ def main():
     Profile(bus, PROFILE_PATH)
     manager = dbus.Interface(bus.get_object("org.bluez", "/org/bluez"),
                              "org.bluez.ProfileManager1")
-    manager.RegisterProfile(PROFILE_PATH, UUID, {
+    manager.RegisterProfile(PROFILE_PATH, uuid, {
         "Name": "Sony probe",
         "Role": "client",
         "RequireAuthentication": dbus.Boolean(False),
@@ -236,7 +263,7 @@ def main():
             if attempt < 10:
                 GLib.timeout_add(1500, lambda: connect(attempt + 1))
         dbus.Interface(bus.get_object("org.bluez", dev), "org.bluez.Device1").ConnectProfile(
-            UUID, reply_handler=lambda: None, error_handler=failed, timeout=30)
+            uuid, reply_handler=lambda: None, error_handler=failed, timeout=30)
         return False
 
     GLib.timeout_add(500, connect)

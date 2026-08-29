@@ -2,7 +2,7 @@
   "schemaVersion": 1,
   "id": "io.github.ncr.omaphones",
   "name": "Omaphones",
-  "version": "1.1.2",
+  "version": "1.2.0",
   "author": "Jacek Becela",
   "license": "MIT",
   "description": "Battery levels and noise-cancellation control for Bluetooth headphones, in the Omarchy bar. JBL, Sony, Nothing, Soundcore, Xiaomi; battery on anything with Google Fast Pair or BlueZ.",
@@ -64,7 +64,7 @@
         "type": "boolean",
         "label": "Noise cancellation (Off / ANC / Ambient)",
         "defaultValue": true,
-        "description": "The MODE row, following changes made on the device too — plus the ambient level on Sony and Soundcore, and the ANC strength and low-latency switch on Nothing. Works on Sony MDR v2, Nothing, Soundcore, Xiaomi Buds 5 Pro, and some JBL earbuds (JBL needs Fast Pair above). Hidden when the device answers for none."
+        "description": "The MODE row, following changes made on the device too — plus the ambient level on Sony and Soundcore, and the ANC strength and low-latency switch on Nothing. Works on Sony MDR v1 and v2, Nothing, Soundcore, Xiaomi Buds 5 Pro, and some JBL earbuds (JBL needs Fast Pair above). Hidden when the device answers for none."
       },
       {
         "key": "lowBatteryThreshold",

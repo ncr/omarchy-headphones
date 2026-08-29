@@ -425,8 +425,9 @@ function readerLevel(state, key) {
 // ---- Which helper can control the listening mode of a given device.
 //
 // Four protocols, decided per device from its SDP record rather than from its
-// name: Sony's MDR v2 lives on an RFCOMM channel the headset itself serves, and
+// name: Sony's MDR lives on an RFCOMM channel the headset itself serves, and
 // advertising the UUID is the whole claim — a device that lists it speaks it.
+// Sony serves two generations on two UUIDs, and both are the same bridge.
 // Nothing's NT Link is the same shape: its own UUID in the record, its own
 // RFCOMM channel (15), carrying noise control, battery and low latency.
 // Xiaomi Buds 5 Pro (and other QCC sets that advertise CSR GAIA) speak Compact
