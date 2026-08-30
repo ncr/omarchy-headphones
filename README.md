@@ -10,6 +10,9 @@
 omarchy plugin add https://github.com/ncr/omarchy-headphones --enable
 ```
 
+Install `playerctl` as well to enable automatic pause/resume on supported wear
+sensors: `sudo pacman -S --needed playerctl`.
+
 **Update** an installed copy:
 
 ```bash
@@ -49,11 +52,11 @@ Headphones not on the list? [Add yours](#add-your-own-headphones).
 </tr>
 <tr>
 <td width="50%"><img src="docs/gallery/sony-wh-1000xm4.png" alt="Sony WH-1000XM4: one battery, Off / ANC / Ambient" width="100%"></td>
-<td width="50%"></td>
+<td width="50%"><img src="docs/gallery/sony-wh-1000xm6.png" alt="Sony WH-1000XM6: one battery, Off / ANC / Ambient, wear detection" width="100%"></td>
 </tr>
 <tr>
 <td align="center">Sony WH-1000XM4 — <a href="https://github.com/seth-reee">@seth-reee</a></td>
-<td align="center"></td>
+<td align="center">Sony WH-1000XM6 — <a href="https://github.com/f-iacono">@f-iacono</a></td>
 </tr>
 </table>
 
@@ -69,6 +72,9 @@ Headphones not on the list? [Add yours](#add-your-own-headphones).
   your brand. Sony and Soundcore add the ambient level with Focus on Voice or
   wind noise reduction; Nothing the ANC strength (Low / Mid / High / Adaptive)
   and a low-latency switch.
+- **Pause when you take them off, resume when you put them back on** — on a
+  headset with a wear sensor (confirmed on the Sony WH-1000XM6). Only players
+  paused by the sensor are resumed. Requires `playerctl`.
 - **Several headphones at once** — one icon per connected set, each with its own
   panel.
 - **Low-battery notification** that names the earbud.
@@ -89,6 +95,7 @@ same idea, built for Apple's own protocol, and the plugin this one is modelled o
 | JBL TUNE230NC TWS (earbuds) | <img src="docs/icons/yes.svg" width="14" alt="yes"> left, right, case | <img src="docs/icons/yes.svg" width="14" alt="yes"> Off · ANC · Ambient · TalkThru              | [@ncr](https://github.com/ncr) |
 | Sony WH-CH720N (over-ear)   | <img src="docs/icons/yes.svg" width="14" alt="yes"> one figure        | <img src="docs/icons/yes.svg" width="14" alt="yes"> Off · ANC · Ambient (level, Focus on Voice) | [@ncr](https://github.com/ncr) |
 | Sony WH-1000XM5 (over-ear)  | <img src="docs/icons/yes.svg" width="14" alt="yes"> one figure        | <img src="docs/icons/yes.svg" width="14" alt="yes"> Off · ANC · Ambient (level, Focus on Voice) | [@huynguyendinhquang](https://github.com/huynguyendinhquang) |
+| Sony WH-1000XM6 (over-ear)  | <img src="docs/icons/yes.svg" width="14" alt="yes"> one figure        | <img src="docs/icons/yes.svg" width="14" alt="yes"> Off · ANC · Ambient (level, Focus on Voice) · wear pause/resume | [@f-iacono](https://github.com/f-iacono) |
 | Sony WH-1000XM4 (over-ear)  | <img src="docs/icons/yes.svg" width="14" alt="yes"> one figure        | <img src="docs/icons/yes.svg" width="14" alt="yes"> Off · ANC · Ambient                          | [@seth-reee](https://github.com/seth-reee) |
 | Soundcore Space 2 (over-ear)| <img src="docs/icons/yes.svg" width="14" alt="yes"> one figure        | <img src="docs/icons/yes.svg" width="14" alt="yes"> Off · ANC · Ambient (level, wind noise reduction) | [@Sovego](https://github.com/Sovego) |
 | Xiaomi Buds 5 Pro (earbuds) | <img src="docs/icons/yes.svg" width="14" alt="yes"> one figure        | <img src="docs/icons/yes.svg" width="14" alt="yes"> Off · ANC · Ambient                          | [@KentoNion](https://github.com/KentoNion)|
@@ -215,6 +222,7 @@ Everything is reachable over IPC — `omarchy-shell omaphones <method>`:
 | `ambientVoice` · `setAmbientVoice on\|off` | `on` / `off` — Focus on voice (Sony), wind noise reduction (Soundcore) |
 | `ancLevel` · `setAncLevel <l>` | `low` `mid` `high` `adaptive` (Nothing); setting one turns ANC on |
 | `latency` · `setLatency on\|off` | `on` / `off` (Nothing) |
+| `worn` | `worn` / `not worn`, or `unsupported` for a device with no wear sensor |
 | `refresh` | ask the device again |
 | `open` · `close` · `toggle` | the panel |
 
@@ -242,6 +250,7 @@ and booleans), or the widget's entry in `~/.config/omarchy/shell.json`.
 | `showPercentage`       | `false` | A written percentage instead of the drawn meter; costs a bar slot.                                                       |
 | `hideWhenDisconnected` | `true`  | Drop the widget while nothing is connected.                                                                              |
 | `notifyLowBattery`     | `true`  | Send the notification.                                                                                                   |
+| `pauseMediaOnDisconnect` | `true` | Pause playing MPRIS players on disconnect or wear-off and resume the same players on wear-on. Requires `playerctl`.     |
 
 ## Credits
 
@@ -249,6 +258,7 @@ and booleans), or the widget's entry in `~/.config/omarchy/shell.json`.
 - [Bluetooth-Battery-Meter](https://github.com/maniacx/Bluetooth-Battery-Meter) — the clearest reading of the Fast Pair battery bytes.
 - [bluetooth-py](https://github.com/GroupXyz2/bluetooth-py) — the JBL command numbers.
 - [Gadgetbridge](https://codeberg.org/Freeyourgadget/Gadgetbridge) and [mos9527/SonyHeadphonesClient](https://github.com/mos9527/SonyHeadphonesClient) — the Sony frame format; the two disagree about the WH-CH720N, and the hardware settled it here.
+- [@f-iacono](https://github.com/f-iacono) — WH-1000XM6 protocol capture and wear-sensor support.
 - [r-witz/omarchy-nothing-ear](https://github.com/r-witz/omarchy-nothing-ear) — the Nothing protocol as a working Omarchy widget: battery components, the latency switch and the case cache; [DaanHessen/earctl](https://github.com/DaanHessen/earctl) — the command table; [@Jenesaispas69](https://github.com/Jenesaispas69)'s [PR #2](https://github.com/ncr/omarchy-headphones/pull/2) — the NT Link UUID and the frame layout from an Ear (a).
 
 ## Licence

@@ -32,6 +32,10 @@ RET = bridge_module.NCASM_RET
 NTFY = bridge_module.NCASM_NTFY
 DATA_MDR = bridge_module.DATA_MDR
 ACK = bridge_module.ACK
+WEAR_GET = bridge_module.SYSTEM_GET_STATUS
+WEAR_RET = bridge_module.SYSTEM_RET_STATUS
+WEAR_NTFY = bridge_module.SYSTEM_NTFY_STATUS
+WEAR_TYPE = bridge_module.WEARING_STATUS_TYPE
 
 
 def device_frame(payload, seq=0):
@@ -147,6 +151,7 @@ class WhCh720n(unittest.TestCase):
 
         s.ack()
         s.receive(device_frame(self.STATE))
+        s.ack()  # Wearing-status GET queued behind the NCASM probe.
         self.assertEqual(s.lines, [{"modes": True, "mode": "ambient",
                                     "available": ["off", "anc", "ambient"],
                                     "level": 20, "voice": False}])
@@ -162,6 +167,7 @@ class WhCh720n(unittest.TestCase):
 
         self.assertEqual(s.sent, [
             [GET, 0x17],
+            [WEAR_GET, WEAR_TYPE],
             [SET, 0x17, 0x01, 0, 0, 0, 20],
             [SET, 0x17, 0x01, 1, 0, 0, 20],
             [SET, 0x17, 0x01, 1, 1, 0, 20],
@@ -183,6 +189,7 @@ class WhCh720n(unittest.TestCase):
         s.receive(device_frame(self.HANDSHAKE))
         s.ack()
         s.receive(device_frame(self.STATE))
+        s.ack()  # Wearing-status GET queued behind the NCASM probe.
         # A v1-numbered block on a headset that answered 0x17 is not a v1
         # headset; reading it as one would move the panel to a mode nobody
         # asked for.
@@ -202,6 +209,7 @@ class Wh1000xm5(unittest.TestCase):
         s.receive(device_frame(self.HANDSHAKE))
         s.ack()
         s.receive(device_frame(self.STATE))
+        s.ack()  # Wearing-status GET queued behind the NCASM probe.
         s.command("set anc")
         s.ack()
         s.command("voice on")
@@ -210,6 +218,7 @@ class Wh1000xm5(unittest.TestCase):
         # ambient — rather than dragging it anywhere on its own.
         self.assertEqual(s.sent, [
             [GET, 0x17],
+            [WEAR_GET, WEAR_TYPE],
             [SET, 0x17, 0x01, 1, 0, 0, 20],
             [SET, 0x17, 0x01, 1, 1, 1, 20],
         ])
@@ -236,6 +245,7 @@ class Wh1000xm4(unittest.TestCase):
 
         s.ack()
         s.receive(device_frame(self.STATE))
+        s.ack()  # Wearing-status GET queued behind the NCASM probe.
         self.assertEqual(s.lines, [{"modes": True, "mode": "anc",
                                     "available": ["off", "anc", "ambient"],
                                     "level": 0, "voice": False}])
@@ -251,6 +261,7 @@ class Wh1000xm4(unittest.TestCase):
         # the reported mode (anc).
         self.assertEqual(s.sent, [
             [GET, 0x02],
+            [WEAR_GET, WEAR_TYPE],
             [SET, 0x02, 0, 0x02, 0, 0x01, 0, 0],
             [SET, 0x02, 1, 0x02, 1, 0x01, 0, 0],
             [SET, 0x02, 1, 0x02, 2, 0x01, 0, 0],
@@ -312,6 +323,35 @@ class CandidateOrder(unittest.TestCase):
             self.assertIn(candidate, bridge_module.AVAILABLE)
 
 
+class Wh1000xm6(unittest.TestCase):
+    """MDR v2 0x17 plus notification-only 0x19 and SYSTEM wear status."""
+
+    HANDSHAKE = [0x01, 0x00, 0x03, 0x00, 0x20, 0x16, 0x00, 0x00]
+    STATE = [RET, 0x17, 0x01, 0x01, 0x01, 0x00, 0x0F]
+
+    def test_mode_notifications_and_wear_edges(self):
+        s = Session()
+        s.receive(device_frame(self.HANDSHAKE))
+        s.ack()
+        self.assertEqual(s.sent, [[GET, 0x17], [WEAR_GET, WEAR_TYPE]])
+
+        s.receive(device_frame(self.STATE))
+        s.receive(device_frame([WEAR_RET, WEAR_TYPE, 0x00]))
+        self.assertTrue(s.lines[-1]["worn"])
+
+        # The XM6 reports mode changes on the wider 0x19 notification even
+        # though its initial query was answered on 0x17.
+        s.receive(device_frame([NTFY, 0x19, 0x01, 0x01, 0x01, 0x00,
+                                0x0A, 0x00, 0x00]))
+        self.assertEqual(s.lines[-1]["mode"], "ambient")
+        self.assertEqual(s.lines[-1]["level"], 10)
+
+        s.receive(device_frame([WEAR_NTFY, WEAR_TYPE, 0x01, 0x01]))
+        self.assertFalse(s.lines[-1]["worn"])
+        s.receive(device_frame([WEAR_NTFY, WEAR_TYPE, 0x01, 0x00]))
+        self.assertTrue(s.lines[-1]["worn"])
+
+
 class Silent(unittest.TestCase):
     def test_nothing_answers_and_the_address_is_parked(self):
         s = Session()
@@ -319,8 +359,8 @@ class Silent(unittest.TestCase):
         for _ in bridge_module.CANDIDATES:
             s.ack()
             s.fire()
-        self.assertEqual(s.sent, [[GET, 0x17], [GET, 0x15], [GET, 0x22],
-                                  [GET, 0x02]])
+        self.assertEqual(s.sent, [[GET, 0x17], [WEAR_GET, WEAR_TYPE],
+                                  [GET, 0x15], [GET, 0x22], [GET, 0x02]])
         self.assertEqual(s.bridge.exit_code, bridge_module.EXIT_UNSUPPORTED)
 
 

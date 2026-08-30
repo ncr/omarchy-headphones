@@ -234,6 +234,14 @@ Item {
   // that never mentioned either.
   readonly property bool ambientControls: ancLive && ambientLevel >= 0
 
+  // On the ears or not, from a wear sensor — confirmed on the Sony WH-1000XM6,
+  // over the same SYSTEM status channel as the listening mode. Undefined until
+  // one arrives, which is every device with no such sensor and, for one that
+  // has it, the moment before its first line: wearSupported is what tells
+  // "not worn" from "does not say".
+  readonly property bool wearSupported: ancState.worn !== undefined
+  readonly property bool worn: ancState.worn !== false
+
   // Whichever bridge this device calls for. They are exclusive — the backend is
   // one string — so this is "the bridge", not "either of two links".
   readonly property bool bridgeRunning: ancBridge.running || classicBridge.running
@@ -369,12 +377,22 @@ Item {
       return
     }
     if (parsed === null || typeof parsed !== "object" || Array.isArray(parsed)) return
-    var carried = ["available", "level", "voice", "ancLevel", "ancLevels", "latency", "battery"]
+    var carried = ["available", "level", "voice", "worn",
+                   "ancLevel", "ancLevels", "latency", "battery"]
     for (var i = 0; i < carried.length; i++) {
       var key = carried[i]
       if (parsed[key] === undefined && ancState[key] !== undefined) parsed[key] = ancState[key]
     }
+    var wasWorn = ancState.worn
     ancState = parsed
+    // Off the ears, or back on, while still connected — a Sony WH-1000XM6-style
+    // wear sensor, reported over the same channel as the listening mode (see
+    // sony-bridge's on_wear). Only a real edge either way; wasWorn undefined
+    // (nothing has said yet, or a JBL device that never will) fires neither.
+    if (service) {
+      if (wasWorn === true && parsed.worn === false) service.pauseMedia()
+      else if (wasWorn === false && parsed.worn === true) service.resumeMedia()
+    }
     if (parsed.modes === true) {
       ancAnswered = true
       ancErrorRaw = ""
@@ -588,6 +606,11 @@ Item {
     if (connected && sawDisconnected) primed = true
     if (!connected) {
       if (hasDevice) sawDisconnected = true
+      // onConnectedChanged only fires on an actual change, so landing here
+      // always means a real connected -> not transition, never the initial
+      // state of a follower built for a device already disconnected (that
+      // path is Component.onCompleted below, which does not touch this).
+      if (service) service.pauseMedia()
       setNotifiedLow(false)
       forgetLevelHistory()
       reading = ({})

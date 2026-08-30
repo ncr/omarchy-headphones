@@ -61,6 +61,7 @@ Item {
   property bool useModeControl: true
   property int lowThreshold: 20
   property bool notifyLow: true
+  property bool pauseOnDisconnect: true
 
   // ---- Which devices, from BlueZ.
   readonly property var devices: Bluetooth.devices ? Bluetooth.devices.values : []
@@ -441,6 +442,59 @@ Item {
     notifyProcess.running = true
   }
 
+  // ---- Pause whatever is playing the moment a followed device stops being
+  //      worn: taken off the ears (a Sony wear sensor, still connected —
+  //      DeviceFollower's on ancState.worn), or disconnected outright —
+  //      switched off or walked out of range (DeviceFollower's onConnectedChanged).
+  //      Both read the same to a listener: unplug the wire.
+  //
+  //      Only players that were actually playing are paused, and their names
+  //      are kept, so putting the headset back on resumes exactly those and
+  //      nothing the user paused on their own for an unrelated reason — the
+  //      same restraint the official Sony app has. resumeMedia() only fires
+  //      from the wear sensor (DeviceFollower's applyAncLine, on a worn edge),
+  //      never from a reconnect: turning the headset on is not "put it back
+  //      on".
+  property var pausedPlayers: []
+
+  function pauseMedia() {
+    if (!pauseOnDisconnect) return
+    pauseProcess.running = false
+    pauseProcess.running = true
+  }
+
+  function resumeMedia() {
+    if (!pauseOnDisconnect || pausedPlayers.length === 0) return
+    // Tried `-p A,B play` first: despite --help documenting -p as a comma
+    // list, in practice it only ever acted on the first name. A loop it is.
+    resumeProcess.command = ["bash", "-c",
+      "for p in \"$@\"; do playerctl -p \"$p\" play 2>/dev/null; done", "--"
+    ].concat(pausedPlayers)
+    pausedPlayers = []
+    resumeProcess.running = false
+    resumeProcess.running = true
+  }
+
+  // Pauses only what is actually playing right now, and names each one it
+  // touched — one line per name, on stdout — so resumeMedia() can bring back
+  // exactly those later rather than everything playerctl knows about.
+  Process {
+    id: pauseProcess
+    command: ["bash", "-c", "for p in $(playerctl -l 2>/dev/null); do " +
+      "[ \"$(playerctl -p \"$p\" status 2>/dev/null)\" = Playing ] || continue; " +
+      "echo \"$p\"; playerctl -p \"$p\" pause; done"]
+    stdout: StdioCollector { id: pauseOut; waitForEnd: true }
+    onExited: root.pausedPlayers = pauseOut.text.split("\n")
+      .map(function (s) { return s.trim() }).filter(function (s) { return s.length > 0 })
+  }
+
+  // `playerctl -p <name> play`, once per name pauseProcess handed back — its
+  // command is built fresh in resumeMedia() each time, from whatever the list
+  // holds at that moment.
+  Process {
+    id: resumeProcess
+  }
+
   // ---- The IPC surface, `omarchy-shell omaphones <method>`. It lives here and
   //      not in Panel.qml because a target may be registered once and a bar
   //      surface exists per monitor: two screens would mean two handlers
@@ -563,6 +617,12 @@ Item {
       return root.writeAmbientVoice(root.followerFor(which), on)
     }
 
+    // On the ears or not — a wear sensor, confirmed on the Sony WH-1000XM6.
+    // "worn" / "not worn", or "unsupported" for a device that has never said,
+    // JBL earbuds included: nothing here claims a sensor that may not exist.
+    function worn(): string { return root.wornOf(root.primary) }
+    function wornFor(which: string): string { return root.wornOf(root.followerFor(which)) }
+
     // How strong the noise cancelling is, on a device that grades it (Nothing):
     // low, mid, high or adaptive, and empty on a device that has never named a
     // strength — a JBL pair, a Sony headset, or a bridge that has not answered.
@@ -646,6 +706,11 @@ Item {
   function voiceOf(follower) {
     if (!follower || !follower.ambientControls) return ""
     return follower.ambientVoice ? "on" : "off"
+  }
+
+  function wornOf(follower) {
+    if (!follower || !follower.wearSupported) return "unsupported"
+    return follower.worn ? "worn" : "not worn"
   }
 
   function ancLevelOf(follower) {

@@ -43,6 +43,7 @@ Panel {
   readonly property bool notifyLowBattery: Model.asBool(setting("notifyLowBattery", true), true)
   readonly property bool useFastPair: Model.asBool(setting("useFastPair", true), true)
   readonly property bool useModeControl: Model.asBool(setting("useModeControl", true), true)
+  readonly property bool pauseMediaOnDisconnect: Model.asBool(setting("pauseMediaOnDisconnect", true), true)
 
   // The one instance of the plugin's service, shared by every monitor's copy of
   // this widget. Null for the moment between the bar loading and the service
@@ -310,6 +311,12 @@ Panel {
     target: root.service
     property: "notifyLow"
     value: root.notifyLowBattery
+    when: root.service !== null
+  }
+  Binding {
+    target: root.service
+    property: "pauseOnDisconnect"
+    value: root.pauseMediaOnDisconnect
     when: root.service !== null
   }
 
