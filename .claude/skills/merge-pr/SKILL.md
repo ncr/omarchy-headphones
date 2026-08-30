@@ -13,6 +13,14 @@ user's go-ahead** → merge → version → deploy → thank. Never merge or com
 GitHub before the go-ahead, and never check a PR branch out in the plugin
 directory — it is the live plugin and every file written there reloads it.
 
+One fact shapes everything below: nobody has more than their own headphones.
+The maintainer cannot test the contributor's model, the contributor cannot
+test anybody else's, and every model in README's table works today on frames
+that only its owner can retest. That is why the invariant exists, why a
+review's own changes are always handed back to the contributor to confirm,
+and why "ship only what the headset was seen to answer" is a rule and not a
+preference.
+
 Two rules that are not up for discussion in any PR: nothing a working model
 is sent may change (check 1 below), and no `sudo`, `pacman`, `yay` or any
 other install command or outside dependency lands anywhere in the repo —
@@ -119,10 +127,11 @@ Post the comment the user approved:
 gh pr comment N --body-file thanks.md
 ```
 
-Two or three sentences, addressed to the contributor by handle: what of theirs
-landed, what was changed and the one-line reason, and where it is now (the
-version, `omarchy plugin update io.github.ncr.omaphones --yes`). If the
-change touches their hardware in a way only they can confirm, say what to
-look for. Then, if the marketplace listing should follow, the verification
+A few sentences, addressed to the contributor by handle: what of theirs
+landed, what was changed and the one-line reason, where it is now (the
+version, `omarchy plugin update io.github.ncr.omaphones --yes`, `omarchy
+restart shell`), and — always — a request to check it on their headphones,
+naming exactly what to look for: the review changed code for a model nobody
+here owns, so the contributor is the only test there is. Then, if the marketplace listing should follow, the verification
 issue form on `HANCORE-linux/omarchy-plugin-marketplace` with the new
 40-char SHA.

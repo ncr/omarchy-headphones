@@ -136,11 +136,14 @@ open a pull request against `github.com/ncr/omarchy-headphones` with the result.
    and add my device to the table, noting what the device answered in
    `PROTOCOL.md`.
 
-   Two rules hold whatever brand this is, and a pull request that breaks either
-   will be sent back:
+   One fact shapes how this plugin is written: nobody has more than their own
+   headphones. The maintainer cannot test yours, you cannot test anybody
+   else's, and every model in the table works today on frames that only its
+   owner can retest. So two rules hold whatever brand this is, and a pull
+   request that breaks either will be sent back:
 
    **A new model may not change what an existing one is sent.** Somebody else's
-   headphones work today on frames nobody can retest without owning them. So a
+   headphones work today on frames nobody here can retest. So a
    model gets its own row — `MODELS` in `soundcore-bridge` and in `sony-bridge`, an
    inquired type in `sony-bridge` — and adding it adds a row; it does not edit another one, and
    it does not turn a value that was always sent into one that is now decided.
