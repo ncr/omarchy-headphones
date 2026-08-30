@@ -171,6 +171,7 @@ Item {
   // the UUID probe settled started as QList("", address).
   readonly property string jblBridgePath: Qt.resolvedUrl("jbl-bridge").toString().replace(/^file:\/\//, "")
   readonly property string sonyBridgePath: Qt.resolvedUrl("sony-bridge").toString().replace(/^file:\/\//, "")
+  readonly property string samsungBridgePath: Qt.resolvedUrl("samsung-bridge").toString().replace(/^file:\/\//, "")
   readonly property string nothingBridgePath: Qt.resolvedUrl("nothing-bridge").toString().replace(/^file:\/\//, "")
   readonly property string xiaomiBridgePath: Qt.resolvedUrl("xiaomi-bridge").toString().replace(/^file:\/\//, "")
   readonly property string soundcoreBridgePath: Qt.resolvedUrl("soundcore-bridge").toString().replace(/^file:\/\//, "")

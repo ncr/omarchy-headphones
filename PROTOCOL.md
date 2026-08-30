@@ -1217,3 +1217,47 @@ case it is ever the only way in, though on a healthy device the vendor channel
 is simpler and this plugin needs nothing from it. Two notes for anyone who
 tries: the address rotates and arrives unprompted as `0b 02` on the same notify
 handle, and BlueZ drops the LE link the moment no client holds it.
+
+## Samsung Galaxy Buds2 — SPPNew
+
+Confirmed on **Samsung Galaxy Buds2** (`84:5F:04:B5:D6:74`, modalias
+`bluetooth:v0075pA013d0001`). The device advertises Samsung's SPPNew UUID
+`2e73a4ad-332d-41fc-90e2-16bef06523f2`, in addition to the standard audio
+profiles and Google Fast Pair Message Stream. Fast Pair supplies the battery;
+SPPNew supplies the listening mode.
+
+The bridge opens the UUID through `org.bluez.Profile1` as a Classic client. The
+observed framing is:
+
+```
+FD <header u16 little-endian> <message id u8> <payload> <crc16> DD
+```
+
+The header's low ten bits carry the frame size and `0x1000` marks a request.
+The CRC is CRC-16/CCITT over the message id and payload. The Buds2 answered
+with this extended-status frame, which reports ANC and 18% in both earbuds:
+
+```
+fd2a00610b031212010111000000bf22010040014001030003660002001000000000110200010000400000993ddd
+```
+
+The bridge sends this manager-info request on connect and these observed noise
+control requests:
+
+```
+fd061088010122da58dd
+fd04107800f081dd   # Off
+fd04107801d191dd   # ANC
+fd04107802b2a1dd   # Ambient
+```
+
+`set talkthru` is deliberately not sent: the Buds2 model row exposes only the
+three modes seen in its status report. `samsung-bridge` and
+`tests/samsung_bridge_test.py` pin these frames and the status offsets; no
+other Samsung model or byte sequence is inferred here.
+
+What is read is as narrow as what is sent: the extended status (`0x61`) above,
+and a noise-controls update (`0x77`) by its first byte. The plain status
+message (`0x60`) has not been captured from this headset and is not read — a
+capture of one is the next thing worth adding. The charging bits at offset 36
+of the extended status have only been seen as `0x40`, nothing charging.

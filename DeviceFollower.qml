@@ -160,11 +160,13 @@ Item {
   //      the reader announces, has a lifecycle of its own.
   readonly property string jblBridgePath: service ? service.jblBridgePath : ""
   readonly property string sonyBridgePath: service ? service.sonyBridgePath : ""
+  readonly property string samsungBridgePath: service ? service.samsungBridgePath : ""
   readonly property string nothingBridgePath: service ? service.nothingBridgePath : ""
   readonly property string xiaomiBridgePath: service ? service.xiaomiBridgePath : ""
   readonly property string soundcoreBridgePath: service ? service.soundcoreBridgePath : ""
   readonly property string classicBridgePath: {
     if (controlBackend === "sony") return sonyBridgePath
+    if (controlBackend === "samsung") return samsungBridgePath
     if (controlBackend === "nothing") return nothingBridgePath
     if (controlBackend === "xiaomi") return xiaomiBridgePath
     if (controlBackend === "soundcore") return soundcoreBridgePath

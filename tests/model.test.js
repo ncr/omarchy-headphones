@@ -605,6 +605,14 @@ Deno.test("controlBackend picks the protocol the device advertises", () => {
   assertEquals(Model.controlBackend(soundcore, ""), "soundcore");
   assertEquals(Model.controlBackend(soundcore, "48:B4:41:00:00:01"), "soundcore");
   assertEquals(Model.controlBackend(["0CF12D31-FAC3-4553-BD80-D6832E7D1402"], ""), "soundcore");
+  // Samsung's own UUID gets its own bridge instead of falling through to JBL.
+  const samsung = [
+    "00001101-0000-1000-8000-00805f9b34fb",
+    Model.SAMSUNG_SPP_UUID,
+  ];
+  assertEquals(Model.controlBackend(samsung, ""), "samsung");
+  assertEquals(Model.controlBackend(samsung, "48:B4:41:00:00:01"), "samsung");
+  assertEquals(Model.controlBackend([Model.SAMSUNG_SPP_UUID.toUpperCase()], ""), "samsung");
   // Sony still wins when both vendor UUIDs are listed.
   assertEquals(
     Model.controlBackend([Model.CSR_GAIA_UUID, Model.SONY_MDR_V2_UUID], ""),
@@ -716,6 +724,7 @@ Deno.test("controlBackend picks nothing from the NT Link UUID", () => {
   );
   assertEquals(Model.isClassicBackend("nothing"), true);
   assertEquals(Model.isClassicBackend("sony"), true);
+  assertEquals(Model.isClassicBackend("samsung"), true);
   assertEquals(Model.isClassicBackend("xiaomi"), true);
   assertEquals(Model.isClassicBackend("soundcore"), true);
   assertEquals(Model.isClassicBackend("jbl"), false);
