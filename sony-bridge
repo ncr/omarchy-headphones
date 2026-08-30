@@ -1,14 +1,18 @@
 #!/usr/bin/env python3
 """Hold one Sony MDR RFCOMM link and mirror the headset's listening mode.
 
-    sony-bridge <classic-address> [<rfcomm-uuid>]
+    sony-bridge <classic-address> [<rfcomm-uuid>] [<device-name>]
 
 Prints one JSON object per line, and reads one command per line:
 
     stdout   {"modes": true, "mode": "ambient", "available": ["off","anc","ambient"],
-              "level": 10, "voice": false}
+              "level": 10, "voice": false, "worn": true}
              {"modes": false, "error": "..."}
     stdin    set off | set anc | set ambient | level <0-20> | voice on|off
+
+"worn" is left out of the line entirely on a headset that has never sent a
+wearing-status frame. The device name says which models are asked for it —
+MODELS below — and a model that was never asked is never sent the question.
 
 Exit codes, which the shell-side service reads to decide what to do next:
 
@@ -37,8 +41,9 @@ This is the sibling of jbl-bridge, which does the same job for JBL earbuds over
 BLE GATT. Both write the same line shape, so the service does not care which one
 is running; the backend is picked from the device's SDP UUIDs.
 
-Protocol, confirmed on a WH-CH720N — see PROTOCOL.md and the reference probe in
-tools/sony_probe.py, which is what these frames were read off:
+Protocol, confirmed on a WH-CH720N and a WH-1000XM6 — see PROTOCOL.md and the
+reference probe in tools/sony_probe.py, which is what these frames were read
+off:
 
     frame    3E <type> <seq> <len u32be> <payload> <cksum> 3C, everything
              between the markers byte-stuffed with 3D (3C/3D/3E -> 3D, b & EF)
@@ -64,6 +69,11 @@ The two things that only the hardware tells you, both handled below:
     straight after still returns the old state, and about a third of a second
     later the headset sends the NTFY with the new one. So the NTFY is the
     source of truth and nothing is read back after a set.
+  * A WH-1000XM6 answers the NC/ASM GET on 0x17 like the CH720N, but its own
+    unsolicited notifications name a type this bridge never asks for, 0x19 —
+    same fields, one slot over. parse_ncasm() decodes both; PROTOCOL.md has
+    the byte-for-byte comparison. Its wearing sensor is a different message
+    class entirely (SYSTEM status, type 0x10) — see on_wear() below.
 """
 import ctypes
 import json
@@ -111,6 +121,43 @@ DATA_MDR, DATA_MDR_NO2, ACK = 0x0C, 0x0E, 0x01
 CONNECT_RET_PROTOCOL_INFO = 0x01
 NCASM_GET, NCASM_RET, NCASM_SET, NCASM_NTFY = 0x66, 0x67, 0x68, 0x69
 
+# Wearing detection, on the SYSTEM status class rather than NCASM. Observed on
+# a WH-1000XM6: the reply to one GET after the handshake, then the headset
+# speaking up on its own for every take-off and put-on, twice in a row:
+#
+#   GET, asked once:                            f2 10
+#   RET  (0xf3), one data byte:                 f3 10 00              worn
+#   NTFY (0xf5) taking it off, two data bytes:  f5 10 01 01           not worn
+#   NTFY putting it back on:                    f5 10 01 00           worn
+#
+# So: command byte 0xf3 (a GET's reply) or 0xf5 (unsolicited), inquired type
+# 0x10, and the *last* byte is the flag — 0x00 worn, anything else not. The
+# extra byte a NTFY carries before it (always seen as 0x01) is not decoded into
+# anything; only the tail matters, the same way NCASM's variants are read from
+# the tail regardless of their width.
+SYSTEM_GET_STATUS, SYSTEM_RET_STATUS, SYSTEM_NTFY_STATUS = 0xF2, 0xF3, 0xF5
+WEARING_STATUS_TYPE = 0x10
+
+# Which headsets are asked f2 10, keyed by the name the headset reports over
+# Bluetooth (BlueZ's Name; DeviceFollower.qml passes it as the third
+# argument). The rows that say no are models pinned in
+# tests/sony_bridge_test.py: nobody has seen them answer the question, and a
+# headset that works is not sent a frame it never was on the strength of
+# another model answering it. A model nobody has held is asked — the wider
+# choice, and silence costs nothing: on_wear() only ever runs from a real RET
+# or NTFY. A new model with a wear sensor is one more row, not an edit to
+# another owner's.
+MODELS = {
+    "WH-CH720N": {"wear": False},    # ncr
+    "WH-1000XM5": {"wear": False},   # huynguyendinhquang
+    "WH-1000XM4": {"wear": False},   # seth-reee, PR #6
+    "WH-1000XM6": {"wear": True},    # f-iacono, PR #7 — answers f3 10 00
+}
+UNKNOWN = {"wear": True}
+# No name at all is a caller written before this argument, and it gets exactly
+# what it used to: no question.
+NAMELESS = {"wear": False}
+
 # The NC/ASM variants worth asking a headset about. An inquired type belongs to
 # one MDR generation and names one block layout, and the number is unique across
 # both generations, so the answering type — not the UUID and not the handshake —
@@ -134,10 +181,14 @@ CANDIDATES = CANDIDATES_V2 + CANDIDATES_V1
 # What each variant can actually do, which is what the panel draws buttons for.
 # 0x22 (ASM_SEAMLESS) is an ambient-only control: its master switch turns the
 # ambient pass-through on and off, and there is no noise cancelling to select.
+# 0x19 is never asked for (not in CANDIDATES) but is what a WH-1000XM6 sends
+# unprompted for every mode change — same three states as 0x17, which is the
+# type this model does answer a GET on. See parse_ncasm.
 AVAILABLE = {
     0x17: ["off", "anc", "ambient"],
     0x15: ["off", "anc", "ambient"],
     0x22: ["off", "ambient"],
+    0x19: ["off", "anc", "ambient"],
     0x02: ["off", "anc", "ambient"],
 }
 
@@ -151,7 +202,7 @@ MAX_LEVEL = 20
 
 ADDRESS = re.compile(r"^([0-9A-Fa-f]{2}:){5}[0-9A-Fa-f]{2}$")
 
-USAGE = "usage: sony-bridge <classic-address> [<rfcomm-uuid>]"
+USAGE = "usage: sony-bridge <classic-address> [<rfcomm-uuid>] [<device-name>]"
 
 EXIT_TRANSIENT = 1
 EXIT_UNSUPPORTED = 3
@@ -293,11 +344,17 @@ def parse_ncasm(payload, expect=None):
     if len(payload) < 2 or payload[0] not in (NCASM_RET, NCASM_NTFY):
         return None
     inquired = payload[1]
-    if expect is not None and inquired != expect:
+    # The XM6 settles on 0x17, then volunteers compatible wider 0x19 mode
+    # notifications. Other mismatched types still belong to another layout and
+    # must be ignored once a model has answered.
+    if expect is not None and inquired != expect \
+            and not (expect == 0x17 and inquired == 0x19):
         return None
     if inquired in CANDIDATES_V1:
         return parse_ncasm_v1(payload)
-    if inquired in CANDIDATES_V2:
+    # 0x19 is notification-only on the WH-1000XM6: the device answers GET on
+    # 0x17 but reports subsequent mode changes on this compatible wider block.
+    if inquired in CANDIDATES_V2 or inquired == 0x19:
         return parse_ncasm_v2(payload)
     return None
 
@@ -306,12 +363,29 @@ def parse_ncasm_v2(payload):
     """The v2 block: 0x17 and 0x22 are 6 bytes, 0x15 is 8.
 
     Focus-on-voice and the ambient level are the last two bytes of every one of
-    the three layouts, which is why they are read from the tail rather than from
-    an index that depends on the variant.
+    the three GET-able layouts, which is why they are read from the tail rather
+    than from an index that depends on the variant.
     """
     if len(payload) < 6:
         return None
     inquired = payload[1]
+    if inquired == 0x19:
+        # Never a candidate — nothing GETs 0x19 — but a WH-1000XM6 sends it
+        # unprompted for every mode change, answering a SET built for 0x17
+        # (the type its own GET replies on). Confirmed against three states
+        # here — off, anc, and ambient at a non-default level: effect and
+        # ambientMode sit in the same slots as 0x17, followed by voice and
+        # level one slot later, then two trailing 0x00 bytes. As with 0x17,
+        # level/voice are only current while the mode is ambient.
+        if len(payload) < 9:
+            return None
+        return {
+            "inquired": inquired,
+            "mode": "off" if payload[3] != 0x01 else ("ambient" if payload[4] == 0x01 else "anc"),
+            "voice": payload[5] == 0x01,
+            "level": payload[6],
+            "ncValue": None,
+        }
     on = payload[3] == 0x01
     # On 0x22 the master switch *is* the ambient switch; the other two layouts
     # carry the NC-versus-ambient choice in the byte after it.
@@ -365,10 +439,14 @@ def find_device_path(bus, address):
 class Bridge:
     """The whole conversation: registration, handshake, probe, then mirroring."""
 
-    def __init__(self, bus, address, loop, uuid=UUID_V2):
+    def __init__(self, bus, address, loop, uuid=UUID_V2, name=""):
         self.bus = bus
         self.address = address
         self.loop = loop
+        # The row in MODELS for this headset, by the name it reports; it only
+        # decides the one question (wearing status) that not every model is
+        # asked. The block layout is still whatever inquired type answers.
+        self.model = MODELS.get(name, UNKNOWN) if name else NAMELESS
         # Which of Sony's two RFCOMM services to register and connect. It says
         # nothing about the block layout — the answering inquired type does —
         # so a wrong guess here costs a connection, not a wrong frame.
@@ -399,6 +477,10 @@ class Bridge:
         self.level = 0
         self.voice = False
         self.nc_value = NC_VALUE_DEFAULT
+        # None until a SYSTEM status frame says otherwise — most headsets never
+        # send one, and "worn" is left out of the line entirely until one does,
+        # rather than guessed at either state.
+        self.worn = None
         self.last_line = None
 
         self.protocol_seen = False
@@ -662,10 +744,21 @@ class Bridge:
                 self.protocol_seen = True
                 self.order_candidates(len(payload))
                 self.probe(0)
+                # Wearing status is never volunteered at connect the way NCASM's
+                # RET is answered here for free — only a later change speaks up
+                # on its own — so a model in MODELS that answers it is asked
+                # once, up front, rather than leaving `worn` unset until the
+                # first time you take the headset off. The pinned models are
+                # not asked; see MODELS.
+                if self.model["wear"]:
+                    self.push(bytes([SYSTEM_GET_STATUS, WEARING_STATUS_TYPE]))
             return
         state = parse_ncasm(payload, self.inquired)
         if state is not None:
             self.on_state(state)
+        elif len(payload) >= 3 and payload[0] in (SYSTEM_RET_STATUS, SYSTEM_NTFY_STATUS) \
+                and payload[1] == WEARING_STATUS_TYPE:
+            self.on_wear(payload[-1] == 0x00)
 
     def order_candidates(self, length):
         """Ask the generation the handshake named first — and the other after.
@@ -695,6 +788,24 @@ class Bridge:
             # Whatever the headset reports here is what a SET must echo back;
             # inventing a value is how the 0x15 layout gets rejected.
             self.nc_value = state["ncValue"]
+        self.push_line(first)
+
+    def on_wear(self, worn):
+        """SYSTEM status, type 0x10: on-head or not, from a headset that says so.
+
+        Arrives independently of NCASM and on its own schedule — the widget
+        wants to know the moment it changes, not only the next time the
+        listening mode does — so it gets its own push rather than waiting to
+        ride along on an NCASM line. Before the mode is known there is nothing
+        to build a line for; push_line() is called the moment on_state() does
+        settle it, and self.worn is read then like every other field.
+        """
+        self.worn = worn
+        if self.inquired is not None:
+            self.push_line(False)
+
+    def push_line(self, first):
+        """Build the line from current state and emit it if it says something new."""
         line = {
             "modes": True,
             "mode": self.mode,
@@ -702,6 +813,8 @@ class Bridge:
             "level": self.level,
             "voice": self.voice,
         }
+        if self.worn is not None:
+            line["worn"] = self.worn
         if first or line != self.last_line:
             self.last_line = line
             emit(line)
@@ -819,6 +932,9 @@ def main():
         emit({"modes": False,
               "error": "%s (not a UUID: %r)" % (USAGE, uuid)})
         sys.exit(EXIT_SETUP)
+    # The name is optional too, and only looks up a row in MODELS; an empty or
+    # unknown one is handled there, not here.
+    name = argv[2].strip() if len(argv) > 2 else ""
 
     dbus.mainloop.glib.DBusGMainLoop(set_as_default=True)
     try:
@@ -828,7 +944,7 @@ def main():
         sys.exit(EXIT_TRANSIENT)
 
     loop = GLib.MainLoop()
-    bridge = Bridge(bus, address, loop, uuid)
+    bridge = Bridge(bus, address, loop, uuid, name)
 
     class Profile(dbus.service.Object):
         @dbus.service.method("org.bluez.Profile1", in_signature="", out_signature="")

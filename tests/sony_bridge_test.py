@@ -32,6 +32,10 @@ RET = bridge_module.NCASM_RET
 NTFY = bridge_module.NCASM_NTFY
 DATA_MDR = bridge_module.DATA_MDR
 ACK = bridge_module.ACK
+WEAR_GET = bridge_module.SYSTEM_GET_STATUS
+WEAR_RET = bridge_module.SYSTEM_RET_STATUS
+WEAR_NTFY = bridge_module.SYSTEM_NTFY_STATUS
+WEAR_TYPE = bridge_module.WEARING_STATUS_TYPE
 
 
 def device_frame(payload, seq=0):
@@ -63,7 +67,7 @@ class FakeGLib:
 class Session:
     """One bridge with its effects captured: payloads out, lines out, timers."""
 
-    def __init__(self, uuid=None):
+    def __init__(self, uuid=None, name=""):
         self.frames = []
         self.lines = []
         self.glib = FakeGLib()
@@ -71,7 +75,7 @@ class Session:
         bridge_module.GLib = self.glib
         loop = type("Loop", (), {"quit": lambda self: None})()
         self.bridge = bridge_module.Bridge(
-            None, "94:DB:56:D0:F0:F0", loop, uuid or bridge_module.UUID_V2)
+            None, "94:DB:56:D0:F0:F0", loop, uuid or bridge_module.UUID_V2, name)
         self.bridge.write = self.frames.append
         # A real link has an fd; only write() and the framer are exercised here,
         # and write() is captured above.
@@ -139,7 +143,7 @@ class WhCh720n(unittest.TestCase):
     STATE = [RET, 0x17, 0x01, 0x01, 0x01, 0x00, 0x14]
 
     def test_frozen_session(self):
-        s = Session()
+        s = Session(name="WH-CH720N")
         s.receive(device_frame(self.HANDSHAKE))
         # Eight bytes, so the v2 questions come first — and 0x17 is the first.
         self.assertEqual(s.sent, [[GET, 0x17]])
@@ -179,7 +183,7 @@ class WhCh720n(unittest.TestCase):
         self.assertIsNone(s.bridge.exit_code)
 
     def test_a_block_of_another_type_is_dropped_once_one_answered(self):
-        s = Session()
+        s = Session(name="WH-CH720N")
         s.receive(device_frame(self.HANDSHAKE))
         s.ack()
         s.receive(device_frame(self.STATE))
@@ -198,7 +202,7 @@ class Wh1000xm5(unittest.TestCase):
     STATE = [RET, 0x17, 0x01, 0x01, 0x01, 0x00, 0x14]
 
     def test_frozen_session(self):
-        s = Session()
+        s = Session(name="WH-1000XM5")
         s.receive(device_frame(self.HANDSHAKE))
         s.ack()
         s.receive(device_frame(self.STATE))
@@ -229,7 +233,7 @@ class Wh1000xm4(unittest.TestCase):
     STATE = [RET, 0x02, 0x01, 0x02, 0x02, 0x01, 0x00, 0x00]
 
     def test_frozen_session(self):
-        s = Session(bridge_module.UUID_V1)
+        s = Session(bridge_module.UUID_V1, name="WH-1000XM4")
         s.receive(device_frame(self.HANDSHAKE))
         # Four bytes, so the v1 question comes first.
         self.assertEqual(s.sent, [[GET, 0x02]])
@@ -310,6 +314,64 @@ class CandidateOrder(unittest.TestCase):
     def test_every_candidate_has_a_mode_list(self):
         for candidate in bridge_module.CANDIDATES:
             self.assertIn(candidate, bridge_module.AVAILABLE)
+
+
+class Wh1000xm6(unittest.TestCase):
+    """MDR v2 on 0x17, mode changes volunteered on 0x19, and the wear sensor —
+    f-iacono, PR #7. The only pinned model that is asked f2 10."""
+
+    HANDSHAKE = [0x01, 0x00, 0x03, 0x00, 0x20, 0x16, 0x00, 0x00]
+    STATE = [RET, 0x17, 0x01, 0x01, 0x01, 0x00, 0x0F]
+
+    def test_mode_notifications_and_wear_edges(self):
+        s = Session(name="WH-1000XM6")
+        s.receive(device_frame(self.HANDSHAKE))
+        s.ack()
+        # The wearing-status GET is queued behind the NCASM probe.
+        self.assertEqual(s.sent, [[GET, 0x17], [WEAR_GET, WEAR_TYPE]])
+
+        s.receive(device_frame(self.STATE))
+        self.assertNotIn("worn", s.lines[-1])
+        s.ack()
+        s.receive(device_frame([WEAR_RET, WEAR_TYPE, 0x00]))
+        self.assertTrue(s.lines[-1]["worn"])
+
+        # Mode changes arrive on the wider 0x19 block even though the GET was
+        # answered on 0x17; the SET stays the 0x17 one.
+        s.receive(device_frame([NTFY, 0x19, 0x01, 0x01, 0x01, 0x00,
+                                0x0A, 0x00, 0x00]))
+        self.assertEqual(s.lines[-1]["mode"], "ambient")
+        self.assertEqual(s.lines[-1]["level"], 10)
+        self.assertTrue(s.lines[-1]["worn"])
+        s.command("set anc")
+        self.assertEqual(s.sent[-1], [SET, 0x17, 0x01, 1, 0, 0, 10])
+
+        s.receive(device_frame([WEAR_NTFY, WEAR_TYPE, 0x01, 0x01]))
+        self.assertFalse(s.lines[-1]["worn"])
+        s.receive(device_frame([WEAR_NTFY, WEAR_TYPE, 0x01, 0x00]))
+        self.assertTrue(s.lines[-1]["worn"])
+
+
+class WearQuestion(unittest.TestCase):
+    """Who is asked f2 10: a model with no row, and nobody without a name."""
+
+    HANDSHAKE = Wh1000xm5.HANDSHAKE
+
+    def test_a_model_nobody_has_held_is_asked(self):
+        s = Session(name="WF-1000XM5")
+        s.receive(device_frame(self.HANDSHAKE))
+        s.ack()
+        self.assertEqual(s.sent, [[GET, 0x17], [WEAR_GET, WEAR_TYPE]])
+
+    def test_no_name_is_the_old_caller_and_gets_the_old_frames(self):
+        s = Session()
+        s.receive(device_frame(self.HANDSHAKE))
+        s.ack()
+        self.assertEqual(s.sent, [[GET, 0x17]])
+
+    def test_every_pinned_model_has_a_row(self):
+        for name in ("WH-CH720N", "WH-1000XM5", "WH-1000XM4", "WH-1000XM6"):
+            self.assertIn(name, bridge_module.MODELS)
 
 
 class Silent(unittest.TestCase):

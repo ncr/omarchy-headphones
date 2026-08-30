@@ -756,6 +756,37 @@ a type has answered, a block of any other type is dropped.
 `tests/sony_bridge_test.py` pins one session per model — this one, the CH720N
 and the WH-1000XM5 — frame for frame.
 
+## WH-1000XM6: NCASM 0x19 notifications and wear status
+
+The WH-1000XM6 answers the regular NCASM query on type `0x17`, but reports
+subsequent mode changes with an unsolicited `0x19` notification. Its effect
+and ambient-mode bytes occupy the same positions as `0x17`; the wider block
+adds trailing bytes. The bridge therefore never probes `0x19`, but accepts and
+decodes it when the headset volunteers it.
+
+The wear sensor uses the SYSTEM status class, independently from NCASM:
+
+```text
+f2 10          SYSTEM_GET_STATUS, wearing status
+f3 10 00       RET: worn
+f5 10 01 01    NTFY: not worn
+f5 10 01 00    NTFY: worn
+```
+
+The reply and notification have different widths, so the final byte is the
+state: `0x00` means worn and any other value means not worn. The bridge asks
+once after the protocol handshake, then consumes the headset's unsolicited
+notifications. This layout and the automatic media pause/resume path are
+confirmed on the Sony WH-1000XM6.
+
+Which headsets are asked is a row in `MODELS` in `sony-bridge`, keyed by the
+name the headset reports (`bluetoothctl info` shows it as `Name`), which
+`DeviceFollower.qml` passes as the bridge's third argument. The WH-CH720N, the
+WH-1000XM5 and the WH-1000XM4 are not asked — none of them has been seen to
+answer `f2 10`, and their sessions in `tests/sony_bridge_test.py` are unchanged
+by this — while a model with no row is, on the chance it has a sensor; an
+unanswered question costs nothing, since `worn` is only ever set by a reply.
+
 ## Xiaomi Buds 5 Pro — Compact GAIA on SPP
 
 A third device and a third protocol, confirmed on **Xiaomi Buds 5 Pro**

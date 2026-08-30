@@ -2,6 +2,7 @@ import QtQuick
 import Quickshell
 import Quickshell.Io
 import Quickshell.Bluetooth
+import Quickshell.Services.Mpris
 import "Model.js" as Model
 
 // Everything about the earbuds that must exist exactly once, and one follower
@@ -61,6 +62,7 @@ Item {
   property bool useModeControl: true
   property int lowThreshold: 20
   property bool notifyLow: true
+  property bool pauseOnDisconnect: true
 
   // ---- Which devices, from BlueZ.
   readonly property var devices: Bluetooth.devices ? Bluetooth.devices.values : []
@@ -441,6 +443,60 @@ Item {
     notifyProcess.running = true
   }
 
+  // ---- Pause whatever is playing the moment a followed device stops being
+  //      worn: taken off the ears (a Sony wear sensor, still connected —
+  //      DeviceFollower's on ancState.worn), or disconnected outright —
+  //      switched off or walked out of range (DeviceFollower's onConnectedChanged).
+  //      Both read the same to a listener: unplug the wire.
+  //
+  //      Only players that were actually playing are paused, and their names
+  //      are kept, so putting the headset back on resumes exactly those and
+  //      nothing the user paused on their own for an unrelated reason — the
+  //      same restraint the official Sony app has. resumeMedia() only fires
+  //      from the wear sensor (DeviceFollower's applyAncLine, on a worn edge),
+  //      never from a reconnect: turning the headset on is not "put it back
+  //      on".
+  //
+  //      Through Quickshell's MPRIS service — the one the shell's own media
+  //      widget drives — so nothing outside the shell is needed. playerctld,
+  //      a proxy that mirrors whichever player was active last, is skipped the
+  //      way the shell skips it: pausing it pauses a real player twice, and
+  //      playing it later could start a different one.
+  property var pausedPlayers: []   // MPRIS bus names, e.g. org.mpris.MediaPlayer2.spotify
+
+  readonly property var mprisPlayers: Mpris.players ? Mpris.players.values : []
+
+  function isProxyPlayer(player) {
+    var bus = String(player.dbusName || "").toLowerCase()
+    var entry = String(player.desktopEntry || "").toLowerCase()
+    return bus.indexOf("playerctld") !== -1 || entry === "playerctld"
+  }
+
+  function pauseMedia() {
+    if (!pauseOnDisconnect) return
+    var paused = []
+    var players = mprisPlayers
+    for (var i = 0; i < players.length; i++) {
+      var p = players[i]
+      if (!p || isProxyPlayer(p) || !p.isPlaying || !p.canPause) continue
+      p.pause()
+      paused.push(String(p.dbusName))
+    }
+    pausedPlayers = paused
+  }
+
+  function resumeMedia() {
+    if (!pauseOnDisconnect || pausedPlayers.length === 0) return
+    var names = pausedPlayers
+    pausedPlayers = []
+    var players = mprisPlayers
+    for (var i = 0; i < players.length; i++) {
+      var p = players[i]
+      if (!p || names.indexOf(String(p.dbusName)) < 0 || !p.canPlay) continue
+      p.play()
+    }
+  }
+
   // ---- The IPC surface, `omarchy-shell omaphones <method>`. It lives here and
   //      not in Panel.qml because a target may be registered once and a bar
   //      surface exists per monitor: two screens would mean two handlers
@@ -563,6 +619,12 @@ Item {
       return root.writeAmbientVoice(root.followerFor(which), on)
     }
 
+    // On the ears or not — a wear sensor, confirmed on the Sony WH-1000XM6.
+    // "worn" / "not worn", or "unsupported" for a device that has never said,
+    // JBL earbuds included: nothing here claims a sensor that may not exist.
+    function worn(): string { return root.wornOf(root.primary) }
+    function wornFor(which: string): string { return root.wornOf(root.followerFor(which)) }
+
     // How strong the noise cancelling is, on a device that grades it (Nothing):
     // low, mid, high or adaptive, and empty on a device that has never named a
     // strength — a JBL pair, a Sony headset, or a bridge that has not answered.
@@ -646,6 +708,11 @@ Item {
   function voiceOf(follower) {
     if (!follower || !follower.ambientControls) return ""
     return follower.ambientVoice ? "on" : "off"
+  }
+
+  function wornOf(follower) {
+    if (!follower || !follower.wearSupported) return "unsupported"
+    return follower.worn ? "worn" : "not worn"
   }
 
   function ancLevelOf(follower) {
