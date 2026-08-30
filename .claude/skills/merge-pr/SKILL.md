@@ -13,6 +13,12 @@ user's go-ahead** → merge → version → deploy → thank. Never merge or com
 GitHub before the go-ahead, and never check a PR branch out in the plugin
 directory — it is the live plugin and every file written there reloads it.
 
+Two rules that are not up for discussion in any PR: nothing a working model
+is sent may change (check 1 below), and no `sudo`, `pacman`, `yay` or any
+other install command or outside dependency lands anywhere in the repo —
+not in README, not in a comment, not in an error message (checks 4 and 5).
+A PR that has them is fixed on its branch, not merged as-is.
+
 ## 1. Fetch into a worktree
 
 ```bash
@@ -88,8 +94,8 @@ In the plugin directory, on `main`:
 
 ```bash
 git merge --no-ff pr-N -F msg           # subject: "Merge PR #N: <title in the house style>"
-sed -i 's/"version": "X.Y.Z"/"version": "X.Y+1.0"/' manifest.json   # new model or feature: minor; fix: patch
-git commit -am "Version X.Y+1.0"
+sed -i 's/"version": "X.Y.Z"/"version": "X.Y.Z+1"/' manifest.json   # the third number, always, unless the user says otherwise
+git commit -am "Version X.Y.Z+1"
 git push
 omarchy restart shell
 journalctl --user -n 50 | grep -i 'omaphones\|qml' # no QML errors

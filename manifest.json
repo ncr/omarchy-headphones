@@ -2,7 +2,7 @@
   "schemaVersion": 1,
   "id": "io.github.ncr.omaphones",
   "name": "Omaphones",
-  "version": "1.2.0",
+  "version": "1.2.1",
   "author": "Jacek Becela",
   "license": "MIT",
   "description": "Battery levels and noise-cancellation control for Bluetooth headphones, in the Omarchy bar. JBL, Sony, Nothing, Soundcore, Xiaomi; battery on anything with Google Fast Pair or BlueZ.",
