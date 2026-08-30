@@ -73,6 +73,22 @@ class SamsungBridge(unittest.TestCase):
         ])
         self.assertEqual(s.lines, [])
 
+    def test_a_plain_status_frame_is_not_read(self):
+        # 0x60 has not been captured; the same bytes under that id say nothing.
+        s = Session()
+        frame = bytearray(STATUS_FRAME)
+        frame[3] = bridge_module.STATUS_UPDATED
+        crc = bridge_module.crc16(bytes(frame[3:-3]))
+        frame[-3:-1] = crc.to_bytes(2, "little")
+        s.bridge.on_frame(bytes(frame))
+        self.assertEqual(s.lines, [])
+
+    def test_silence_after_the_request_parks_the_address(self):
+        s = Session()
+        s.bridge.send_manager_info()
+        s.bridge.status_timeout()
+        self.assertEqual(s.bridge.exit_code, bridge_module.EXIT_UNSUPPORTED)
+
     def test_parse_state_uses_the_observed_offsets(self):
         self.assertEqual(bridge_module.parse_state(STATUS_PAYLOAD), {
             "modes": True,

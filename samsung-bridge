@@ -10,7 +10,7 @@ Prints one JSON object per line, and reads one command per line:
               "battery": {"left": 18, "right": 18, "case": 0,
                           "charging": []}}
              {"modes": false, "error": "..."}
-    stdin    set off | set anc | set ambient | set talkthru
+    stdin    set off | set anc | set ambient
 
 Exit codes, which the shell-side service reads to decide what to do next:
 
@@ -29,6 +29,13 @@ protocol on that channel: `FD <header u16 little-endian> <msg id u8> <payload>
 <crc16> DD`, where the header carries the payload length in its low 10 bits and
 the request bit in 0x1000. The bridge uses the headset's own extended-status
 report as the source of truth for both the battery and the mode row.
+
+Confirmed on a Galaxy Buds2, and only what it was seen to send is read: the
+extended status (0x61) that answers the manager-info request, and the three
+noise-control SETs. The plain status message (0x60) is not read — nobody has
+captured one, and its layout is not known to be the extended one's — and a
+noise-controls update (0x77) is read from its first byte alone. The charging
+bits in the extended status have only been seen as 0x40, nothing charging.
 """
 import ctypes
 import json
@@ -154,6 +161,8 @@ def parse_state(payload):
         "charging": [],
     }
     if len(payload) > 36:
+        # Seen only as 0x40 with nothing charging; the three bits are the
+        # layout GalaxyBudsClient reads, not one this headset has confirmed.
         charging = []
         status = payload[36]
         if status & 0x10:
@@ -282,8 +291,11 @@ class Bridge:
         GLib.timeout_add(5000, self.status_timeout)
 
     def status_timeout(self):
+        # Linked, asked, and nothing came back: this headset serves the UUID
+        # but not this part of the protocol, so the address is parked rather
+        # than dialled again every few seconds — exit code 3, as sony-bridge.
         if self.exit_code is None and self.state is None:
-            self.finish(EXIT_TRANSIENT, "the Samsung headset did not answer")
+            self.finish(EXIT_UNSUPPORTED, "the Samsung headset did not answer")
         return False
 
     def send_manager_info(self):
@@ -313,7 +325,10 @@ class Bridge:
         if decoded is None:
             return
         header, msgid, payload = decoded
-        if msgid in (STATUS_UPDATED, EXTENDED_STATUS_UPDATED):
+        # Only the extended status: a 0x60 STATUS_UPDATED has not been
+        # captured from this headset, and reading it at the 0x61 offsets would
+        # be a guess about where its mode byte sits.
+        if msgid == EXTENDED_STATUS_UPDATED:
             self.emit_state(parse_state(payload))
             return
         if msgid == NOISE_CONTROLS_UPDATE and payload:

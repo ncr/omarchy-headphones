@@ -116,7 +116,8 @@ open a pull request against `github.com/ncr/omarchy-headphones` with the result.
    <address>` for the UUIDs — `df21fe2c-2515-4fdb-8886-f12c4d67927c` is the
    Google Fast Pair Message Stream (battery), `956c7b26-d49a-4ba8-b03f-b17d393cb6e2`
    is Sony MDR v2 and `96cc203e-5068-46ad-b32d-e316f5e069ba` Sony MDR v1 (both
-   noise control), `aeac4a03-dff5-498f-843a-34487cf133eb` is Nothing NT Link;
+   noise control), `2e73a4ad-332d-41fc-90e2-16bef06523f2` is Samsung SPPNew,
+   `aeac4a03-dff5-498f-843a-34487cf133eb` is Nothing NT Link;
    JBL earbuds are probed over BLE by the plugin itself.
 2. If battery and the mode row both already work, nothing needs
    writing: the pull request is my device's row in the table in `README.md` —
