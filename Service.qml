@@ -2,6 +2,7 @@ import QtQuick
 import Quickshell
 import Quickshell.Io
 import Quickshell.Bluetooth
+import Quickshell.Services.Mpris
 import "Model.js" as Model
 
 // Everything about the earbuds that must exist exactly once, and one follower
@@ -455,44 +456,45 @@ Item {
   //      from the wear sensor (DeviceFollower's applyAncLine, on a worn edge),
   //      never from a reconnect: turning the headset on is not "put it back
   //      on".
-  property var pausedPlayers: []
+  //
+  //      Through Quickshell's MPRIS service — the one the shell's own media
+  //      widget drives — so nothing outside the shell is needed. playerctld,
+  //      a proxy that mirrors whichever player was active last, is skipped the
+  //      way the shell skips it: pausing it pauses a real player twice, and
+  //      playing it later could start a different one.
+  property var pausedPlayers: []   // MPRIS bus names, e.g. org.mpris.MediaPlayer2.spotify
+
+  readonly property var mprisPlayers: Mpris.players ? Mpris.players.values : []
+
+  function isProxyPlayer(player) {
+    var bus = String(player.dbusName || "").toLowerCase()
+    var entry = String(player.desktopEntry || "").toLowerCase()
+    return bus.indexOf("playerctld") !== -1 || entry === "playerctld"
+  }
 
   function pauseMedia() {
     if (!pauseOnDisconnect) return
-    pauseProcess.running = false
-    pauseProcess.running = true
+    var paused = []
+    var players = mprisPlayers
+    for (var i = 0; i < players.length; i++) {
+      var p = players[i]
+      if (!p || isProxyPlayer(p) || !p.isPlaying || !p.canPause) continue
+      p.pause()
+      paused.push(String(p.dbusName))
+    }
+    pausedPlayers = paused
   }
 
   function resumeMedia() {
     if (!pauseOnDisconnect || pausedPlayers.length === 0) return
-    // Tried `-p A,B play` first: despite --help documenting -p as a comma
-    // list, in practice it only ever acted on the first name. A loop it is.
-    resumeProcess.command = ["bash", "-c",
-      "for p in \"$@\"; do playerctl -p \"$p\" play 2>/dev/null; done", "--"
-    ].concat(pausedPlayers)
+    var names = pausedPlayers
     pausedPlayers = []
-    resumeProcess.running = false
-    resumeProcess.running = true
-  }
-
-  // Pauses only what is actually playing right now, and names each one it
-  // touched — one line per name, on stdout — so resumeMedia() can bring back
-  // exactly those later rather than everything playerctl knows about.
-  Process {
-    id: pauseProcess
-    command: ["bash", "-c", "for p in $(playerctl -l 2>/dev/null); do " +
-      "[ \"$(playerctl -p \"$p\" status 2>/dev/null)\" = Playing ] || continue; " +
-      "echo \"$p\"; playerctl -p \"$p\" pause; done"]
-    stdout: StdioCollector { id: pauseOut; waitForEnd: true }
-    onExited: root.pausedPlayers = pauseOut.text.split("\n")
-      .map(function (s) { return s.trim() }).filter(function (s) { return s.length > 0 })
-  }
-
-  // `playerctl -p <name> play`, once per name pauseProcess handed back — its
-  // command is built fresh in resumeMedia() each time, from whatever the list
-  // holds at that moment.
-  Process {
-    id: resumeProcess
+    var players = mprisPlayers
+    for (var i = 0; i < players.length; i++) {
+      var p = players[i]
+      if (!p || names.indexOf(String(p.dbusName)) < 0 || !p.canPlay) continue
+      p.play()
+    }
   }
 
   // ---- The IPC surface, `omarchy-shell omaphones <method>`. It lives here and

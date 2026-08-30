@@ -100,7 +100,7 @@
         "type": "boolean",
         "label": "Pause media when a device disconnects or comes off your ears",
         "defaultValue": true,
-        "description": "Pauses every currently-playing player (via playerctl) when a followed device disconnects (switched off, out of range) and, on headsets with a wear sensor (confirmed on the Sony WH-1000XM6), the moment it comes off your ears while still connected — resuming exactly those players when it goes back on. Needs playerctl installed."
+        "description": "Pauses every playing media player when a followed device disconnects (switched off, out of range) and, on headsets with a wear sensor (confirmed on the Sony WH-1000XM6), the moment it comes off your ears while still connected — and resumes exactly those players when it goes back on."
       }
     ]
   }

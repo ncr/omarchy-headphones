@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Hold one Sony MDR RFCOMM link and mirror the headset's listening mode.
 
-    sony-bridge <classic-address> [<rfcomm-uuid>]
+    sony-bridge <classic-address> [<rfcomm-uuid>] [<device-name>]
 
 Prints one JSON object per line, and reads one command per line:
 
@@ -11,8 +11,8 @@ Prints one JSON object per line, and reads one command per line:
     stdin    set off | set anc | set ambient | level <0-20> | voice on|off
 
 "worn" is left out of the line entirely on a headset that has never sent a
-wearing-status frame — this bridge asks for it once at connect, but plenty of
-Sony models are never expected to answer; see below and PROTOCOL.md.
+wearing-status frame. The device name says which models are asked for it —
+MODELS below — and a model that was never asked is never sent the question.
 
 Exit codes, which the shell-side service reads to decide what to do next:
 
@@ -121,22 +121,42 @@ DATA_MDR, DATA_MDR_NO2, ACK = 0x0C, 0x0E, 0x01
 CONNECT_RET_PROTOCOL_INFO = 0x01
 NCASM_GET, NCASM_RET, NCASM_SET, NCASM_NTFY = 0x66, 0x67, 0x68, 0x69
 
-# Wearing detection, on the SYSTEM status class rather than NCASM — never
-# asked for (nothing here sends a GET for it, the headset volunteers it) but
-# observed unprompted on a WH-1000XM6, taking the headset off and putting it
-# back on, twice in a row:
+# Wearing detection, on the SYSTEM status class rather than NCASM. Observed on
+# a WH-1000XM6: the reply to one GET after the handshake, then the headset
+# speaking up on its own for every take-off and put-on, twice in a row:
 #
-#   RET  (0xf3) at connect, one data byte:      f3 10 00              worn
+#   GET, asked once:                            f2 10
+#   RET  (0xf3), one data byte:                 f3 10 00              worn
 #   NTFY (0xf5) taking it off, two data bytes:  f5 10 01 01           not worn
 #   NTFY putting it back on:                    f5 10 01 00           worn
 #
 # So: command byte 0xf3 (a GET's reply) or 0xf5 (unsolicited), inquired type
 # 0x10, and the *last* byte is the flag — 0x00 worn, anything else not. The
-# RET's extra byte a NTFY carries before it (its own idx 2, always seen as
-# 0x01) is not decoded into anything; only the tail matters, the same way
-# NCASM's variants are read from the tail regardless of their width.
+# extra byte a NTFY carries before it (always seen as 0x01) is not decoded into
+# anything; only the tail matters, the same way NCASM's variants are read from
+# the tail regardless of their width.
 SYSTEM_GET_STATUS, SYSTEM_RET_STATUS, SYSTEM_NTFY_STATUS = 0xF2, 0xF3, 0xF5
 WEARING_STATUS_TYPE = 0x10
+
+# Which headsets are asked f2 10, keyed by the name the headset reports over
+# Bluetooth (BlueZ's Name; DeviceFollower.qml passes it as the third
+# argument). The rows that say no are models pinned in
+# tests/sony_bridge_test.py: nobody has seen them answer the question, and a
+# headset that works is not sent a frame it never was on the strength of
+# another model answering it. A model nobody has held is asked — the wider
+# choice, and silence costs nothing: on_wear() only ever runs from a real RET
+# or NTFY. A new model with a wear sensor is one more row, not an edit to
+# another owner's.
+MODELS = {
+    "WH-CH720N": {"wear": False},    # ncr
+    "WH-1000XM5": {"wear": False},   # huynguyendinhquang
+    "WH-1000XM4": {"wear": False},   # seth-reee, PR #6
+    "WH-1000XM6": {"wear": True},    # f-iacono, PR #7 — answers f3 10 00
+}
+UNKNOWN = {"wear": True}
+# No name at all is a caller written before this argument, and it gets exactly
+# what it used to: no question.
+NAMELESS = {"wear": False}
 
 # The NC/ASM variants worth asking a headset about. An inquired type belongs to
 # one MDR generation and names one block layout, and the number is unique across
@@ -182,7 +202,7 @@ MAX_LEVEL = 20
 
 ADDRESS = re.compile(r"^([0-9A-Fa-f]{2}:){5}[0-9A-Fa-f]{2}$")
 
-USAGE = "usage: sony-bridge <classic-address> [<rfcomm-uuid>]"
+USAGE = "usage: sony-bridge <classic-address> [<rfcomm-uuid>] [<device-name>]"
 
 EXIT_TRANSIENT = 1
 EXIT_UNSUPPORTED = 3
@@ -419,10 +439,14 @@ def find_device_path(bus, address):
 class Bridge:
     """The whole conversation: registration, handshake, probe, then mirroring."""
 
-    def __init__(self, bus, address, loop, uuid=UUID_V2):
+    def __init__(self, bus, address, loop, uuid=UUID_V2, name=""):
         self.bus = bus
         self.address = address
         self.loop = loop
+        # The row in MODELS for this headset, by the name it reports; it only
+        # decides the one question (wearing status) that not every model is
+        # asked. The block layout is still whatever inquired type answers.
+        self.model = MODELS.get(name, UNKNOWN) if name else NAMELESS
         # Which of Sony's two RFCOMM services to register and connect. It says
         # nothing about the block layout — the answering inquired type does —
         # so a wrong guess here costs a connection, not a wrong frame.
@@ -722,11 +746,12 @@ class Bridge:
                 self.probe(0)
                 # Wearing status is never volunteered at connect the way NCASM's
                 # RET is answered here for free — only a later change speaks up
-                # on its own — so it is asked for once, up front, rather than
-                # leaving `worn` unset until the first time you take the headset
-                # off. Silence is fine: on_wear() only ever runs from a real
-                # RET or NTFY, never from this going unanswered.
-                self.push(bytes([SYSTEM_GET_STATUS, WEARING_STATUS_TYPE]))
+                # on its own — so a model in MODELS that answers it is asked
+                # once, up front, rather than leaving `worn` unset until the
+                # first time you take the headset off. The pinned models are
+                # not asked; see MODELS.
+                if self.model["wear"]:
+                    self.push(bytes([SYSTEM_GET_STATUS, WEARING_STATUS_TYPE]))
             return
         state = parse_ncasm(payload, self.inquired)
         if state is not None:
@@ -907,6 +932,9 @@ def main():
         emit({"modes": False,
               "error": "%s (not a UUID: %r)" % (USAGE, uuid)})
         sys.exit(EXIT_SETUP)
+    # The name is optional too, and only looks up a row in MODELS; an empty or
+    # unknown one is handled there, not here.
+    name = argv[2].strip() if len(argv) > 2 else ""
 
     dbus.mainloop.glib.DBusGMainLoop(set_as_default=True)
     try:
@@ -916,7 +944,7 @@ def main():
         sys.exit(EXIT_TRANSIENT)
 
     loop = GLib.MainLoop()
-    bridge = Bridge(bus, address, loop, uuid)
+    bridge = Bridge(bus, address, loop, uuid, name)
 
     class Profile(dbus.service.Object):
         @dbus.service.method("org.bluez.Profile1", in_signature="", out_signature="")

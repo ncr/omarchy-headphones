@@ -779,6 +779,14 @@ once after the protocol handshake, then consumes the headset's unsolicited
 notifications. This layout and the automatic media pause/resume path are
 confirmed on the Sony WH-1000XM6.
 
+Which headsets are asked is a row in `MODELS` in `sony-bridge`, keyed by the
+name the headset reports (`bluetoothctl info` shows it as `Name`), which
+`DeviceFollower.qml` passes as the bridge's third argument. The WH-CH720N, the
+WH-1000XM5 and the WH-1000XM4 are not asked — none of them has been seen to
+answer `f2 10`, and their sessions in `tests/sony_bridge_test.py` are unchanged
+by this — while a model with no row is, on the chance it has a sensor; an
+unanswered question costs nothing, since `worn` is only ever set by a reply.
+
 ## Xiaomi Buds 5 Pro — Compact GAIA on SPP
 
 A third device and a third protocol, confirmed on **Xiaomi Buds 5 Pro**

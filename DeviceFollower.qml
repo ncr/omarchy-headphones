@@ -44,6 +44,10 @@ Item {
   readonly property bool hasDevice: !!device
   readonly property bool connected: hasDevice && device.connected === true
   readonly property string name: hasDevice ? Model.deviceLabel(device) : ""
+  // The name the headset itself reports (BlueZ's Name), never the alias a
+  // person may have set: sony-bridge looks its model up by it.
+  readonly property string reportedName: hasDevice
+    ? (Model.plainText(device.deviceName).trim() || name) : ""
 
   // ---- The settings live on the service, where the panel pushes them. They are
   //      the same for every device — a threshold is about you, not about a
@@ -732,11 +736,12 @@ Item {
     id: classicBridge
     running: follower.classicArmed
     // Every classic bridge takes the address; sony-bridge takes the UUID after
-    // it, and defaults to v2 without one, which is what it was always sent.
+    // it, and defaults to v2 without one, which is what it was always sent, and
+    // then the reported name, which picks its row in the bridge's MODELS.
     command: follower.classicBridgePath === ""
       ? ["true"]
       : (follower.sonyUuid !== ""
-        ? [follower.classicBridgePath, follower.address, follower.sonyUuid]
+        ? [follower.classicBridgePath, follower.address, follower.sonyUuid, follower.reportedName]
         : [follower.classicBridgePath, follower.address])
     stdinEnabled: true
     stdout: SplitParser {

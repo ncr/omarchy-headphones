@@ -10,9 +10,6 @@
 omarchy plugin add https://github.com/ncr/omarchy-headphones --enable
 ```
 
-Install `playerctl` as well to enable automatic pause/resume on supported wear
-sensors: `sudo pacman -S --needed playerctl`.
-
 **Update** an installed copy:
 
 ```bash
@@ -73,8 +70,9 @@ Headphones not on the list? [Add yours](#add-your-own-headphones).
   wind noise reduction; Nothing the ANC strength (Low / Mid / High / Adaptive)
   and a low-latency switch.
 - **Pause when you take them off, resume when you put them back on** — on a
-  headset with a wear sensor (confirmed on the Sony WH-1000XM6). Only players
-  paused by the sensor are resumed. Requires `playerctl`.
+  headset with a wear sensor (confirmed on the Sony WH-1000XM6). Only the
+  players the sensor paused are resumed. Any headphones pause what is playing
+  when they disconnect.
 - **Several headphones at once** — one icon per connected set, each with its own
   panel.
 - **Low-battery notification** that names the earbud.
@@ -143,8 +141,8 @@ open a pull request against `github.com/ncr/omarchy-headphones` with the result.
 
    **A new model may not change what an existing one is sent.** Somebody else's
    headphones work today on frames nobody can retest without owning them. So a
-   model gets its own row — `MODELS` in `soundcore-bridge`, an inquired type in
-   `sony-bridge` — and adding it adds a row; it does not edit another one, and
+   model gets its own row — `MODELS` in `soundcore-bridge` and in `sony-bridge`, an
+   inquired type in `sony-bridge` — and adding it adds a row; it does not edit another one, and
    it does not turn a value that was always sent into one that is now decided.
    Where something must be decided, let it widen rather than narrow: prefer
    asking one more question to asking one fewer.
@@ -250,7 +248,7 @@ and booleans), or the widget's entry in `~/.config/omarchy/shell.json`.
 | `showPercentage`       | `false` | A written percentage instead of the drawn meter; costs a bar slot.                                                       |
 | `hideWhenDisconnected` | `true`  | Drop the widget while nothing is connected.                                                                              |
 | `notifyLowBattery`     | `true`  | Send the notification.                                                                                                   |
-| `pauseMediaOnDisconnect` | `true` | Pause playing MPRIS players on disconnect or wear-off and resume the same players on wear-on. Requires `playerctl`.     |
+| `pauseMediaOnDisconnect` | `true` | Pause playing media players when a device disconnects or comes off the ears, and resume the same players when it goes back on. |
 
 ## Credits
 
