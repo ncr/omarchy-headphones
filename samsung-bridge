@@ -1,0 +1,481 @@
+#!/usr/bin/env python3
+"""Hold one Samsung SPP link and mirror the Buds2 noise-control state.
+
+    samsung-bridge <classic-address>
+
+Prints one JSON object per line, and reads one command per line:
+
+    stdout   {"modes": true, "mode": "anc",
+              "available": ["off","anc","ambient"],
+              "battery": {"left": 18, "right": 18, "case": 0,
+                          "charging": []}}
+             {"modes": false, "error": "..."}
+    stdin    set off | set anc | set ambient | set talkthru
+
+Exit codes, which the shell-side service reads to decide what to do next:
+
+    0   clean stop: SIGTERM/SIGINT, or the widget closed the pipe
+    1   transient: the channel never opened, or closed under us. Says nothing
+        about the device, so the service retries with a growing pause
+    3   linked but silent: connected, asked, heard nothing. This headset
+        speaks Samsung's SPPNew protocol but not this part of it, so the
+        service parks the address
+    4   setup failure: bad arguments, or a Python without Bluetooth sockets.
+        About this machine, not about the device
+
+The Buds2 and later advertise the SPPNew UUID
+`2e73a4ad-332d-41fc-90e2-16bef06523f2`. The device speaks Samsung's framed SPP
+protocol on that channel: `FD <header u16 little-endian> <msg id u8> <payload>
+<crc16> DD`, where the header carries the payload length in its low 10 bits and
+the request bit in 0x1000. The bridge uses the headset's own extended-status
+report as the source of truth for both the battery and the mode row.
+"""
+import ctypes
+import json
+import os
+import re
+import signal
+import struct
+import sys
+
+try:
+    import dbus
+    import dbus.mainloop.glib
+    import dbus.service
+    from gi.repository import GLib
+except ImportError as error:
+    sys.stdout.write(json.dumps({
+        "modes": False,
+        "error": "missing python dependency %s"
+                 % (getattr(error, "name", None) or error),
+    }) + "\n")
+    sys.stdout.flush()
+    sys.exit(4)
+
+try:
+    from gi.repository import GLibUnix
+    unix_signal_add = GLibUnix.signal_add
+except ImportError:
+    unix_signal_add = GLib.unix_signal_add
+
+UUID = "2e73a4ad-332d-41fc-90e2-16bef06523f2"
+PROFILE_PATH = "/io/github/ncr/omaphones/samsung"
+ADDRESS = re.compile(r"^([0-9A-Fa-f]{2}:){5}[0-9A-Fa-f]{2}$")
+
+SOF = 0xFD
+EOF = 0xDD
+
+MANAGER_INFO = 136
+STATUS_UPDATED = 96
+EXTENDED_STATUS_UPDATED = 97
+NOISE_CONTROLS = 120
+NOISE_CONTROLS_UPDATE = 119
+
+AVAILABLE = ["off", "anc", "ambient"]
+MODE_FROM_BYTE = {0x00: "off", 0x01: "anc", 0x02: "ambient"}
+MODE_TO_BYTE = {value: key for key, value in MODE_FROM_BYTE.items()}
+
+EXIT_TRANSIENT = 1
+EXIT_UNSUPPORTED = 3
+EXIT_SETUP = 4
+REPLY_TIMEOUT = 5
+CONNECT_TIMEOUT = 30
+CONNECT_DELAY = 500
+
+
+def emit(payload):
+    try:
+        sys.stdout.write(json.dumps(payload, separators=(",", ":")) + "\n")
+        sys.stdout.flush()
+    except (BrokenPipeError, ValueError):
+        os._exit(0)
+
+
+def arm_parent_death_signal():
+    try:
+        libc = ctypes.CDLL("libc.so.6", use_errno=True)
+        libc.prctl(1, signal.SIGTERM)
+    except Exception:
+        return
+    if os.getppid() == 1:
+        os._exit(0)
+
+
+def crc16(data):
+    crc = 0
+    for byte in data:
+        crc ^= byte << 8
+        for _ in range(8):
+            if crc & 0x8000:
+                crc = ((crc << 1) ^ 0x1021) & 0xFFFF
+            else:
+                crc = (crc << 1) & 0xFFFF
+    return crc & 0xFFFF
+
+
+def encode(msgid, payload=b"", request=True):
+    size = 1 + len(payload) + 2
+    header = (size & 0x3FF) | (0x1000 if request else 0)
+    body = bytes([SOF]) + struct.pack("<H", header) + bytes([msgid]) + payload
+    return body + struct.pack("<H", crc16(bytes([msgid]) + payload)) + bytes([EOF])
+
+
+def decode(frame):
+    if len(frame) < 7 or frame[0] != SOF or frame[-1] != EOF:
+        return None
+    header = struct.unpack_from("<H", frame, 1)[0]
+    size = header & 0x3FF
+    if len(frame) != 1 + 2 + size + 1:
+        return None
+    msgid = frame[3]
+    payload = frame[4:-3]
+    if frame[-3:-1] != struct.pack("<H", crc16(bytes([msgid]) + payload)):
+        return None
+    return header, msgid, payload
+
+
+def first_int(payload, index):
+    if index >= len(payload):
+        return -1
+    value = payload[index]
+    return value if 0 <= value <= 100 else -1
+
+
+def parse_state(payload):
+    if len(payload) < 13:
+        return None
+    mode = MODE_FROM_BYTE.get(payload[12])
+    if mode is None:
+        return None
+    battery = {
+        "left": first_int(payload, 2),
+        "right": first_int(payload, 3),
+        "case": first_int(payload, 7),
+        "charging": [],
+    }
+    if len(payload) > 36:
+        charging = []
+        status = payload[36]
+        if status & 0x10:
+            charging.append("left")
+        if status & 0x04:
+            charging.append("right")
+        if status & 0x01:
+            charging.append("case")
+        battery["charging"] = charging
+    return {
+        "modes": True,
+        "mode": mode,
+        "available": AVAILABLE,
+        "battery": battery,
+    }
+
+
+class Stop(Exception):
+    """Raised into the main loop when the bridge should stop."""
+
+
+class Bridge:
+    def __init__(self, bus, address, loop):
+        self.bus = bus
+        self.address = address
+        self.loop = loop
+        self.exit_code = None
+        self.device = None
+        self.manager = None
+        self.registered = False
+        self.fd = None
+        self.watch = None
+        self.buffer = bytearray()
+        self.pending = ""
+        self.connected = False
+        self.last_line = None
+        self.state = None
+        self.manager_sent = False
+
+    def finish(self, code, message=None):
+        if self.exit_code is not None:
+            return False
+        self.exit_code = code
+        if message:
+            emit({"modes": False, "error": message})
+        self.loop.quit()
+        return False
+
+    def unregister(self):
+        if self.watch is not None:
+            try:
+                GLib.source_remove(self.watch)
+            except Exception:
+                pass
+            self.watch = None
+        if self.fd is not None:
+            try:
+                os.close(self.fd)
+            except OSError:
+                pass
+            self.fd = None
+        if self.manager is not None and self.registered:
+            try:
+                self.manager.UnregisterProfile(PROFILE_PATH, timeout=REPLY_TIMEOUT)
+            except dbus.DBusException:
+                pass
+            self.registered = False
+
+    def register(self):
+        try:
+            device_path = find_device_path(self.bus, self.address)
+        except dbus.DBusException as error:
+            return self.finish(EXIT_TRANSIENT,
+                               "cannot reach BlueZ: %s" % error.get_dbus_message())
+        if not device_path:
+            return self.finish(EXIT_TRANSIENT,
+                               "no paired device with address %s" % self.address)
+        self.device = dbus.Interface(
+            self.bus.get_object("org.bluez", device_path), "org.bluez.Device1")
+        self.manager = dbus.Interface(
+            self.bus.get_object("org.bluez", "/org/bluez"), "org.bluez.ProfileManager1")
+        try:
+            self.manager.RegisterProfile(PROFILE_PATH, UUID, {
+                "Name": "Omaphones Samsung",
+                "Role": "client",
+                "RequireAuthentication": dbus.Boolean(False),
+                "RequireAuthorization": dbus.Boolean(False),
+            }, timeout=REPLY_TIMEOUT)
+        except dbus.DBusException as error:
+            return self.finish(EXIT_TRANSIENT,
+                               "cannot register the Samsung profile: %s"
+                               % error.get_dbus_message())
+        self.registered = True
+        GLib.timeout_add(CONNECT_DELAY, self.connect, 0)
+        return False
+
+    def connect(self, attempt):
+        if self.exit_code is not None or self.fd is not None:
+            return False
+
+        def failed(error):
+            if self.exit_code is not None or self.fd is not None:
+                return
+            self.finish(EXIT_TRANSIENT, "cannot open the Samsung channel: %s"
+                        % error.get_dbus_message())
+
+        try:
+            self.device.ConnectProfile(UUID, reply_handler=lambda: None,
+                                       error_handler=failed, timeout=CONNECT_TIMEOUT)
+        except dbus.DBusException as error:
+            failed(error)
+        return False
+
+    def opened(self, fd):
+        if self.fd is not None:
+            try:
+                os.close(fd)
+            except OSError:
+                pass
+            return
+        self.fd = fd
+        self.watch = GLib.io_add_watch(fd, GLib.PRIORITY_DEFAULT,
+                                       GLib.IO_IN | GLib.IO_HUP | GLib.IO_ERR,
+                                       self.on_io)
+        self.send_manager_info()
+        GLib.timeout_add(5000, self.status_timeout)
+
+    def status_timeout(self):
+        if self.exit_code is None and self.state is None:
+            self.finish(EXIT_TRANSIENT, "the Samsung headset did not answer")
+        return False
+
+    def send_manager_info(self):
+        if self.fd is None or self.manager_sent:
+            return
+        self.manager_sent = True
+        self.write(encode(MANAGER_INFO, bytes([1, 1, 34]), request=True))
+
+    def write(self, frame):
+        if self.fd is None:
+            return
+        try:
+            written = 0
+            while written < len(frame):
+                written += os.write(self.fd, frame[written:])
+        except OSError as error:
+            self.finish(EXIT_TRANSIENT, "the Samsung channel closed: %s" % error)
+
+    def emit_state(self, state):
+        if state and state != self.last_line:
+            self.last_line = state
+            self.state = state
+            emit(state)
+
+    def on_frame(self, frame):
+        decoded = decode(frame)
+        if decoded is None:
+            return
+        header, msgid, payload = decoded
+        if msgid in (STATUS_UPDATED, EXTENDED_STATUS_UPDATED):
+            self.emit_state(parse_state(payload))
+            return
+        if msgid == NOISE_CONTROLS_UPDATE and payload:
+            mode = MODE_FROM_BYTE.get(payload[0])
+            if mode is None:
+                return
+            state = dict(self.state or {
+                "modes": True,
+                "mode": mode,
+                "available": AVAILABLE,
+                "battery": {"left": -1, "right": -1, "case": -1, "charging": []},
+            })
+            state["mode"] = mode
+            self.emit_state(state)
+            return
+
+    def parse_buffer(self):
+        while True:
+            start = self.buffer.find(SOF)
+            if start < 0:
+                self.buffer.clear()
+                return
+            if start:
+                del self.buffer[:start]
+            if len(self.buffer) < 7:
+                return
+            header = struct.unpack_from("<H", self.buffer, 1)[0]
+            size = header & 0x3FF
+            total = 1 + 2 + size + 1
+            if len(self.buffer) < total:
+                return
+            frame = bytes(self.buffer[:total])
+            del self.buffer[:total]
+            if frame[-1] != EOF:
+                continue
+            self.on_frame(frame)
+            if self.exit_code is not None:
+                return
+
+    def command(self, line):
+        parts = line.strip().split()
+        if not parts:
+            return
+        if parts[0] != "set" or len(parts) < 2:
+            return
+        if parts[1] not in MODE_TO_BYTE:
+            return
+        self.write(encode(NOISE_CONTROLS, bytes([MODE_TO_BYTE[parts[1]]]), request=True))
+
+    def on_io(self, _fd, condition):
+        if condition & (GLib.IO_HUP | GLib.IO_ERR):
+            self.finish(EXIT_TRANSIENT, "the Samsung channel closed")
+            return False
+        try:
+            data = os.read(self.fd, 4096)
+        except OSError as error:
+            self.finish(EXIT_TRANSIENT, "the Samsung channel closed: %s" % error)
+            return False
+        if not data:
+            self.finish(EXIT_TRANSIENT, "the Samsung channel closed")
+            return False
+        self.buffer += data
+        self.parse_buffer()
+        return self.exit_code is None
+
+    def listen_to_stdin(self):
+        GLib.io_add_watch(0, GLib.PRIORITY_DEFAULT,
+                          GLib.IO_IN | GLib.IO_HUP | GLib.IO_ERR, self.on_stdin)
+
+    def on_stdin(self, _fd, condition):
+        if condition & (GLib.IO_HUP | GLib.IO_ERR):
+            self.finish(0)
+            return False
+        try:
+            chunk = os.read(0, 4096)
+        except OSError:
+            self.finish(0)
+            return False
+        if not chunk:
+            self.finish(0)
+            return False
+        self.pending += chunk.decode("utf-8", "replace")
+        while "\n" in self.pending:
+            line, self.pending = self.pending.split("\n", 1)
+            self.command(line)
+        return True
+
+
+def find_device_path(bus, address):
+    wanted = address.upper()
+    objects = dbus.Interface(bus.get_object("org.bluez", "/"),
+                             "org.freedesktop.DBus.ObjectManager").GetManagedObjects()
+    for path, interfaces in objects.items():
+        device = interfaces.get("org.bluez.Device1")
+        if device and str(device.get("Address", "")).upper() == wanted:
+            return str(path)
+    return None
+
+
+def main():
+    argv = sys.argv[1:]
+    address = argv[0].strip() if argv else ""
+    if argv and argv[0] in ("-h", "--help"):
+        print("usage: samsung-bridge <classic-address>")
+        return 0
+    if not argv or not ADDRESS.match(address):
+        emit({"modes": False,
+              "error": "usage: samsung-bridge <classic-address> "
+                       "(not a Bluetooth address: %r)" % address})
+        sys.exit(EXIT_SETUP)
+
+    dbus.mainloop.glib.DBusGMainLoop(set_as_default=True)
+    try:
+        bus = dbus.SystemBus()
+    except dbus.DBusException as error:
+        emit({"modes": False, "error": "no system bus: %s" % error.get_dbus_message()})
+        sys.exit(EXIT_TRANSIENT)
+
+    loop = GLib.MainLoop()
+    bridge = Bridge(bus, address, loop)
+
+    class Profile(dbus.service.Object):
+        @dbus.service.method("org.bluez.Profile1", in_signature="", out_signature="")
+        def Release(self):
+            bridge.finish(EXIT_TRANSIENT, "BlueZ released the Samsung profile")
+
+        @dbus.service.method("org.bluez.Profile1", in_signature="oha{sv}",
+                             out_signature="")
+        def NewConnection(self, path, fd, properties):
+            bridge.opened(fd.take())
+
+        @dbus.service.method("org.bluez.Profile1", in_signature="o", out_signature="")
+        def RequestDisconnection(self, path):
+            bridge.finish(EXIT_TRANSIENT, "the Samsung channel closed")
+
+    Profile(bus, PROFILE_PATH)
+    bridge.listen_to_stdin()
+    bridge.register()
+
+    def stop(*_args):
+        bridge.finish(0)
+        return False
+
+    unix_signal_add(GLib.PRIORITY_DEFAULT, signal.SIGTERM, stop)
+    unix_signal_add(GLib.PRIORITY_DEFAULT, signal.SIGINT, stop)
+
+    try:
+        if bridge.exit_code is None:
+            loop.run()
+    finally:
+        bridge.unregister()
+    sys.exit(bridge.exit_code or 0)
+
+
+if __name__ == "__main__":
+    arm_parent_death_signal()
+    try:
+        main()
+    except SystemExit:
+        raise
+    except KeyboardInterrupt:
+        pass
+    except BaseException as error:
+        emit({"modes": False, "error": "%s: %s" % (type(error).__name__, error)})
+        sys.exit(EXIT_TRANSIENT)

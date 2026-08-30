@@ -1,6 +1,6 @@
 # Omaphones for Omarchy
 
-<p align="center"><b>JBL</b> &nbsp;·&nbsp; <b>Sony</b> &nbsp;·&nbsp; <b>Nothing</b> &nbsp;·&nbsp; <b>Soundcore</b> &nbsp;·&nbsp; <b>Xiaomi</b></p>
+<p align="center"><b>JBL</b> &nbsp;·&nbsp; <b>Sony</b> &nbsp;·&nbsp; <b>Samsung</b> &nbsp;·&nbsp; <b>Nothing</b> &nbsp;·&nbsp; <b>Soundcore</b> &nbsp;·&nbsp; <b>Xiaomi</b></p>
 
 <p align="center"><b>Battery levels and noise-cancellation control for Bluetooth headphones, in the Omarchy bar.</b></p>
 
@@ -49,11 +49,11 @@ Headphones not on the list? [Add yours](#add-your-own-headphones).
 </tr>
 <tr>
 <td width="50%"><img src="docs/gallery/sony-wh-1000xm4.png" alt="Sony WH-1000XM4: one battery, Off / ANC / Ambient" width="100%"></td>
-<td width="50%"></td>
+<td width="50%"><img src="docs/gallery/samsung-galaxy-buds2.png" alt="Samsung Galaxy Buds2: left, right and case, Off / ANC / Ambient" width="100%"></td>
 </tr>
 <tr>
 <td align="center">Sony WH-1000XM4 — <a href="https://github.com/seth-reee">@seth-reee</a></td>
-<td align="center"></td>
+<td align="center">Samsung Galaxy Buds2 — <a href="https://github.com/seth-reee">@seth-reee</a></td>
 </tr>
 </table>
 
@@ -65,7 +65,7 @@ Headphones not on the list? [Add yours](#add-your-own-headphones).
   headphones, filling up as they charge. Readable from the bar without opening
   anything.
 - **Noise control** — Off / ANC / Ambient / TalkThru, from the panel or a key.
-  JBL, Sony, Nothing, Soundcore and Xiaomi Buds 5 Pro today; built to learn
+  JBL, Sony, Samsung, Nothing, Soundcore and Xiaomi Buds 5 Pro today; built to learn
   your brand. Sony and Soundcore add the ambient level with Focus on Voice or
   wind noise reduction; Nothing the ANC strength (Low / Mid / High / Adaptive)
   and a low-latency switch.
@@ -90,6 +90,7 @@ same idea, built for Apple's own protocol, and the plugin this one is modelled o
 | Sony WH-CH720N (over-ear)   | <img src="docs/icons/yes.svg" width="14" alt="yes"> one figure        | <img src="docs/icons/yes.svg" width="14" alt="yes"> Off · ANC · Ambient (level, Focus on Voice) | [@ncr](https://github.com/ncr) |
 | Sony WH-1000XM5 (over-ear)  | <img src="docs/icons/yes.svg" width="14" alt="yes"> one figure        | <img src="docs/icons/yes.svg" width="14" alt="yes"> Off · ANC · Ambient (level, Focus on Voice) | [@huynguyendinhquang](https://github.com/huynguyendinhquang) |
 | Sony WH-1000XM4 (over-ear)  | <img src="docs/icons/yes.svg" width="14" alt="yes"> one figure        | <img src="docs/icons/yes.svg" width="14" alt="yes"> Off · ANC · Ambient                          | [@seth-reee](https://github.com/seth-reee) |
+| Samsung Galaxy Buds2 (earbuds) | <img src="docs/icons/yes.svg" width="14" alt="yes"> left, right, case | <img src="docs/icons/yes.svg" width="14" alt="yes"> Off · ANC · Ambient | [@seth-reee](https://github.com/seth-reee) |
 | Soundcore Space 2 (over-ear)| <img src="docs/icons/yes.svg" width="14" alt="yes"> one figure        | <img src="docs/icons/yes.svg" width="14" alt="yes"> Off · ANC · Ambient (level, wind noise reduction) | [@Sovego](https://github.com/Sovego) |
 | Xiaomi Buds 5 Pro (earbuds) | <img src="docs/icons/yes.svg" width="14" alt="yes"> one figure        | <img src="docs/icons/yes.svg" width="14" alt="yes"> Off · ANC · Ambient                          | [@KentoNion](https://github.com/KentoNion)|
 | Nothing Ear (a) (earbuds)   | <img src="docs/icons/yes.svg" width="14" alt="yes"> left, right, case | <img src="docs/icons/yes.svg" width="14" alt="yes"> Off · ANC (Low / Mid / High / Adaptive) · Ambient · low latency | [@Jenesaispas69](https://github.com/Jenesaispas69) |
