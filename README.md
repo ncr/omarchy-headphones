@@ -60,7 +60,7 @@ Headphones not on the list? [Add yours](#add-your-own-headphones).
 <table>
 <tr>
 <td width="50%"><img src="docs/gallery/samsung-galaxy-buds2.png" alt="Samsung Galaxy Buds2: left, right and case, Off / ANC / Ambient" width="100%"></td>
-<td width="50%"><img src="docs/gallery/sony-1000X.png" alt="Sony 1000X The Collexion: one battery, Off / ANC / Ambient" width="100%"></td>
+<td width="50%"><img src="docs/gallery/sony-1000x-the-collexion.png" alt="Sony 1000X The Collexion: one battery, Off / ANC / Ambient, the ambient level slider and the Focus on voice switch" width="100%"></td>
 </tr>
 <tr>
 <td align="center">Samsung Galaxy Buds2 — <a href="https://github.com/seth-reee">@seth-reee</a></td>
@@ -70,7 +70,7 @@ Headphones not on the list? [Add yours](#add-your-own-headphones).
 
 <table>
 <tr>
-<td width="50%"><img src="docs/gallery/Xiaomi-Buds-5-Pro.png" alt="Xiaomi Buds 5 Pro: one battery, Off / ANC / Ambient" width="100%"></td>
+<td width="50%"><img src="docs/gallery/xiaomi-buds-5-pro.png" alt="Xiaomi Buds 5 Pro: one battery, Off / ANC / Ambient" width="100%"></td>
 <td width="50%"></td>
 </tr>
 <tr>
@@ -117,7 +117,7 @@ same idea, built for Apple's own protocol, and the plugin this one is modelled o
 | Sony WH-1000XM5 (over-ear)  | <img src="docs/icons/yes.svg" width="14" alt="yes"> one figure        | <img src="docs/icons/yes.svg" width="14" alt="yes"> Off · ANC · Ambient (level, Focus on Voice) | [@huynguyendinhquang](https://github.com/huynguyendinhquang) |
 | Sony WH-1000XM6 (over-ear)  | <img src="docs/icons/yes.svg" width="14" alt="yes"> one figure        | <img src="docs/icons/yes.svg" width="14" alt="yes"> Off · ANC · Ambient (level, Focus on Voice) · wear pause/resume | [@f-iacono](https://github.com/f-iacono) |
 | Sony WH-1000XM4 (over-ear)  | <img src="docs/icons/yes.svg" width="14" alt="yes"> one figure        | <img src="docs/icons/yes.svg" width="14" alt="yes"> Off · ANC · Ambient                          | [@seth-reee](https://github.com/seth-reee) |
-| Sony 1000X The Collexion (over-ear)  | <img src="docs/icons/yes.svg" width="14" alt="yes"> one figure        | <img src="docs/icons/yes.svg" width="14" alt="yes"> Off · ANC · Ambient (level, Focus on Voice) · wear pause/resume | [@KentoNion](https://github.com/KentoNion) |
+| Sony 1000X The Collexion (over-ear) | <img src="docs/icons/yes.svg" width="14" alt="yes"> one figure        | <img src="docs/icons/yes.svg" width="14" alt="yes"> Off · ANC · Ambient (level, Focus on Voice)   | [@KentoNion](https://github.com/KentoNion) |
 | Samsung Galaxy Buds2 (earbuds) | <img src="docs/icons/yes.svg" width="14" alt="yes"> left, right, case | <img src="docs/icons/yes.svg" width="14" alt="yes"> Off · ANC · Ambient | [@seth-reee](https://github.com/seth-reee) |
 | Soundcore Space 2 (over-ear)| <img src="docs/icons/yes.svg" width="14" alt="yes"> one figure        | <img src="docs/icons/yes.svg" width="14" alt="yes"> Off · ANC · Ambient (level, wind noise reduction) | [@Sovego](https://github.com/Sovego) |
 | Xiaomi Buds 5 Pro (earbuds) | <img src="docs/icons/yes.svg" width="14" alt="yes"> one figure        | <img src="docs/icons/yes.svg" width="14" alt="yes"> Off · ANC · Ambient                          | [@KentoNion](https://github.com/KentoNion)|
