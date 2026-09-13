@@ -1,0 +1,29 @@
+Owner: belph3g0r
+Model: soundcore R60i NC
+Date: 2026-09-13
+Source: tools/soundcore_probe.py on RFCOMM vendor channel 0cf12d31-fac3-4553-bd80-d6832e71202c
+  (one continuous session: initial state read, query modes, set ambient, query ambient,
+   set off, query off, restore anc in finally).
+  All frame bytes verbatim. Timestamps are the probe's elapsed clock.
+
+   0.08s == connected
+   0.10s <- ready [01 7f]      09ff000001017f0b000195
+   0.38s -> req_state [01 01]  08ee00000001010a0002
+   0.40s <- state [01 01]      09ff0000010101a20000010606000030342e383930342e38393132303233343039433942344335343430342e383904000078787878787878787800ffffffffffffffffffffff00ffffffffffffffffff00ffffffffffffffffff000000000000ffffffffffffffffff00ffffffffffffffffff0000000af1f06366ffff444433005100000000000031010101010102005a0000000100000000000000ffffffffff83
+   0.78s <- cmd (0x0b, 0x02)   09ff0000010b02110000be5e28d19110dd
+   0.98s -> req_modes [06 01]  08ee00000006010a0007
+   1.00s <- notify [06 01]     09ff00000106011200005100000000000073
+   1.58s -> set_ambient [06 81] 08ee00000006811000015100000000df
+   1.60s <- ack [06 81]        09ff00000106810a009a
+   2.18s -> req_modes [06 01]  08ee00000006010a0007
+   2.20s <- notify [06 01]     09ff00000106011200015100000000000074
+   2.78s -> set_off [06 81]    08ee00000006811000025100000000e0
+   2.80s <- ack [06 81]        09ff00000106810a009a
+   3.38s -> req_modes [06 01]  08ee00000006010a0007
+   3.40s <- notify [06 01]     09ff00000106011200025100000000000075
+   3.98s == restoring initial mode (anc)
+   3.98s -> restore_anc [06 81] 08ee00000006811000005100000000de
+   4.00s <- ack [06 81]        09ff00000106810a009a
+   4.58s -> req_modes [06 01]  08ee00000006010a0007
+   4.61s <- notify [06 01]     09ff00000106011200005100000000000073
+   5.18s == done

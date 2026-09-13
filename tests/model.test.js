@@ -605,6 +605,26 @@ Deno.test("controlBackend picks the protocol the device advertises", () => {
   assertEquals(Model.controlBackend(soundcore, ""), "soundcore");
   assertEquals(Model.controlBackend(soundcore, "48:B4:41:00:00:01"), "soundcore");
   assertEquals(Model.controlBackend(["0CF12D31-FAC3-4553-BD80-D6832E7D1402"], ""), "soundcore");
+  const soundcoreR60iNC = [
+    "00000001-0000-1000-8000-00805f9b34fb",
+    "00001101-0000-1000-8000-00805f9b34fb",
+    "0000110b-0000-1000-8000-00805f9b34fb",
+    "0000110c-0000-1000-8000-00805f9b34fb",
+    "0000110d-0000-1000-8000-00805f9b34fb",
+    "0000110e-0000-1000-8000-00805f9b34fb",
+    "0000110f-0000-1000-8000-00805f9b34fb",
+    "0000111e-0000-1000-8000-00805f9b34fb",
+    "00001200-0000-1000-8000-00805f9b34fb",
+    "00001203-0000-1000-8000-00805f9b34fb",
+    "00001800-0000-1000-8000-00805f9b34fb",
+    "00001801-0000-1000-8000-00805f9b34fb",
+    "0219f5da-0000-1000-8000-00805f9b34fb",
+    "0cf12d31-fac3-4553-bd80-d6832e71202c",
+    "66666666-6666-6666-6666-666666666666",
+    "99999999-9999-9999-9999-999999999999",
+    "df21fe2c-2515-4fdb-8886-f12c4d67927c",
+  ];
+  assertEquals(Model.controlBackend(soundcoreR60iNC, "34:09:C9:B4:C5:44"), "soundcore");
   // Samsung's own UUID gets its own bridge instead of falling through to JBL.
   const samsung = [
     "00001101-0000-1000-8000-00805f9b34fb",

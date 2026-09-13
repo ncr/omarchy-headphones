@@ -64,6 +64,10 @@ class ModelLookup(unittest.TestCase):
         row = bridge_module.model_for("0cf12d31-fac3-4553-bd80-d6832e7d1402")
         self.assertEqual(row["name"], "Space 2")
 
+    def test_r60i_nc_by_uuid_suffix(self):
+        row = bridge_module.model_for("0cf12d31-fac3-4553-bd80-d6832e71202c")
+        self.assertEqual(row["name"], "soundcore R60i NC")
+
     def test_case_insensitive(self):
         row = bridge_module.model_for("0CF12D31-FAC3-4553-BD80-D6832E7D1402")
         self.assertEqual(row["name"], "Space 2")

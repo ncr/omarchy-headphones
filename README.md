@@ -90,6 +90,17 @@ Headphones not on the list? [Add yours](#add-your-own-headphones).
 </tr>
 </table>
 
+<table>
+<tr>
+<td width="50%"><img src="docs/gallery/soundcore-r60i-nc.png" alt="soundcore R60i NC: left, right and case, Off / ANC / Ambient, the ambient level slider and the Wind noise reduction switch" width="100%"></td>
+<td width="50%"></td>
+</tr>
+<tr>
+<td align="center">soundcore R60i NC — <a href="https://github.com/belph3g0r">@belph3g0r</a></td>
+<td></td>
+</tr>
+</table>
+
 ## What it does
 
 - **Battery level** — per earbud and the case, or the single battery of
@@ -138,6 +149,7 @@ same idea, built for Apple's own protocol, and the plugin this one is modelled o
 | CMF Headphone Pro (over-ear) | <img src="docs/icons/yes.svg" width="14" alt="yes"> one figure | <img src="docs/icons/yes.svg" width="14" alt="yes"> Off · ANC (Low / Mid / High / Adaptive) · Ambient · low latency | [@adilahmad17](https://github.com/adilahmad17) |
 | Nothing Ear · Headphone (1) | <img src="docs/icons/yes.svg" width="14" alt="yes"> expected (one figure on Headphone (1)) | <img src="docs/icons/yes.svg" width="14" alt="yes"> expected — same protocol, per [omarchy-nothing-ear](https://github.com/r-witz/omarchy-nothing-ear) | — |
 | soundcore Space One Pro (A3062, over-ear) | <img src="docs/icons/yes.svg" width="14" alt="yes"> one figure | <img src="docs/icons/yes.svg" width="14" alt="yes"> Off · ANC · Ambient (level, wind noise reduction) | [@sasiruLK](https://github.com/sasiruLK) |
+| soundcore R60i NC (earbuds) | <img src="docs/icons/yes.svg" width="14" alt="yes"> left, right, case | <img src="docs/icons/yes.svg" width="14" alt="yes"> Off · ANC · Ambient (level, wind noise reduction) | [@belph3g0r](https://github.com/belph3g0r) |
 | other Fast Pair headphones  | <img src="docs/icons/yes.svg" width="14" alt="yes"> expected          | <img src="docs/icons/unknown.svg" width="14" alt="untested">                                    | —                              |
 
 CMF Headphone Pro's connection, reconnect recovery and all panel controls were
