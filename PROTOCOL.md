@@ -1276,6 +1276,27 @@ is simpler and this plugin needs nothing from it. Two notes for anyone who
 tries: the address rotates and arrives unprompted as `0b 02` on the same notify
 handle, and BlueZ drops the LE link the moment no client holds it.
 
+### soundcore R60i NC — offset 119 on 152-byte state
+
+Notes from a **soundcore R60i NC** (`34:09:C9:B4:C5:44`, modalias
+`bluetooth:v02B0p0000d001F`). Same vendor channel (`0cf12d31-fac3-4553-bd80-d6832e71202c`,
+model ID `1202c`), same framing, same commands.
+
+`01 01` answers with a 152-byte state payload. The six sound mode bytes are
+at **offset 119**:
+
+```
+... 44 44 33 00 51 00 00 00 00 00 00 31 01 01 ...
+              ^^ ^^ ^^ ^^ ^^ ^^
+              the six sound-mode bytes, at offset 119
+```
+
+`06 01` query is supported and returns `00 51 00 00 00 00 00 00` (mode, custom anc,
+transparency mode, nc mode, wind noise, custom transparency). Mode changes with `06 81`
+are answered with ACK `06 81`, and followed up with `06 01` notify.
+Fast Pair Message Stream (`df21fe2c-2515-4fdb-8886-f12c4d67927c`) reports
+individual earbud and case battery levels.
+
 ## Samsung Galaxy Buds2 — SPPNew
 
 Confirmed on **Samsung Galaxy Buds2** (`84:5F:04:B5:D6:74`, modalias

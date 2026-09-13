@@ -1,0 +1,31 @@
+Device 34:09:C9:B4:C5:44 (public)
+	Name: soundcore R60i NC
+	Alias: soundcore R60i NC
+	Class: 0x00240404 (2360324)
+	Icon: audio-headset
+	Paired: yes
+	Bonded: yes
+	Trusted: yes
+	Blocked: no
+	Connected: yes
+	LegacyPairing: no
+	CablePairing: no
+	UUID: SDP                       (00000001-0000-1000-8000-00805f9b34fb)
+	UUID: Serial Port               (00001101-0000-1000-8000-00805f9b34fb)
+	UUID: Audio Sink                (0000110b-0000-1000-8000-00805f9b34fb)
+	UUID: A/V Remote Control Target (0000110c-0000-1000-8000-00805f9b34fb)
+	UUID: Advanced Audio Distribu.. (0000110d-0000-1000-8000-00805f9b34fb)
+	UUID: A/V Remote Control        (0000110e-0000-1000-8000-00805f9b34fb)
+	UUID: A/V Remote Control Cont.. (0000110f-0000-1000-8000-00805f9b34fb)
+	UUID: Handsfree                 (0000111e-0000-1000-8000-00805f9b34fb)
+	UUID: PnP Information           (00001200-0000-1000-8000-00805f9b34fb)
+	UUID: Generic Audio             (00001203-0000-1000-8000-00805f9b34fb)
+	UUID: Generic Access Profile    (00001800-0000-1000-8000-00805f9b34fb)
+	UUID: Generic Attribute Profile (00001801-0000-1000-8000-00805f9b34fb)
+	UUID: Unknown                   (0219f5da-0000-1000-8000-00805f9b34fb)
+	UUID: Vendor specific           (0cf12d31-fac3-4553-bd80-d6832e71202c)
+	UUID: Vendor specific           (66666666-6666-6666-6666-666666666666)
+	UUID: Vendor specific           (99999999-9999-9999-9999-999999999999)
+	UUID: Vendor specific           (df21fe2c-2515-4fdb-8886-f12c4d67927c)
+	Modalias: bluetooth:v02B0p0000d001F
+	Battery Percentage: 0x46 (70)

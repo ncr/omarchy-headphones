@@ -1,0 +1,200 @@
+{
+  "model": "soundcore R60i NC",
+  "owner": "belph3g0r",
+  "bridge": "soundcore-bridge",
+  "notes": "Vendor UUID suffix 1202c. A 152-byte state payload with the six sound-mode bytes at offset 119: anc, level 0, wind noise reduction off. A request for 06 01 is answered.",
+  "session": {
+    "uuid": "0cf12d31-fac3-4553-bd80-d6832e71202c"
+  },
+  "steps": [
+    {
+      "device": {
+        "cmd": "01 01",
+        "body": "00 01 06 06 00 00 30 34 2e 38 39 30 34 2e 38 39 31 32 30 32 33 34 30 39 43 39 42 34 43 35 34 34 30 34 2e 38 39 04 00 00 78 78 78 78 78 78 78 78 78 00 ff ff ff ff ff ff ff ff ff ff ff 00 ff ff ff ff ff ff ff ff ff 00 ff ff ff ff ff ff ff ff ff 00 00 00 00 00 00 ff ff ff ff ff ff ff ff ff 00 ff ff ff ff ff ff ff ff ff 00 00 00 0a f1 f0 63 66 ff ff 44 44 33 00 51 00 00 00 00 00 00 31 01 01 01 01 01 02 00 5a 00 00 00 01 00 00 00 00 00 00 00 ff ff ff ff ff"
+      },
+      "note": "the 152-byte state answered to the handshake: anc, level 0"
+    },
+    {
+      "lines": [
+        {
+          "modes": true,
+          "mode": "anc",
+          "available": [
+            "off",
+            "anc",
+            "ambient"
+          ],
+          "level": 0,
+          "voice": false
+        }
+      ],
+      "note": "read at offset 119, then queried with 06 01 to confirm"
+    },
+    {
+      "sent": [
+        "08 ee 00 00 00 06 01 0a 00 07"
+      ]
+    },
+    {
+      "device": {
+        "cmd": "06 01",
+        "body": "00 51 00 00 00 00 00 00"
+      },
+      "note": "device confirms initial mode"
+    },
+    {
+      "line_count": 1,
+      "note": "same state, no duplicate line"
+    },
+    {
+      "command": "set ambient"
+    },
+    {
+      "device": {
+        "cmd": "06 81"
+      },
+      "note": "a set is followed by an ACK only"
+    },
+    {
+      "line_count": 1
+    },
+    {
+      "timers": [
+        400
+      ],
+      "note": "the bridge asks 400 ms later, and the reply, not the optimism, reaches the panel"
+    },
+    {
+      "fire": true
+    },
+    {
+      "device": {
+        "cmd": "06 01",
+        "body": "01 51 00 00 00 00 00 00"
+      }
+    },
+    {
+      "sent": [
+        "08 ee 00 00 00 06 01 0a 00 07",
+        "08 ee 00 00 00 06 81 10 00 01 51 00 00 00 00 df",
+        "08 ee 00 00 00 06 01 0a 00 07"
+      ]
+    },
+    {
+      "lines": [
+        {
+          "modes": true,
+          "mode": "anc",
+          "available": [
+            "off",
+            "anc",
+            "ambient"
+          ],
+          "level": 0,
+          "voice": false
+        },
+        {
+          "modes": true,
+          "mode": "ambient",
+          "available": [
+            "off",
+            "anc",
+            "ambient"
+          ],
+          "level": 0,
+          "voice": false
+        }
+      ]
+    },
+    {
+      "command": "set off"
+    },
+    {
+      "device": {
+        "cmd": "06 81"
+      }
+    },
+    {
+      "timers": [
+        400
+      ]
+    },
+    {
+      "fire": true
+    },
+    {
+      "device": {
+        "cmd": "06 01",
+        "body": "02 51 00 00 00 00 00 00"
+      }
+    },
+    {
+      "sent": [
+        "08 ee 00 00 00 06 01 0a 00 07",
+        "08 ee 00 00 00 06 81 10 00 01 51 00 00 00 00 df",
+        "08 ee 00 00 00 06 01 0a 00 07",
+        "08 ee 00 00 00 06 81 10 00 02 51 00 00 00 00 e0",
+        "08 ee 00 00 00 06 01 0a 00 07"
+      ]
+    },
+    {
+      "line": {
+        "modes": true,
+        "mode": "off",
+        "available": [
+          "off",
+          "anc",
+          "ambient"
+        ],
+        "level": 0,
+        "voice": false
+      }
+    },
+    {
+      "command": "set anc"
+    },
+    {
+      "device": {
+        "cmd": "06 81"
+      }
+    },
+    {
+      "timers": [
+        400
+      ]
+    },
+    {
+      "fire": true
+    },
+    {
+      "device": {
+        "cmd": "06 01",
+        "body": "00 51 00 00 00 00 00 00"
+      }
+    },
+    {
+      "sent": [
+        "08 ee 00 00 00 06 01 0a 00 07",
+        "08 ee 00 00 00 06 81 10 00 01 51 00 00 00 00 df",
+        "08 ee 00 00 00 06 01 0a 00 07",
+        "08 ee 00 00 00 06 81 10 00 02 51 00 00 00 00 e0",
+        "08 ee 00 00 00 06 01 0a 00 07",
+        "08 ee 00 00 00 06 81 10 00 00 51 00 00 00 00 de",
+        "08 ee 00 00 00 06 01 0a 00 07"
+      ]
+    },
+    {
+      "line": {
+        "modes": true,
+        "mode": "anc",
+        "available": [
+          "off",
+          "anc",
+          "ambient"
+        ],
+        "level": 0,
+        "voice": false
+      }
+    }
+  ]
+}

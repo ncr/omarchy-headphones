@@ -78,6 +78,9 @@ MODELS = {
     # left, the width OpenSCQ30's A3062 parser gives the fields ahead of them,
     # and a request for 06 01 is answered.
     "b3062": {"name": "Space One Pro", "offset": 69, "query": True},
+    # soundcore R60i NC — belph3g0r. Suffix 1202c. A 152-byte state payload with
+    # the six sound-mode bytes at offset 119. A request for 06 01 is answered.
+    "1202c": {"name": "soundcore R60i NC", "offset": 119, "query": True},
 }
 # A model nobody has held is read at the Space 2's offset and then asked, so
 # a block that sits elsewhere is corrected by the reply before anyone clicks.
