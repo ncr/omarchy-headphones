@@ -1377,6 +1377,82 @@ is simpler and this plugin needs nothing from it. Two notes for anyone who
 tries: the address rotates and arrives unprompted as `0b 02` on the same notify
 handle, and BlueZ drops the LE link the moment no client holds it.
 
+### Life Q30 (A3028) — the same protocol, four bytes at 35
+
+Notes from a **soundcore Q30** (`88:0E:85:5F:64:B4`, firmware `05.24`, serial
+starting `3028`). Same vendor channel as the Space 2, same framing, same
+commands, same mode bytes. Two things differ, and between them the row never
+said anything at all.
+
+#### A shorter state, and the block near its front
+
+`0cf12d31-fac3-4553-bd80-d6832e7b302a`, model ID `b302a`, and `01 01` answers
+with a **70-byte** state — a third of the Space 2's. The sound mode bytes are at
+**offset 35**:
+
+```
+0200 fefe9d93949faa8d8f78 0000...0000 01 00 01 00 00 30352e32343330 3238...
+                                         ^^^^^^^^^^^ the block, at 35
+                                      ^^ ambient sound mode cycle
+                                                     ^^^^^^^^^^^^^ "05.24" — firmware,
+                                                                   as ASCII, from 39
+```
+
+Read at 71 there is no byte at all: the payload ends at 69. `on_packet` needs
+`len(body) >= offset + 4` before it reads anything, so the state was discarded,
+`06 01` was never asked for on the UNKNOWN row's terms, and the bridge sat
+connected and silent until the service parked the address. From outside, the
+headphones showed a battery and no controls.
+
+#### The block is four bytes wide, and what follows is not mode data
+
+This is the part that matters beyond this one headset. The Space 2's block is
+six bytes and the bridge reads six. Here the fourth byte is the last:
+
+```
+>>> 08 ee 00 00 00 06 01 0a 00 07              request
+<<< 09 ff 00 00 01 06 01 0e 00 00 01 00 00 ..  four bytes, not six
+```
+
+Byte 39 is `0x30`, the `0` of `05.24`. A six-byte read takes `30 35` along with
+the block, and `set` posts them straight back as mode parameters — the same
+failure the Space One Pro section describes, one field further along. Observed
+here, with the bridge's default parameters rather than a mis-offset read:
+
+```
+before  ... 01 00 01 00 00 30 35 ...     byte 36 = 01, byte 37 = 00
+write   08 ee 00 00 00 06 81 10 00 01 1f ff 00 00 01 ad
+after   ... 01 01 1f ff 00 30 35 ...     byte 36 = 1f, byte 37 = ff
+```
+
+`1f ff` are the bridge's defaults for a model that keeps a custom transparency
+level there. This one does not: the write left two fields holding values nobody
+chose, and restoring them took a second write with the bytes read before the
+first. A four-byte write, carrying the device's own parameters with only the
+mode replaced, is accepted and changes nothing else:
+
+```
+>>> 08 ee 00 00 00 06 81 0e 00 01 01 00 00 8d
+<<< ACK, and the state reads back 01 01 00 00 — mode changed, neighbours intact
+```
+
+So the model row carries a width, and the rows that came before say six.
+
+#### No dial, no switch
+
+The Q30 has no ambient level and no wind noise reduction, and the four bytes
+hold neither. The row reports `mode` alone; `DeviceFollower` reads a missing
+`level` as -1 and draws no dial, which is what it already does for the JBL.
+
+#### What was verified on the hardware
+
+Off, ANC and Ambient were each set from the shell and read back from the device,
+and the mode the headphones reported afterwards matched every time. Battery
+continues to come from Fast Pair. Untested: charging state, the noise-cancelling
+sub-mode at byte 36 (transport / outdoor / indoor / custom in OpenSCQ30's A3028
+parser, and writable — that is how `1f` landed there), and the equalizer, which
+lives on a command this bridge does not send.
+
 ## Samsung Galaxy Buds2 — SPPNew
 
 Confirmed on **Samsung Galaxy Buds2** (`84:5F:04:B5:D6:74`, modalias

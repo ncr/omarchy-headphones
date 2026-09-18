@@ -67,21 +67,32 @@ CMD_SOUND_MODES_SET = (0x06, 0x81)
 # editing another row, which is another owner's working headset.
 # tests/soundcore_bridge_test.py pins every row's outbound frames.
 #
-#   offset   where the six sound-mode bytes sit in the 01 01 state payload
-#   query    ask 06 01 for those six bytes after the state, and again after
+#   offset   where the sound-mode bytes sit in the 01 01 state payload
+#   width    how many bytes that block has. Six is the usual: mode, then four
+#            fields, then the ambient level. The Life Q30 has four, and reading
+#            six there would take two bytes of the firmware string that follows
+#            and post them back as parameters on the next write
+#   query    ask 06 01 for those bytes after the state, and again after
 #            each write; its reply stands over whatever the offset produced
 MODELS = {
     # Space 2 — Sovego, PR #3. Never asked 06 01: it emits one unprompted
     # after a mode change, but whether it answers a request is untested.
-    "d1402": {"name": "Space 2", "offset": 71, "query": False},
+    "d1402": {"name": "Space 2", "offset": 71, "width": 6, "query": False},
     # Space One Pro (A3062) — sasiruLK, PR #5. The six bytes sit two to the
     # left, the width OpenSCQ30's A3062 parser gives the fields ahead of them,
     # and a request for 06 01 is answered.
-    "b3062": {"name": "Space One Pro", "offset": 69, "query": True},
+    "b3062": {"name": "Space One Pro", "offset": 69, "width": 6, "query": True},
+    # Life Q30 (A3028) — Kevin, verified on hardware 2026-09-18. The state
+    # payload is 70 bytes with the block at 35, and it is four bytes wide:
+    # [mode, noise-cancelling mode, 2 more], with the firmware string starting
+    # at 39. 06 01 is answered, with the same four bytes. The model has no
+    # ambient level and no wind-noise switch, so the row reports neither and
+    # the panel draws no dial.
+    "b302a": {"name": "Life Q30", "offset": 35, "width": 4, "query": True},
 }
 # A model nobody has held is read at the Space 2's offset and then asked, so
 # a block that sits elsewhere is corrected by the reply before anyone clicks.
-UNKNOWN = {"name": "", "offset": 71, "query": True}
+UNKNOWN = {"name": "", "offset": 71, "width": 6, "query": True}
 
 MODE_FROM_BYTE = {0x00: "anc", 0x01: "ambient", 0x02: "off"}
 BYTE_FROM_MODE = {name: byte for byte, name in MODE_FROM_BYTE.items()}
@@ -346,12 +357,14 @@ class Bridge:
     def on_packet(self, cmd, body):
         if cmd == CMD_STATE_UPDATE:
             self.handshake_seen = True
-            # The six sound-mode bytes sit where this model's row says.
+            # The sound-mode bytes sit where this model's row says, as wide
+            # as the row says.
             at = self.model["offset"]
+            width = self.model.get("width", 6)
             if len(body) >= at + 4:
                 mode_byte = body[at]
-                if len(body) >= at + 6:
-                    self.sound_mode_params = list(body[at:at + 6])
+                if len(body) >= at + width:
+                    self.sound_mode_params = list(body[at:at + width])
                 else:
                     self.sound_mode_params[0] = mode_byte
                 self.on_mode_byte(mode_byte)
@@ -366,10 +379,11 @@ class Bridge:
                 self.write(make_packet(CMD_SOUND_MODES_NOTIFY))
         elif cmd == CMD_SOUND_MODES_NOTIFY:
             self.query_answered = True
+            width = self.model.get("width", 6)
             if len(body) >= 1:
                 mode_byte = body[0]
-                if len(body) >= 6:
-                    self.sound_mode_params = list(body[:6])
+                if len(body) >= width:
+                    self.sound_mode_params = list(body[:width])
                 else:
                     self.sound_mode_params[0] = mode_byte
                 self.on_mode_byte(mode_byte)
@@ -382,9 +396,12 @@ class Bridge:
             "modes": True,
             "mode": self.mode,
             "available": AVAILABLE,
-            "level": int(self.sound_mode_params[5]),
-            "voice": bool(self.sound_mode_params[4]),
         }
+        # A four-byte block has neither, and the shell draws the dial and the
+        # switch on their presence: saying nothing is what hides them.
+        if len(self.sound_mode_params) >= 6:
+            line["level"] = int(self.sound_mode_params[5])
+            line["voice"] = bool(self.sound_mode_params[4])
         if first or line != self.last_line:
             self.last_line = line
             emit(line)
@@ -417,6 +434,8 @@ class Bridge:
                 self.write(make_packet(CMD_SOUND_MODES_SET, bytes(body)))
                 self.confirm()
         elif parts[0] == "level" and len(parts) > 1:
+            if len(self.sound_mode_params) < 6:
+                return
             try:
                 val = max(1, min(5, int(round(float(parts[1])))))
                 body = list(self.sound_mode_params)
@@ -428,6 +447,8 @@ class Bridge:
             except (ValueError, TypeError):
                 pass
         elif parts[0] in ("voice", "wind") and len(parts) > 1:
+            if len(self.sound_mode_params) < 6:
+                return
             on = parts[1].lower() in ("1", "on", "true", "yes")
             body = list(self.sound_mode_params)
             body[4] = 1 if on else 0

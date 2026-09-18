@@ -1,0 +1,107 @@
+{
+  "model": "Soundcore Life Q30",
+  "owner": "Kevin",
+  "bridge": "soundcore-bridge",
+  "notes": "Vendor UUID suffix b302a (A3028), captured on hardware 2026-09-18. The state payload is 70 bytes and the sound-mode block sits at 35, four bytes wide: mode, noise-cancelling mode, and two more. The firmware string starts at 39, so a six-byte read would take '0' and '5' from it and post them back as parameters on the next write. 06 01 is answered with the same four bytes. No ambient level and no wind switch, so the row reports neither.",
+  "session": {
+    "uuid": "0cf12d31-fac3-4553-bd80-d6832e7b302a"
+  },
+  "steps": [
+    {
+      "device": {
+        "cmd": "01 01",
+        "body": "02 00 fe fe 9d 93 94 9f aa 8d 8f 78 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 01 00 01 00 00 30 35 2e 32 34 33 30 32 38 42 34 36 34 35 46 38 35 30 45 38 38 00 01 01 01 00 00 01 03 04 07"
+      },
+      "note": "the state the device answers the handshake with: ANC"
+    },
+    {
+      "sent": [
+        "08 ee 00 00 00 06 01 0a 00 07"
+      ],
+      "note": "the row asks 06 01, and the reply stands over the offset read"
+    },
+    {
+      "lines": [
+        {
+          "modes": true,
+          "mode": "anc",
+          "available": [
+            "off",
+            "anc",
+            "ambient"
+          ]
+        }
+      ],
+      "note": "no level and no voice: this model has neither, and the panel draws no dial"
+    },
+    {
+      "device": {
+        "cmd": "06 01",
+        "body": "00 01 00 00"
+      },
+      "note": "the four bytes the device answers with, the same ones seen at 35"
+    },
+    {
+      "line_count": 1,
+      "note": "same state, no repeat"
+    },
+    {
+      "command": "set ambient"
+    },
+    {
+      "device": {
+        "cmd": "06 81"
+      },
+      "note": "a set is followed by an ACK only"
+    },
+    {
+      "line_count": 1
+    },
+    {
+      "timers": [
+        400
+      ],
+      "note": "the bridge asks again 400 ms later"
+    },
+    {
+      "fire": true
+    },
+    {
+      "device": {
+        "cmd": "06 01",
+        "body": "01 01 00 00"
+      }
+    },
+    {
+      "sent": [
+        "08 ee 00 00 00 06 01 0a 00 07",
+        "08 ee 00 00 00 06 81 0e 00 01 01 00 00 8d",
+        "08 ee 00 00 00 06 01 0a 00 07"
+      ],
+      "note": "the write is four bytes wide: the device's own parameters, with the mode replaced"
+    },
+    {
+      "lines": [
+        {
+          "modes": true,
+          "mode": "anc",
+          "available": [
+            "off",
+            "anc",
+            "ambient"
+          ]
+        },
+        {
+          "modes": true,
+          "mode": "ambient",
+          "available": [
+            "off",
+            "anc",
+            "ambient"
+          ]
+        }
+      ],
+      "note": "the two lines the panel saw: no level and no voice on either"
+    }
+  ]
+}
