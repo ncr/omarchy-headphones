@@ -346,8 +346,10 @@ What the bridge's exit code means, because the answer to "does this model speak
 the protocol" is only some of the ways it can end:
 
 - **1, transient** — the link never opened, was refused, or closed under the
-  bridge. That says nothing about the device, so nothing is written down and the
-  service tries again after 10 seconds, then 20, then 40, up to five minutes.
+  bridge. That says nothing about the device, so nothing is written down; the
+  service asks the reader to reopen the device's Fast Pair channel, which makes
+  the earbuds announce the BLE address they currently hold, then tries again
+  after 10 seconds, then 20, then 40, up to five minutes.
 - **3, linked but silent** — connected, discovered, asked, heard nothing. The
   bridge records one miss against the Fast Pair model id in
   `$XDG_STATE_HOME/omaphones/mode-support.json` and the service leaves that model
@@ -430,6 +432,25 @@ Because the handles differ and the model id is the only thing a connect hands
 over for free, `jbl-bridge` carries a per-model table: `MODELS` is keyed by
 Fast Pair model id, picks the notify/write handles, and a model not listed
 keeps the TUNE230NC handles on which the protocol was first confirmed.
+
+Its Fast Pair Message Stream announces the same three DEVICE_INFO frames as
+every other pair here, unprompted on every channel open: model id `ea59a0`,
+then the session's current BLE address, then battery `03 03 00 03 32 3c 64` —
+left 50%, right 60%, case 100%, none charging — verbatim in
+[`docs/captures/jbl-wave-buds-2-fastpair.txt`](docs/captures/jbl-wave-buds-2-fastpair.txt).
+The `08 11 00 00` Hearable Control probe got no reply, as documented. The BLE
+address frame is the one the widget's reader republishes and the excelpoint
+bridge dials; across today's sessions it read `64:F7:09:7F:E2:9D`,
+`72:36:C8:11:D2:7F`, `67:6D:C6:10:DE:5F`, `4A:02:E4:49:B0:65` and
+`48:DD:7D:82:61:F8` at different times.
+
+Reconnect recovery is evidence now too: five Bluetooth disconnect/connect
+cycles in a row each re-announced the earbuds' current BLE address and the
+mode row came back on its own (all `anc`, no manual refresh), see
+[`docs/captures/jbl-wave-buds-2-reconnect-recovery.json`](docs/captures/jbl-wave-buds-2-reconnect-recovery.json).
+A rotation mid-session still leaves the announced address stale for the next
+attempt, which is what exit 1 above covers: the service reopens the channel
+and the earbuds announce the address they actually hold.
 
 ## Sony MDR v2 — the listening mode on the WH-CH720N
 

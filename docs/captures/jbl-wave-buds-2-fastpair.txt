@@ -1,0 +1,55 @@
+JBL Wave Buds 2 — tools/gfps_probe.py, address 50:1B:6A:0B:0B:6E, Google Fast
+Pair Message Stream UUID (df21fe2c-2515-4fdb-8886-f12c4d67927c), captured
+2026-09-18 by @carlosr-sh. Two connections, 30s / 15s. The widget's Fast Pair
+reader was stopped during the capture (useFastPair off) so the probe held the
+channel.
+
+== Run 1 (30s) =============================================================
+
+profile registered for df21fe2c-2515-4fdb-8886-f12c4d67927c
+NewConnection from /org/bluez/hci0/dev_50_1B_6A_0B_0B_6E fd=9 props={}
+<<< 03010003ea59a0
+frame group=0x03 (DEVICE_INFO) code=0x01 len=3 payload=ea59a0
+<<< 030200064a02e449b065
+frame group=0x03 (DEVICE_INFO) code=0x02 len=6 payload=4a02e449b065
+<<< 03030003323c64
+frame group=0x03 (DEVICE_INFO) code=0x03 len=3 payload=323c64
+  BATTERY: left=50%, right=60%, case=100%
+ConnectProfile returned
+>>> 08110000
+done
+
+== Run 2 (15s) =============================================================
+
+profile registered for df21fe2c-2515-4fdb-8886-f12c4d67927c
+NewConnection from /org/bluez/hci0/dev_50_1B_6A_0B_0B_6E fd=9 props={}
+<<< 03010003ea59a0
+frame group=0x03 (DEVICE_INFO) code=0x01 len=3 payload=ea59a0
+<<< 030200064a02e449b06503030003323c64
+frame group=0x03 (DEVICE_INFO) code=0x02 len=6 payload=4a02e449b065
+frame group=0x03 (DEVICE_INFO) code=0x03 len=3 payload=323c64
+  BATTERY: left=50%, right=60%, case=100%
+ConnectProfile returned
+>>> 08110000
+done
+
+== Summary ==================================================================
+
+Every run announces three DEVICE_INFO frames unprompted, right after the
+channel opens, and they are identical every time:
+
+- code 1 (model id) `ea59a0` — the Fast Pair model id `jbl-bridge` keys its
+  per-model handle table on, matching PROTOCOL.md's Wave Buds 2 row.
+- code 2 (BLE address) `4a 02 e4 49 b0 65` — the resolvable private address in
+  that session; it is this frame the widget's reader republishes, and the very
+  address the follow-up jbl-bridge dials for the excelpoint service. The
+  address rotates between sessions (observed today alone: 64:F7:09:7F:E2:9D,
+  72:36:C8:11:D2:7F, 67:6D:C6:10:DE:5F, 4A:02:E4:49:B0:65, 48:DD:7D:82:61:F8).
+- code 3 (battery) `03 03 00 03 32 3c 64` — left 50%, right 60%, case 100%,
+  none charging (0x32/0x3c/0x64, no 0x80 charging bit). Matches the widget's
+  Fast Pair rows in the same session (leftFor 50, rightFor 60, batteryCaseFor
+  100).
+
+The probe's own `08 11 00 00` (Fast Pair Hearable Control "get ANC state",
+sent 1.5s after connect) got no reply in either run — the same absence already
+documented for JBL under "Fast Pair Hearable Controls: absent".

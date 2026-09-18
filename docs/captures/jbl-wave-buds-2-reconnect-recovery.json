@@ -1,0 +1,52 @@
+{
+  "time": "2026-09-18T12:55:00+00:00",
+  "device": "JBL Wave Buds 2",
+  "classic": "50:1B:6A:0B:0B:6E",
+  "fastPairModelId": "ea59a0",
+  "mode": "anc",
+  "story": [
+    {
+      "context": "pre-fix, same session",
+      "when": "2026-09-18T12:28:00Z",
+      "what": "reader published BLE address 72:36:C8:11:D2:7F while the widget backed off; that address was refused",
+      "btgatt": "Failed to connect: Connection refused",
+      "modeRow": "looped pending -> unsupported; setMode returned unavailable/busy"
+    },
+    {
+      "context": "pre-fix, same session",
+      "when": "2026-09-18T12:34:45Z",
+      "what": "manual refresh reopens the Message Stream channel; earbuds announce their current address 67:6D:C6:10:DE:5F and the mode row comes up",
+      "modeRow": "ambient then anc, stable"
+    },
+    {
+      "context": "fix applied and shell restarted to load it",
+      "when": "2026-09-18T12:58:00Z",
+      "what": "five Bluetooth disconnect/connect cycles in a row, no manual refresh at any point",
+      "cycles": [
+        { "cycle": 1, "disconnected": true, "mode": "anc", "recoveredWithoutManual": true, "bleAddress": "4A:02:E4:49:B0:65" },
+        { "cycle": 2, "disconnected": true, "mode": "anc", "recoveredWithoutManual": true, "bleAddress": "4A:02:E4:49:B0:65" },
+        { "cycle": 3, "disconnected": true, "mode": "anc", "recoveredWithoutManual": true, "bleAddress": "4A:02:E4:49:B0:65" },
+        { "cycle": 4, "disconnected": true, "mode": "anc", "recoveredWithoutManual": true, "bleAddress": "4A:02:E4:49:B0:65" },
+        { "cycle": 5, "disconnected": true, "mode": "anc", "recoveredWithoutManual": true, "bleAddress": "4A:02:E4:49:B0:65" }
+      ]
+    },
+    {
+      "context": "post-fix, same device, after the Fast Pair probe capture",
+      "when": "2026-09-18T13:18:35Z/13:21:52Z",
+      "what": "the current address 4A:02:E4:49:B0:65 (confirmed live by the probe minutes earlier) refused attaches; the widget cycled eight bridge attempts against it, ~20 s apart (a new bridge PID each), re-announcing the same address every time the transient exit reopened the channel",
+      "modeRow": "cycled pending <-> unsupported for ~3 minutes"
+    },
+    {
+      "context": "same window, recovery",
+      "when": "2026-09-18T13:21:52Z/13:22:02Z",
+      "what": "one bluetoothctl reconnect announced the next rotated address 48:DD:7D:82:61:F8; the bridge dialed it and the row came up 10 s later",
+      "modeRow": "anc, stable"
+    }
+  ],
+  "behavior": [
+    "The Wave Buds 2 rotate their resolvable private BLE address; the current one is only announced when the Fast Pair Message Stream channel (re)opens.",
+    "A transient (exit 1) JBL bridge exit now asks the reader to reopen that channel, so the next bridge start dials the address the earbuds actually answer on.",
+    "The five cycles above came back on their own; reconnect alone never needed a manual refresh before or after the fix."
+  ],
+  "procedure": "tools/check output recorded separately; each cycle = bluetoothctl disconnect + connect, mode awaited via omarchy-shell omaphones modeFor with a 60 s budget."
+}
