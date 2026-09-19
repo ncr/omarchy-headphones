@@ -741,9 +741,9 @@ idx: 0    1     2             3       4        5       6       7
 
 | field | values |
 |---|---|
-| `ncAsmEffect` | `0x00` off, `0x01` on |
+| `ncAsmEffect` | `0x00` off, `0x01` on; a SET sends `0x11` (adjustment completion) for on |
 | `ncType` | `0x02` (`DUAL_SINGLE_OFF`) — the v1 enum; the headset always reports this |
-| `ncValue` | `0x00` off, `0x01` SINGLE (ambient), `0x02` DUAL (noise cancelling) |
+| `ncValue` | `0x00` off — with the effect on, this is ambient sound; `0x01` SINGLE (wind noise reduction); `0x02` DUAL (noise cancelling) |
 | `asmType` | `0x01` — the only value seen; the bridge writes back what it read |
 | `asmId` | `0x00` normal, `0x01` voice |
 | `asmValue` | ambient level, `0x00`-`0x14` (0-20) |
@@ -755,21 +755,23 @@ What the headset actually said:
 <-  67 02 01 02 02 01 00 00     RET: on, DUAL_SINGLE_OFF, nc=NC, asm normal, level 0
 ```
 
-The SET (`0x68`) is that block written back, with `ncAsmEffect` and `ncValue`
-carrying the mode and everything else echoed as the headset reported it:
+The SET (`0x68`) uses effect `0x11` for on, setting type `0x01`, and `ncValue`
+`0x02` for noise cancelling or `0x00` for ambient, with the level in the last
+byte only in ambient:
 
 ```
-->  68 02 00 02 00 01 00 00     SET off
-->  68 02 01 02 02 01 00 00     SET ANC
-->  68 02 01 02 01 01 00 00     SET ambient
+->  68 02 00 01 00 01 00 00     SET off
+->  68 02 11 01 02 01 00 00     SET ANC
+->  68 02 11 01 00 01 00 14     SET ambient, level 20
+<-  69 02 01 02 00 01 00 14     NTFY: on, ncValue 0, level 20
 ```
 
-Off / ANC / Ambient each set and were confirmed on the headset; the NTFY
-(`0x69`) follows a SET with the new state. The ambient level and Focus on Voice
-are in the payload and the headset ACKs them in the SET, but the reply carries
-the pre-existing stored values — the headset stores them but does not apply them
-from the bridge's writes, the same way the v2 protocol stores the level and only
-applies it on an ambient SET.
+Off / ANC / Ambient and the ambient level were each confirmed by ear on a
+second WH-1000XM4 (firmware 3.0.1, [capture](docs/captures/sony-wh-1000xm4-ambient.txt)).
+The NTFY (`0x69`) follows a SET with the new state, and with effect `0x11` it
+carries the level that was sent. An earlier version sent ambient as
+`68 02 01 02 01 01 00 00`: the headset accepts and echoes it, but `ncValue`
+`0x01` is wind noise reduction, so no outside sound comes through.
 
 Sony's v1 table also numbers an NC-only `0x01` and an ambient-only `0x03`. Both
 were asked on this headset and neither was answered, so neither is in the

@@ -429,8 +429,9 @@ def parse_ncasm_v1(payload):
     nc_value = payload[4]
     return {
         "inquired": payload[1],
-        # ncValue: 0 off, 1 SINGLE (ambient), 2 DUAL (noise cancelling).
-        "mode": "off" if not on else ("ambient" if nc_value == 0x01 else "anc"),
+        # ncValue: 0 OFF, 1 SINGLE (wind reduction), 2 DUAL (noise cancelling).
+        # With the effect on and NC off, what is left is ambient sound.
+        "mode": "off" if not on else ("ambient" if nc_value == 0x00 else "anc"),
         "voice": payload[6] == 0x01,      # asmId, 1 is voice
         "level": payload[7],              # asmValue, 0-20
         # ncType, the value a SET must echo back, the way 0x15's ncValue is.
@@ -858,9 +859,14 @@ class Bridge:
             # carries the three-way choice here rather than a separate ambient
             # flag, and asmType (0x01) is the only value the WH-1000XM4 was
             # seen to take.
-            nc_value = 0 if not on else (1 if mode == "ambient" else 2)
-            return bytes([NCASM_SET, 0x02, on, self.nc_value, nc_value,
-                          0x01, voice, level])
+            # Frame sony-device-center sends and a WH-1000XM4 obeys: effect
+            # 0x11 (adjustment completion), level-adjustment type, dual/single
+            # 2 for noise cancelling and 0 for ambient, level only in ambient.
+            if mode == "ambient":
+                return bytes([NCASM_SET, 0x02, 0x11, 0x01, 0x00, 0x01, voice,
+                              max(1, level)])
+            return bytes([NCASM_SET, 0x02, 0x11 if on else 0x00, 0x01,
+                          0x02 if on else 0x00, 0x01, voice, 0x00])
         if self.inquired == 0x15:
             return bytes([NCASM_SET, 0x15, 0x01, on, ambient,
                           self.nc_value, voice, level])
