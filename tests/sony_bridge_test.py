@@ -230,6 +230,56 @@ class NoModes(unittest.TestCase):
         self.assertEqual(s.sent, [])
 
 
+class V1AmbientLevel(unittest.TestCase):
+    """The WH-1000XM4 reports level 0 in noise cancelling. Frames from
+    docs/captures/sony-wh-1000xm4-ambient.txt."""
+
+    def session(self):
+        s = Session("v1", "WH-1000XM4")
+        s.device("01 00 70 00")
+        s.ack()
+        s.device("67 02 01 02 02 01 00 00")     # RET: noise cancelling, level 0
+        return s
+
+    def test_ambient_returns_to_the_last_reported_level(self):
+        s = self.session()
+        s.device("69 02 01 02 00 01 00 14")     # NTFY: ambient, level 20
+        s.device("69 02 01 02 02 01 00 00")     # NTFY: noise cancelling, level 0
+        s.command("set ambient")
+        self.assertEqual(s.sent[-1], "68 02 11 01 00 01 00 14")
+
+    def test_nothing_remembered_starts_at_one(self):
+        s = self.session()
+        s.command("set ambient")
+        self.assertEqual(s.sent[-1], "68 02 11 01 00 01 00 01")
+
+    def test_a_level_asked_for_is_sent_as_asked(self):
+        s = self.session()
+        s.device("69 02 01 02 00 01 00 14")
+        s.device("69 02 01 02 02 01 00 00")
+        s.command("level 5")
+        self.assertEqual(s.sent[-1], "68 02 11 01 00 01 00 05")
+
+    def test_the_level_kept_while_off_is_remembered_too(self):
+        s = self.session()
+        s.device("69 02 00 02 00 01 00 14")     # NTFY: effect off, level 20 kept
+        s.device("69 02 01 02 02 01 00 00")
+        s.command("set ambient")
+        self.assertEqual(s.sent[-1], "68 02 11 01 00 01 00 14")
+
+    def test_v2_headsets_are_sent_what_they_were(self):
+        # A v2 report with a level above zero is not remembered, and the
+        # ambient SET carries the reported level, zero included.
+        s = Session("v2", "WH-CH720N")
+        s.bridge.on_state({"inquired": 0x17, "mode": "ambient", "level": 12,
+                           "voice": False, "ncValue": None})
+        s.bridge.on_state({"inquired": 0x17, "mode": "anc", "level": 0,
+                           "voice": False, "ncValue": None})
+        self.assertEqual(s.bridge.ambient_level, 0)
+        s.command("set ambient")
+        self.assertEqual(s.sent[-1], "68 17 01 01 01 00 00")
+
+
 class Silent(unittest.TestCase):
     def test_nothing_answers_and_the_address_is_parked(self):
         s = Session()

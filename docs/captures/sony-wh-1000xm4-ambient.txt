@@ -1,0 +1,75 @@
+Owner: SirAllap
+Model: Sony WH-1000XM4 (firmware 3.0.1)
+Date: 2026-09-19
+Source: MDR payloads logged at the bridge (sony-bridge with this change),
+Arch Linux / BlueZ. Framing, sequence bytes and checksums omitted.
+-> is sent to the headset, <- is what it answered. Every mode was checked
+by ear: Off, ANC and Ambient each change what is heard, and Ambient passes
+outside sound louder as the level rises.
+
+->  66 02                      GET NC+ASM
+<-  67 02 01 02 02 01 00 00    RET: on, DUAL_SINGLE_OFF, ncValue 2 (NC)
+->  68 02 00 01 00 01 00 00    SET off
+<-  69 02 00 02 02 01 00 00    NTFY: effect off
+->  68 02 11 01 02 01 00 00    SET ANC
+<-  69 02 01 02 02 01 00 00    NTFY: on, ncValue 2 (NC)
+->  68 02 11 01 00 01 00 01    SET ambient, level 1
+<-  69 02 01 02 00 01 00 01    NTFY: on, ncValue 0, level 1  -> ambient
+->  68 02 11 01 00 01 00 14    SET ambient, level 20
+<-  69 02 01 02 00 01 00 14    NTFY: on, ncValue 0, level 20
+->  68 02 11 01 02 01 00 00    SET ANC
+<-  69 02 01 02 02 01 00 00    NTFY: on, ncValue 2 (NC)
+
+Before this change the bridge sent ambient as ncValue 1 with effect 0x01:
+->  68 02 01 02 01 01 00 00
+The headset accepts it, but ncValue 1 is SINGLE (wind noise reduction):
+no outside sound is passed through at any level.
+
+Ambient levels and Focus on Voice, then off and back to ANC:
+->  66 02                      GET NC+ASM
+<-  67 02 01 02 02 01 00 00    RET: on, ncValue 2 (NC)
+->  68 02 11 01 00 01 00 01    SET ambient, level 1
+<-  69 02 01 02 00 01 00 01    NTFY: ambient, level 1
+->  68 02 11 01 00 01 00 05    SET ambient, level 5
+<-  69 02 01 02 00 01 00 05    NTFY: ambient, level 5
+->  68 02 11 01 00 01 00 0a    SET ambient, level 10
+<-  69 02 01 02 00 01 00 0a    NTFY: ambient, level 10
+->  68 02 11 01 00 01 00 14    SET ambient, level 20
+<-  69 02 01 02 00 01 00 14    NTFY: ambient, level 20
+->  68 02 11 01 00 01 01 14    SET voice on
+<-  69 02 01 02 00 01 01 14    NTFY: ambient, voice on, level 20
+->  68 02 11 01 00 01 00 14    SET voice off
+<-  69 02 01 02 00 01 00 14    NTFY: ambient, voice off, level 20
+->  68 02 00 01 00 01 00 00    SET off
+<-  69 02 00 02 00 01 00 14    NTFY: effect off (the headset keeps level 20 stored)
+->  68 02 11 01 02 01 00 00    SET ANC
+<-  69 02 01 02 02 01 00 00    NTFY: on, ncValue 2 (NC)
+
+Reconnect: set ambient, `bluetoothctl disconnect` and `connect`, then a new
+bridge session. The headset still reports ambient at the same level. The
+initial setting (ANC) is then restored:
+->  66 02                      GET NC+ASM
+<-  67 02 01 02 02 01 00 00    RET: NC (initial setting)
+->  68 02 11 01 00 01 00 07    SET ambient, level 7
+<-  69 02 01 02 00 01 00 07    NTFY: ambient, level 7
+    -- bluetoothctl disconnect / connect --
+->  66 02                      GET NC+ASM
+<-  67 02 01 02 00 01 00 07    RET: ambient, level 7, kept across the reconnect
+->  68 02 11 01 02 01 00 00    SET ANC (restore the initial setting)
+<-  69 02 01 02 02 01 00 00    NTFY: on, ncValue 2 (NC)
+
+Not tested: Fast Pair battery frames (unchanged by this change), and wind
+noise reduction (ncValue 1) as a mode of its own; the panel does not offer it.
+
+Level after ANC, on ff4b4c5 (the bridge remembers the last ambient level above
+zero the headset reported). Run by SirAllap on the same headset, 2026-09-22,
+posted in PR #21. Ambient at 20 -> ANC -> Ambient comes back at 20, as loud by
+ear as before ANC:
+->  68 02 11 01 00 01 00 01    SET ambient (nothing remembered yet, so level 1)
+<-  69 02 01 02 00 01 00 01
+->  68 02 11 01 00 01 00 14    SET ambient, level 20
+<-  69 02 01 02 00 01 00 14
+->  68 02 11 01 02 01 00 00    SET ANC
+<-  69 02 01 02 02 01 00 00    level 0 in ANC
+->  68 02 11 01 00 01 00 14    SET ambient: back to 20
+<-  69 02 01 02 00 01 00 14

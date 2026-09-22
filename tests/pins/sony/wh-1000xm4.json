@@ -2,6 +2,7 @@
   "model": "Sony WH-1000XM4",
   "owner": "seth-reee",
   "bridge": "sony-bridge",
+  "capture": "docs/captures/sony-wh-1000xm4-ambient.txt",
   "notes": "0x02, MDR v1. PR #6. Nobody on the maintainer's desk has one: what is pinned is what PROTOCOL.md records the headset answering, and the frames the bridge builds from it.",
   "session": {
     "uuid": "v1",
@@ -78,19 +79,19 @@
     {
       "sent": [
         "66 02",
-        "68 02 00 02 00 01 00 00",
-        "68 02 01 02 01 01 00 00",
-        "68 02 01 02 02 01 00 00",
-        "68 02 01 02 01 01 00 05",
-        "68 02 01 02 02 01 01 00"
+        "68 02 00 01 00 01 00 00",
+        "68 02 11 01 00 01 00 01",
+        "68 02 11 01 02 01 00 00",
+        "68 02 11 01 00 01 00 05",
+        "68 02 11 01 02 01 01 00"
       ],
-      "note": "as on v2: each SET carries what the headset last reported, so the level 5 is gone again by the voice switch, which goes out in the reported mode (anc)"
+      "note": "effect 0x11 and ncValue 0 for ambient (1 is wind reduction); ambient never goes out at level 0, and the level 5 is gone again by the voice switch, which goes out in the reported mode (anc)"
     },
     {
       "line_count": 1
     },
     {
-      "device": "69 02 01 02 01 01 01 05"
+      "device": "69 02 01 02 00 01 01 05"
     },
     {
       "line": {
