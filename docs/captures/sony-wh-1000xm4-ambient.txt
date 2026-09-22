@@ -60,3 +60,16 @@ initial setting (ANC) is then restored:
 
 Not tested: Fast Pair battery frames (unchanged by this change), and wind
 noise reduction (ncValue 1) as a mode of its own; the panel does not offer it.
+
+Level after ANC, on ff4b4c5 (the bridge remembers the last ambient level above
+zero the headset reported). Run by SirAllap on the same headset, 2026-09-22,
+posted in PR #21. Ambient at 20 -> ANC -> Ambient comes back at 20, as loud by
+ear as before ANC:
+->  68 02 11 01 00 01 00 01    SET ambient (nothing remembered yet, so level 1)
+<-  69 02 01 02 00 01 00 01
+->  68 02 11 01 00 01 00 14    SET ambient, level 20
+<-  69 02 01 02 00 01 00 14
+->  68 02 11 01 02 01 00 00    SET ANC
+<-  69 02 01 02 02 01 00 00    level 0 in ANC
+->  68 02 11 01 00 01 00 14    SET ambient: back to 20
+<-  69 02 01 02 00 01 00 14
