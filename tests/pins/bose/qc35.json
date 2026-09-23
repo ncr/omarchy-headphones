@@ -1,0 +1,183 @@
+{
+  "model": "Bose QC35",
+  "owner": "pedrohfp",
+  "bridge": "bose-bridge",
+  "capture": "docs/captures/bose-qc35.txt",
+  "notes": "BMAP on RFCOMM channel 8, the same channel and the same [0.1] init as the QC45 (this headset answers '1.0.4'). What is frozen here is the second path: the QC45's [31.3] audio-mode GET comes back an ERROR, the bridge asks [1.6] instead and polls that from then on. [1.6] STATUS is two bytes — the current value, then a bitmask of the values the headset takes. This unit answered 01 0b: value 1, mask 0b1011, and it refused value 2 (the one bit under 4 the mask leaves clear) with an ERROR. 0 is off; 1 and 3 are the two strengths, named by the owner listening to them. A SETGET is answered with the resulting STATUS rather than an ack, so there is no PROCESSING step here. Battery is one byte on this generation, not the QC45's four. The 69% sample near the end is synthetic, derived from the observed 70% reply to exercise a battery change; every other frame in this pin is from docs/captures/bose-qc35.txt.",
+  "session": {},
+  "steps": [
+    {
+      "call": "open",
+      "note": "the socket is up and the [0.1] init has been answered; the battery and the QC45 mode query go out, exactly as they do for a QC45"
+    },
+    {
+      "sent": [
+        "02 02 01 00",
+        "1f 03 01 00"
+      ]
+    },
+    {
+      "device": "02 02 03 01 46",
+      "note": "[2.2] STATUS: 70% (0x46) in a single byte — this generation reports no further bytes"
+    },
+    {
+      "lines": [],
+      "note": "nothing is printed until the mode is known"
+    },
+    {
+      "device": "1f 03 04 01 03",
+      "note": "[31.3] ERROR 03: this headset does not serve the QC45's audio modes"
+    },
+    {
+      "sent_last": "01 06 01 00",
+      "note": "so it is asked the other question, once"
+    },
+    {
+      "lines": [],
+      "note": "an ERROR is not a mode; still nothing printed"
+    },
+    {
+      "device": "01 06 03 02 01 0b",
+      "note": "[1.6] STATUS: value 1, mask 0b1011 — off, and the two strengths"
+    },
+    {
+      "line": {
+        "modes": true,
+        "mode": "anc",
+        "available": [
+          "off",
+          "anc"
+        ],
+        "ancLevel": "high",
+        "ancLevels": [
+          "low",
+          "high"
+        ],
+        "battery": {
+          "headset": 70,
+          "charging": []
+        }
+      }
+    },
+    {
+      "fire": "poll"
+    },
+    {
+      "sent_last": "01 06 01 00",
+      "note": "from here the poll asks [1.6]; [31.3] is never sent again this run"
+    },
+    {
+      "command": "set off"
+    },
+    {
+      "sent_last": "01 06 02 01 00",
+      "note": "SETGET [1.6] -> 0, the headset's real off"
+    },
+    {
+      "device": "01 06 03 02 00 0b",
+      "note": "the headset answers the SETGET with the resulting STATUS"
+    },
+    {
+      "line_has": {
+        "mode": "off",
+        "ancLevel": "high"
+      },
+      "note": "the strength last seen is kept across off so the panel's row does not go blank"
+    },
+    {
+      "command": "set anc"
+    },
+    {
+      "sent_last": "01 06 02 01 01",
+      "note": "set anc asks for the strength last seen, as it does on every brand"
+    },
+    {
+      "device": "01 06 03 02 01 0b"
+    },
+    {
+      "line_has": {
+        "mode": "anc",
+        "ancLevel": "high"
+      }
+    },
+    {
+      "command": "level low"
+    },
+    {
+      "sent_last": "01 06 02 01 03"
+    },
+    {
+      "device": "01 06 03 02 03 0b"
+    },
+    {
+      "line_has": {
+        "mode": "anc",
+        "ancLevel": "low"
+      }
+    },
+    {
+      "command": "set anc",
+      "note": "now the strength last seen is low"
+    },
+    {
+      "sent_last": "01 06 02 01 03"
+    },
+    {
+      "command": "set ambient",
+      "note": "the QC35 has neither ambient nor TalkThru, no ambient dial and no low-latency switch; none of the five is sent"
+    },
+    {
+      "command": "set talkthru"
+    },
+    {
+      "command": "level mid"
+    },
+    {
+      "command": "voice on"
+    },
+    {
+      "command": "latency on"
+    },
+    {
+      "sent_last": "01 06 02 01 03",
+      "note": "still the last real command"
+    },
+    {
+      "device": "01 06 04 01 06",
+      "note": "[1.6] ERROR 06 — what this headset answers a value outside its mask with; it is not a state change"
+    },
+    {
+      "line_has": {
+        "mode": "anc",
+        "ancLevel": "low"
+      }
+    },
+    {
+      "device": "02 02 03 01 45",
+      "note": "SYNTHETIC: 69%, derived from the observed 70% reply to exercise a battery change. Not a captured device sample."
+    },
+    {
+      "line_has": {
+        "battery": {
+          "headset": 69,
+          "charging": []
+        }
+      }
+    },
+    {
+      "sent": [
+        "02 02 01 00",
+        "1f 03 01 00",
+        "01 06 01 00",
+        "01 06 01 00",
+        "01 06 02 01 00",
+        "01 06 02 01 01",
+        "01 06 02 01 03",
+        "01 06 02 01 03"
+      ]
+    },
+    {
+      "exit": null
+    }
+  ]
+}

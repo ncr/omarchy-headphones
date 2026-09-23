@@ -60,6 +60,33 @@ The QC45 has no "off": noise cancelling is Quiet or Aware, unmapped indexes
 forced into a name. There is no ambient dial and no wear sensor, so the line
 carries no level, voice or worn key. The headset never speaks on its own —
 every change it makes is only visible on a [31.3] GET — so the bridge polls.
+
+The QC35 generation does not serve [31.3] at all. Confirmed on a Bose QC35
+(address 04:52:C7:C2:A9:3E, firmware "1.0.4") on 2026-09-23 — see
+docs/captures/bose-qc35.txt — it answers the [31.3] GET with an ERROR and
+keeps its noise cancelling on [1.6] instead, off or one of two strengths:
+
+    GET    [1.6]        two bytes: the current value, then a bitmask whose
+                        set bits are the values this headset takes. It
+                        answered 01 0b — value 1, mask 0b1011 — and it
+                        refused value 2, the one bit the mask leaves clear,
+                        with an ERROR. 0 is off; 1 and 3 are the strengths
+    SETGET [1.6] value  switches, and is answered with the resulting STATUS
+                        rather than an ack, so the reply is the readback
+
+Which path a headset is on is decided by the headset, not by its name — a
+Bose name is whatever its owner typed into the app, and the QC45 capture
+carries no SDP listing to key a table on. Every Bose is therefore asked the
+QC45 question first, exactly as before the QC35 was added, and only one that
+answers it with an ERROR is asked [1.6]; from then on that is the question it
+is polled with. A QC45 answers [31.3] with a STATUS and never reaches the
+fallback, so what it is sent is unchanged, frame for frame.
+
+On the [1.6] path the line carries the panel's ANC strength row — `ancLevel`
+and `ancLevels`, the same keys nothing-bridge fills — because the QC35's two
+strengths are one `anc` mode graded twice, not two modes. Its "off" is a real
+off, so `available` is ["off", "anc"]; there is no ambient or TalkThru on
+this headset and neither is ever offered or sent.
 """
 import json
 import os
@@ -79,17 +106,23 @@ EXIT_UNSUPPORTED = 3
 EXIT_SETUP = 4
 
 # The BMAP operators, as the low nibble of the flags byte.
-OP_STATUS, OP_ERROR, OP_START = 3, 4, 5
+OP_SETGET, OP_STATUS, OP_ERROR, OP_START = 2, 3, 4, 5
 
 # A frame on the wire: [fblock, func, flags, length, ...payload].
 INIT = bytes([0x00, 0x01, 0x01, 0x00])      # GET [0.1]
 BATTERY = bytes([0x02, 0x02, 0x01, 0x00])   # GET [2.2]
 CURRENT = bytes([0x1f, 0x03, 0x01, 0x00])   # GET [31.3]
+NOISE = bytes([0x01, 0x06, 0x01, 0x00])     # GET [1.6]
 
 
 def start_mode(index):
     """START [31.3]: switch to the mode index, no voice prompt."""
     return bytes([0x1f, 0x03, OP_START, 0x02, index, 0x00])
+
+
+def set_noise(value):
+    """SETGET [1.6]: the QC35 answers this with the resulting STATUS."""
+    return bytes([0x01, 0x06, OP_SETGET, 0x01, value])
 
 
 # The modes the QC45 serves, by the index [31.3] reports. 0 and 1 are the
@@ -98,6 +131,20 @@ def start_mode(index):
 # they are not given names the panel could act on wrongly.
 MODE_BY_IDX = {0: "anc", 1: "ambient"}
 AVAILABLE = ["anc", "ambient"]
+
+# The two questions a Bose headset can be on. Every one starts on MODES, the
+# QC45's [31.3]; a headset that answers it with an ERROR moves to NOISE and
+# is never sent [31.3] again in that run.
+PATH_MODES, PATH_NOISE = "modes", "noise"
+
+# The [1.6] values this QC35 took, weakest first — the order the panel draws
+# its strength row in. 0 is off and is not a strength. Values outside this
+# table are dropped rather than named, the way the QC45's custom slots are;
+# the headset refused the one value it did not list (2) with an ERROR.
+NOISE_OFF = 0x00
+NOISE_LEVELS = ((0x03, "low"), (0x01, "high"))
+NOISE_LEVEL_BY_VALUE = dict(NOISE_LEVELS)
+NOISE_VALUE_BY_LEVEL = dict((name, value) for value, name in NOISE_LEVELS)
 
 # RFCOMM channels to ask for BMAP, in order. The QC45 capture confirms 8.
 # Candidates 2 and 9 came from an external implementation, not this capture;
@@ -184,6 +231,22 @@ def parse_battery(payload):
     return level
 
 
+def parse_noise(payload):
+    """(value, the values the mask names) out of a [1.6] STATUS payload.
+
+    The QC35 answers two bytes: what it is set to, then a bitmask of what it
+    takes — `01 0b` here, and it refused 2, the one value under 4 whose bit
+    0x0b leaves clear. A payload with no mask byte yields None for the set
+    rather than a guessed one, and the caller falls back to what is named.
+    """
+    if len(payload) < 1:
+        return None, None
+    if len(payload) < 2:
+        return payload[0], None
+    mask = payload[1]
+    return payload[0], [bit for bit in range(8) if mask & (1 << bit)]
+
+
 class Bridge:
     def __init__(self, address):
         self.address = address
@@ -199,6 +262,12 @@ class Bridge:
         self.mode = None
         self.battery = None
         self.last_line = None
+
+        # Which question this headset answers, and what the [1.6] path knows:
+        # the strength last seen and the values the headset's mask named.
+        self.path = PATH_MODES
+        self.level = None
+        self.supported = None
 
         self.opened_at = None
         self.next_poll = None
@@ -329,9 +398,28 @@ class Bridge:
         for frame in take_frames(self.buffer):
             self.on_frame(*frame)
 
+    def query(self):
+        """The mode question this headset answers."""
+        return NOISE if self.path == PATH_NOISE else CURRENT
+
+    def noise_levels(self):
+        """The strengths the headset's [1.6] mask named, weakest first."""
+        if self.supported is None:
+            return [name for _value, name in NOISE_LEVELS]
+        return [name for value, name in NOISE_LEVELS if value in self.supported]
+
+    def noise_available(self):
+        """The modes the [1.6] path offers: a real off, and graded ANC."""
+        out = []
+        if self.supported is None or NOISE_OFF in self.supported:
+            out.append("off")
+        if self.noise_levels():
+            out.append("anc")
+        return out
+
     def poll(self):
         self.polls += 1
-        self.send(CURRENT)
+        self.send(self.query())
         if self.polls % BATTERY_EVERY == 0:
             self.send(BATTERY)
         self.next_poll = time.monotonic() + POLL_INTERVAL
@@ -346,24 +434,62 @@ class Bridge:
                 self.battery = level
                 if changed:
                     self.report()
-        elif (fblock, func) == (31, 3) and op == OP_STATUS and len(payload) == 1:
-            mode = MODE_BY_IDX.get(payload[0])
-            if mode is not None and mode != self.mode:
-                self.mode = mode
-                self.report()
+        elif (fblock, func) == (31, 3):
+            if op == OP_STATUS and len(payload) == 1:
+                mode = MODE_BY_IDX.get(payload[0])
+                if mode is not None and mode != self.mode:
+                    self.mode = mode
+                    self.report()
+            elif op == OP_ERROR and self.path == PATH_MODES:
+                # This headset does not serve the QC45's audio modes. Ask the
+                # QC35's question once, and poll that one from here on; a
+                # headset that answered [31.3] never reaches this.
+                self.path = PATH_NOISE
+                self.send(NOISE)
+        elif (fblock, func) == (1, 6) and op == OP_STATUS \
+                and self.path == PATH_NOISE:
+            self.on_noise(payload)
+
+    def on_noise(self, payload):
+        """A [1.6] STATUS: what the headset is set to, and what it takes."""
+        value, supported = parse_noise(payload)
+        if value is None:
+            return
+        if value == NOISE_OFF:
+            mode, level = "off", self.level
+        elif value in NOISE_LEVEL_BY_VALUE:
+            mode, level = "anc", NOISE_LEVEL_BY_VALUE[value]
+        else:
+            return  # an unnamed value is dropped, not forced into a name
+        if supported is not None:
+            self.supported = supported
+        self.mode, self.level = mode, level
+        self.report()
 
     def report(self):
         if self.mode is None:
             return
-        battery = {"headset": self.battery, "charging": []} \
-            if self.battery is not None else None
-        line = {
-            "modes": True,
-            "mode": self.mode,
-            "available": AVAILABLE,
-        }
-        if battery is not None:
-            line["battery"] = battery
+        if self.path == PATH_NOISE:
+            levels = self.noise_levels()
+            line = {
+                "modes": True,
+                "mode": self.mode,
+                "available": self.noise_available(),
+                # The strength last seen, kept across off so the panel's row
+                # does not go blank; the strongest the headset named when it
+                # has been off the whole session. That default is the panel's,
+                # not something the headset said.
+                "ancLevel": self.level or (levels[-1] if levels else ""),
+                "ancLevels": levels,
+            }
+        else:
+            line = {
+                "modes": True,
+                "mode": self.mode,
+                "available": AVAILABLE,
+            }
+        if self.battery is not None:
+            line["battery"] = {"headset": self.battery, "charging": []}
         if line != self.last_line:
             self.last_line = line
             emit(line)
@@ -375,16 +501,40 @@ class Bridge:
         if len(parts) < 2 or self.mode is None:
             return
         verb, value = parts[0], parts[1]
+        frame = (self.noise_frame(verb, value) if self.path == PATH_NOISE
+                 else self.mode_frame(verb, value))
+        if frame is None:
+            return
+        self.send(frame)
+        self.readback_at = time.monotonic() + READBACK_DELAY
+
+    def mode_frame(self, verb, value):
+        """The QC45's [31.3] START, or None for anything it does not serve."""
+        if verb != "set":
+            return None
+        index = None
+        if value == "anc":
+            index = 0
+        elif value == "ambient":
+            index = 1
+        return None if index is None else start_mode(index)
+
+    def noise_frame(self, verb, value):
+        """The QC35's [1.6] SETGET, or None for anything it does not serve."""
+        levels = self.noise_levels()
         if verb == "set":
-            index = None
-            if value == "anc":
-                index = 0
-            elif value == "ambient":
-                index = 1
-            if index is None:
-                return
-            self.send(start_mode(index))
-            self.readback_at = time.monotonic() + READBACK_DELAY
+            if value == "off" and "off" in self.noise_available():
+                return set_noise(NOISE_OFF)
+            # "set anc" asks for the strength last seen, and the strongest the
+            # headset named when none has been — the same thing nothing-bridge
+            # does, so setMode anc means one thing on every brand.
+            if value == "anc" and levels:
+                wanted = self.level if self.level in levels else levels[-1]
+                return set_noise(NOISE_VALUE_BY_LEVEL[wanted])
+            return None
+        if verb == "level" and value in levels:
+            return set_noise(NOISE_VALUE_BY_LEVEL[value])
+        return None
 
     def on_stdin(self):
         try:
@@ -432,7 +582,7 @@ class Bridge:
                 break
             if self.readback_at is not None and now >= self.readback_at:
                 self.readback_at = None
-                self.send(CURRENT)
+                self.send(self.query())
             if self.next_poll is not None and now >= self.next_poll:
                 self.poll()
 
