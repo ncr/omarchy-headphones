@@ -70,7 +70,8 @@ keeps its noise cancelling on [1.6] instead, off or one of two strengths:
                         set bits are the values this headset takes. It
                         answered 01 0b — value 1, mask 0b1011 — and it
                         refused value 2, the one bit the mask leaves clear,
-                        with an ERROR. 0 is off; 1 and 3 are the strengths
+                        with an ERROR. 0 is off, 1 the weaker strength and
+                        3 the stronger, ranked by ear on the hardware
     SETGET [1.6] value  switches, and is answered with the resulting STATUS
                         rather than an ack, so the reply is the readback
 
@@ -141,8 +142,15 @@ PATH_MODES, PATH_NOISE = "modes", "noise"
 # its strength row in. 0 is off and is not a strength. Values outside this
 # table are dropped rather than named, the way the QC45's custom slots are;
 # the headset refused the one value it did not list (2) with an ERROR.
+#
+# Which of 1 and 3 is the stronger is the headset's to say, and it does not
+# say it on the wire: the owner ranked the three unnamed values by ear, twice
+# each, and 3 was the quietest and 0 the loudest. That is the opposite of what
+# the third-party tables for this protocol claim, which is why the naming is
+# not taken from them — a copied table would have put the panel's High button
+# on the weaker setting.
 NOISE_OFF = 0x00
-NOISE_LEVELS = ((0x03, "low"), (0x01, "high"))
+NOISE_LEVELS = ((0x01, "low"), (0x03, "high"))
 NOISE_LEVEL_BY_VALUE = dict(NOISE_LEVELS)
 NOISE_VALUE_BY_LEVEL = dict((name, value) for value, name in NOISE_LEVELS)
 

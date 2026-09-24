@@ -3,7 +3,7 @@
   "owner": "pedrohfp",
   "bridge": "bose-bridge",
   "capture": "docs/captures/bose-qc35.txt",
-  "notes": "BMAP on RFCOMM channel 8, the same channel and the same [0.1] init as the QC45 (this headset answers '1.0.4'). What is frozen here is the second path: the QC45's [31.3] audio-mode GET comes back an ERROR, the bridge asks [1.6] instead and polls that from then on. [1.6] STATUS is two bytes — the current value, then a bitmask of the values the headset takes. This unit answered 01 0b: value 1, mask 0b1011, and it refused value 2 (the one bit under 4 the mask leaves clear) with an ERROR. 0 is off; 1 and 3 are the two strengths, named by the owner listening to them. A SETGET is answered with the resulting STATUS rather than an ack, so there is no PROCESSING step here. Battery is one byte on this generation, not the QC45's four. The 69% sample near the end is synthetic, derived from the observed 70% reply to exercise a battery change; every other frame in this pin is from docs/captures/bose-qc35.txt.",
+  "notes": "BMAP on RFCOMM channel 8, the same channel and the same [0.1] init as the QC45 (this headset answers '1.0.4'). What is frozen here is the second path: the QC45's [31.3] audio-mode GET comes back an ERROR, the bridge asks [1.6] instead and polls that from then on. [1.6] STATUS is two bytes — the current value, then a bitmask of the values the headset takes. This unit answered 01 0b: value 1, mask 0b1011, and it refused value 2 (the one bit under 4 the mask leaves clear) with an ERROR. 0 is off; 1 and 3 are the two strengths. Which of the two is the stronger came from the owner ranking the three values by ear, twice each, with the values unnamed during the test: 3 was the quietest, 0 the loudest. That is the reverse of the published third-party tables for this protocol, so the naming here is the hardware's, not theirs. A SETGET is answered with the resulting STATUS rather than an ack, so there is no PROCESSING step. Battery is one byte on this generation, not the QC45's four. The 69% sample near the end is synthetic, derived from the observed 70% reply to exercise a battery change; every other frame in this pin is from docs/captures/bose-qc35.txt.",
   "session": {},
   "steps": [
     {
@@ -38,7 +38,7 @@
     },
     {
       "device": "01 06 03 02 01 0b",
-      "note": "[1.6] STATUS: value 1, mask 0b1011 — off, and the two strengths"
+      "note": "[1.6] STATUS: value 1 — the weaker strength — and mask 0b1011, which names off and both strengths"
     },
     {
       "line": {
@@ -48,7 +48,7 @@
           "off",
           "anc"
         ],
-        "ancLevel": "high",
+        "ancLevel": "low",
         "ancLevels": [
           "low",
           "high"
@@ -80,7 +80,7 @@
     {
       "line_has": {
         "mode": "off",
-        "ancLevel": "high"
+        "ancLevel": "low"
       },
       "note": "the strength last seen is kept across off so the panel's row does not go blank"
     },
@@ -89,25 +89,10 @@
     },
     {
       "sent_last": "01 06 02 01 01",
-      "note": "set anc asks for the strength last seen, as it does on every brand"
+      "note": "set anc asks for the strength last seen — low, so value 1"
     },
     {
       "device": "01 06 03 02 01 0b"
-    },
-    {
-      "line_has": {
-        "mode": "anc",
-        "ancLevel": "high"
-      }
-    },
-    {
-      "command": "level low"
-    },
-    {
-      "sent_last": "01 06 02 01 03"
-    },
-    {
-      "device": "01 06 03 02 03 0b"
     },
     {
       "line_has": {
@@ -116,8 +101,24 @@
       }
     },
     {
+      "command": "level high"
+    },
+    {
+      "sent_last": "01 06 02 01 03",
+      "note": "the stronger of the two, which this headset holds at value 3"
+    },
+    {
+      "device": "01 06 03 02 03 0b"
+    },
+    {
+      "line_has": {
+        "mode": "anc",
+        "ancLevel": "high"
+      }
+    },
+    {
       "command": "set anc",
-      "note": "now the strength last seen is low"
+      "note": "now the strength last seen is high, so the same command sends a different value"
     },
     {
       "sent_last": "01 06 02 01 03"
@@ -149,7 +150,7 @@
     {
       "line_has": {
         "mode": "anc",
-        "ancLevel": "low"
+        "ancLevel": "high"
       }
     },
     {

@@ -2,23 +2,28 @@
 
 Branch `bose-qc35`, off `948bfb2` (v1.3.10). Nothing here is pushed.
 
-## The one thing that is blocked
+## The naming, settled
 
-**Which of the [1.6] values 0x01 and 0x03 is High and which is Low.** The
-headset reports numbers; only a person wearing it can name them. The tables
-in the code currently read `0x03 low, 0x01 high`, which is what third-party
-clients claim — it is NOT confirmed on this headset and must not ship until
-it is. If the owner's ranking comes back the other way, flip `NOISE_LEVELS`
-in `bose-bridge` and the names in the pin, the capture and PROTOCOL.md.
+The owner ranked the three values by ear on 2026-09-23 — unnamed during the
+test, 12 s each, two rounds. 0x00 was the loudest, 0x03 the quietest:
 
-`wip/qc35_rank.py` is the test to run: three unnamed states, 12 s each, two
-rounds. The owner says which was quietest and which was loudest.
-State 1 = 0x00, state 2 = 0x01, state 3 = 0x03.
+    0x00  off
+    0x01  low       the weaker strength
+    0x03  high      the stronger strength
 
-A second, smaller gap: whether the headset announces a change made on the
-headset itself. Two watch windows recorded zero unsolicited [1.6] frames,
-but it is not established that the owner operated the control during either,
-so this is untested rather than a negative result. The bridge polls anyway.
+**This is the reverse of the published third-party tables**, which claim
+0x01 is High. Do not "correct" `NOISE_LEVELS` in `bose-bridge` to match
+them: it would put the panel's High button on the weaker setting. The raw
+run is `wip/rank-run3.txt`; the live bridge run with the settled names is
+`wip/raw-live-bridge-2.txt`.
+
+## Still untested, and recorded as such
+
+Whether the headset announces a change made on the headset itself. Three
+watch windows recorded zero unsolicited [1.6] frames, but the owner
+confirmed he did not operate the control during them, so this is untested
+rather than a negative result. The bridge polls every 4 s, which covers it
+either way.
 
 ## Done
 

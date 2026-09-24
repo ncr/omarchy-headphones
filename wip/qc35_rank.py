@@ -9,6 +9,7 @@ initial value is read first and restored in `finally`, verified by readback.
 import re
 import signal
 import socket
+import subprocess
 import sys
 import time
 
@@ -62,6 +63,18 @@ def read_nc(link, label):
     return values[-1] if values else None
 
 
+def notify(summary, body="", urgency="normal", seconds=12):
+    """Say it on the desktop too: the listener is wearing the headphones and
+    cannot read a log that is being written somewhere else. One notification
+    id, so each state replaces the last instead of stacking up."""
+    try:
+        subprocess.run(["notify-send", "-r", "9001", "-u", urgency,
+                        "-t", str(int(seconds * 1000)), summary, body],
+                       check=False, timeout=5)
+    except (OSError, subprocess.SubprocessError):
+        pass
+
+
 def banner(text):
     print("\n" + "=" * 58, flush=True)
     print(text, flush=True)
@@ -81,6 +94,9 @@ def run(link):
     banner("PUT THE HEADPHONES ON. No music. %d seconds." % GRACE)
     for left in range(int(GRACE), 0, -10):
         print("    starting in %d..." % left, flush=True)
+        notify("Pon o fone — sem musica",
+               "Comeca em %d segundos. Precisa de ruido de fundo." % left,
+               "critical", 10)
         link.drain(10.0)
 
     wrote = False
@@ -91,11 +107,17 @@ def run(link):
                        % (round_number, label, HOLD))
                 wrote = True
                 link.exchange(nc_setget(value), "state %d" % label)
+                notify("ESTADO %d" % label,
+                       "rodada %d de 2  ·  %d segundos"
+                       % (round_number, int(HOLD)), "critical", HOLD)
                 link.drain(HOLD)
 
         banner("RANKING DONE. Now press the buttons on the left earcup a\n"
                "few times, or change noise cancelling in the Bose Connect\n"
                "app. %d seconds. Nothing is being sent from here." % WATCH)
+        notify("Agora muda tu o cancelamento",
+               "Botoes do lado esquerdo do fone, ou o app Bose Connect. "
+               "%d segundos." % int(WATCH), "critical", WATCH)
         pushed = link.drain(WATCH)
         announced = [p.hex(" ") for b, f, op, p in pushed if (b, f) == (1, 6)]
         banner("the headset sent %d [1.6] frames unasked: %s"
@@ -107,6 +129,8 @@ def run(link):
                 if read_nc(link, "restore check") != initial:
                     raise RuntimeError("restore readback differs")
                 link.log("== restored initial 0x%02x ==" % initial)
+                notify("Terminou", "Teu ajuste original foi restaurado. "
+                       "Pode tirar o fone.", "critical", 30)
             except BaseException:
                 link.log("!! RESTORATION FAILED; set the headset by hand")
                 raise
