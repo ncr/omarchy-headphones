@@ -1921,9 +1921,13 @@ response latency.
 Two limits are recorded rather than resolved. Channels 2 and 9 were never
 reached on this headset, because 8 answered the probe first — untried, not
 refused. And whether the headset announces a change made on the headset
-itself is **untested**: a 40-second window recorded no unsolicited `[1.6]`
-frames, but the owner confirmed he did not operate the control during it.
-The bridge polls every four seconds, which covers either answer.
+itself is **untested**: three windows totalling 110 seconds recorded no
+unsolicited `[1.6]` frames, but the owner confirmed he did not operate the
+headset's own controls during any of them. The bridge polls every four
+seconds, which covers either answer.
+
+See [the review and the owner's hardware runs](docs/BOSE-QC35-REVIEW.md) for
+what was tested on this headset and what remains open.
 
 ## Canonical owner captures — 2026-09-08
 
