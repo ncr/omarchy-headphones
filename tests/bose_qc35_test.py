@@ -82,6 +82,21 @@ class PathSwitch(unittest.TestCase):
         self.assertEqual(s.lines[-1]["available"], ["anc", "ambient"])
         self.assertNotIn("ancLevels", s.lines[-1])
 
+    def test_an_error_after_the_audio_modes_answered_keeps_the_qc45_question(self):
+        """A headset that answered [31.3] once stays on it. The ERROR is
+        synthetic: no QC45 capture shows one, which is why it must not move
+        a QC45 onto a question it was never sent."""
+        s = Session()
+        s.do_open()
+        s.device("02 02 03 04 5a ff ff 00")
+        s.device("1f 03 03 01 01")
+        s.command("set anc")
+        s.device("1f 03 04 01 03")  # synthetic: the START refused
+        s.fire()
+        self.assertEqual(s.bridge.path, m.PATH_MODES)
+        self.assertNotIn("01 06 01 00", s.sent)
+        self.assertEqual(s.bridge.mode, "ambient")
+
     def test_a_noise_reply_before_the_switch_is_ignored(self):
         s = Session()
         s.do_open()

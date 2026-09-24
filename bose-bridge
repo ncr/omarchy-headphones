@@ -79,8 +79,8 @@ Which path a headset is on is decided by the headset, not by its name — a
 Bose name is whatever its owner typed into the app, and the QC45 capture
 carries no SDP listing to key a table on. Every Bose is therefore asked the
 QC45 question first, exactly as before the QC35 was added, and only one that
-answers it with an ERROR is asked [1.6]; from then on that is the question it
-is polled with. A QC45 answers [31.3] with a STATUS and never reaches the
+answers it with an ERROR before any STATUS is asked [1.6]; from then on that
+is the question it is polled with. A QC45 answers [31.3] with a STATUS and never reaches the
 fallback, so what it is sent is unchanged, frame for frame.
 
 On the [1.6] path the line carries the panel's ANC strength row — `ancLevel`
@@ -448,10 +448,14 @@ class Bridge:
                 if mode is not None and mode != self.mode:
                     self.mode = mode
                     self.report()
-            elif op == OP_ERROR and self.path == PATH_MODES:
+            elif op == OP_ERROR and self.path == PATH_MODES \
+                    and self.mode is None:
                 # This headset does not serve the QC45's audio modes. Ask the
-                # QC35's question once, and poll that one from here on; a
-                # headset that answered [31.3] never reaches this.
+                # QC35's question once, and poll that one from here on. Only
+                # a headset that has never answered [31.3] with a STATUS gets
+                # here: an ERROR after one — a refused START, say — leaves a
+                # QC45 on its own question, since no QC45 capture shows what
+                # such an ERROR would mean.
                 self.path = PATH_NOISE
                 self.send(NOISE)
         elif (fblock, func) == (1, 6) and op == OP_STATUS \

@@ -1842,8 +1842,10 @@ name — and the QC45's capture carries no SDP listing to write its row from,
 so that row would have to be invented.
 
 So every Bose is asked `[31.3]` first, exactly as before this model was
-added, and only one that answers with an **ERROR** is asked `[1.6]` and
-polled on it from then on. A QC45 answers `[31.3]` with a STATUS and never
+added, and only one that answers with an **ERROR**, before it has ever
+answered `[31.3]` with a STATUS, is asked `[1.6]` and polled on it from then
+on. An ERROR after a STATUS — a refused START, say — leaves the headset on
+`[31.3]`: no QC45 capture shows such an ERROR, so it must not move a QC45. A QC45 answers `[31.3]` with a STATUS and never
 reaches the fallback: its wire is unchanged frame for frame, which is what
 `tests/pins/bose/qc45.json` passing untouched demonstrates.
 
