@@ -112,6 +112,17 @@ Headphones not on the list? [Add yours](#add-your-own-headphones).
 </tr>
 </table>
 
+<table>
+<tr>
+<td width="50%"><img src="docs/gallery/bose-qc35.png" alt="Bose QC35: one battery, Off / ANC, and the ANC level row Low / High" width="100%"></td>
+<td width="50%"></td>
+</tr>
+<tr>
+<td align="center">Bose QC35 — <a href="https://github.com/pedrohfp">@pedrohfp</a></td>
+<td align="center"></td>
+</tr>
+</table>
+
 ## What it does
 
 - **Battery level** — per earbud and the case, or the single battery of
