@@ -1920,16 +1920,35 @@ itself against the headset. Raw reads are logged at receipt before framing;
 each step waits a fixed collection window, so no timestamp there measures
 response latency.
 
-Two limits are recorded rather than resolved. Channels 2 and 9 were never
-reached on this headset, because 8 answered the probe first — untried, not
-refused. And whether the headset announces a change made on the headset
-itself is **untested**: three windows totalling 110 seconds recorded no
-unsolicited `[1.6]` frames, but the owner confirmed he did not operate the
-headset's own controls during any of them. The bridge polls every four
-seconds, which covers either answer.
+### Tested on the headset
 
-See [the review and the owner's hardware runs](docs/BOSE-QC35-REVIEW.md) for
-what was tested on this headset and what remains open.
+By [@pedrohfp](https://github.com/pedrohfp) on `3aa8974`, with the plugin
+installed from that revision and nothing else holding channel 8:
+
+| Run | Result |
+|:--|:--|
+| Read-only discovery | init `1.0.4`, battery `02 02 03 01 46` (70%, matching BlueZ), `[31.3]` ERROR, `[1.6]` `01 0b` |
+| Driven session | values 0, 1 and 3 accepted and read back; 2 refused with `01 06 04 01 06` and the setting did not move; initial value restored and the restoration verified |
+| Bridge over its own pipe | first reading, `set off`, `set anc`, `level low`, `level high`, seven unsupported commands that sent nothing, restoration, exit 0 |
+| Reconnect | `bluetoothctl disconnect` showed `not connected`; after reconnect mode, strength and battery all returned, and a strength set before the cycle survived it |
+| Panel | Off, ANC, Low and High all responded; the owner reports the three states audibly distinct, High the stronger cancelling |
+
+### Not established
+
+- **Unsolicited changes.** Three windows totalling 110 seconds recorded no
+  `[1.6]` frame the bridge had not asked for, but the owner did not operate
+  the headset's own controls during any of them, so whether it announces a
+  change made on the headset is unknown. A panel change travels through the
+  bridge and does not count. The bridge polls every four seconds either way.
+- **Channels 2 and 9** were never tried on this headset, because 8 answered
+  the probe first — untried, not refused.
+- **Charging.** The battery read 70% throughout; `charging` is always empty.
+- **The support mask** is an inference from four observations matching
+  `0x0b`. No other mask has been seen from any Bose.
+- **Peer isolation** is simulated in `tests/bose_qc35_test.py`; no second
+  headset was connected alongside.
+- **The `[5.1]` and `[4.2]` frames** sent after the init are recorded in the
+  capture and stepped over by the framer; their meaning is not known.
 
 ## Canonical owner captures — 2026-09-08
 
