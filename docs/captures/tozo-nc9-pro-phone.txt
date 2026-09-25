@@ -1,0 +1,738 @@
+TOZO NC9 Pro / NC9 Pro Box — owner @seth-reee
+Selected ATT packets from the owner phone HCI capture. All other devices,
+audio, and vendor diagnostic traffic omitted. No packet bytes redacted.
+Original SHA256: 75573044ce5c197821bd70c19e612bfa0b4fc50b8f2e7504b236b2100b714d95
+btmon renders timestamps in host local time as 15:06; the screenshot filenames
+and phone show 22:06. This is a seven-hour display offset. Align by seconds;
+these original trace times are preserved, not asserted to be UTC wall time.
+ACL handle 5 = earbuds 94:4B:F8:C1:5F:98; handle 7 = case 41:42:B1:F6:F8:4F.
+Screenshots: 220600 L=100 R=100; 220610 Transparency; 220619 ANC;
+220626 Leisure; 220632 Reduce Wind Noise; 220637 Normal; 220642 Adaptive;
+220656 case=100, case firmware displayed V1.1.5. All dated 20260924.
+SET replies acknowledge success; mode values are established by separate live
+readback in tozo-nc9-pro-live.txt. The app's other commands are evidence only,
+not support claims or runtime commands.
+
+< LE-ACL: Handle 5 [2/16].. flags 0x00 dlen 9  #1899 2026-09-24 15:05:56.872607
+      ATT: Write Request (0x12) len 4
+        Handle: 0x000a
+          Data[2]:
+        01 00                                            ..              
+> LE-ACL: Handle 5 [94:4B.. flags 0x02 dlen 5  #1916 2026-09-24 15:05:56.931498
+      ATT: Write Response (0x13) len 0
+< LE-ACL: Handle 5 [1/16].. flags 0x00 dlen 9  #1917 2026-09-24 15:05:56.934216
+      ATT: Write Request (0x12) len 4
+        Handle: 0x0010
+          Data[2]:
+        01 00                                            ..              
+> LE-ACL: Handle 5 [94:4B.. flags 0x02 dlen 5  #1924 2026-09-24 15:05:56.988585
+      ATT: Write Response (0x13) len 0
+< LE-ACL: Handle 5 [1/16].. flags 0x00 dlen 7  #1940 2026-09-24 15:05:57.380582
+      ATT: Exchange MTU Request (0x02) len 2
+        Client RX MTU: 517
+> LE-ACL: Handle 5 [94:4B.. flags 0x02 dlen 7  #1946 2026-09-24 15:05:57.439084
+      ATT: Exchange MTU Response (0x03) len 2
+        Server RX MTU: 256
+< LE-ACL: Handle 5 [1/16.. flags 0x00 dlen 11  #1950 2026-09-24 15:05:57.491432
+      ATT: Write Command (0x52) len 6
+        Handle: 0x000c
+          Data[4]:
+        00 01 00 00                                      ....            
+> LE-ACL: Handle 5 [94:4.. flags 0x02 dlen 17  #1956 2026-09-24 15:05:57.588944
+      ATT: Handle Value Notification (0x1b) len 12
+        Handle: 0x0009
+          Data[10]:
+        00 01 06 00 05 02 00 05 02 0e                    ..........      
+< LE-ACL: Handle 5 [2/16.. flags 0x00 dlen 11  #1963 2026-09-24 15:05:57.643710
+      ATT: Write Command (0x52) len 6
+        Handle: 0x000c
+          Data[4]:
+        00 01 00 00                                      ....            
+> LE-ACL: Handle 5 [94:4.. flags 0x02 dlen 17  #1966 2026-09-24 15:05:57.679149
+      ATT: Handle Value Notification (0x1b) len 12
+        Handle: 0x0009
+          Data[10]:
+        00 01 06 00 05 02 00 05 02 0e                    ..........      
+< LE-ACL: Handle 5 [1/16.. flags 0x00 dlen 11  #1968 2026-09-24 15:05:57.733103
+      ATT: Write Command (0x52) len 6
+        Handle: 0x000c
+          Data[4]:
+        00 18 00 00                                      ....            
+> LE-ACL: Handle 5 [94:4.. flags 0x02 dlen 51  #1973 2026-09-24 15:05:57.827442
+      ATT: Handle Value Notification (0x1b) len 46
+        Handle: 0x0009
+          Data[44]:
+        00 18 28 14 00 0a 00 32 00 00 00 64 00 01 00 c8  ..(....2...d....
+        00 03 00 90 01 05 00 20 03 07 00 40 06 09 00 80  ....... ...@....
+        0c 01 00 00 19 04 00 00 32 09 00 74              ........2..t    
+< LE-ACL: Handle 5 [1/16.. flags 0x00 dlen 11  #1974 2026-09-24 15:05:57.888354
+      ATT: Write Command (0x52) len 6
+        Handle: 0x000c
+          Data[4]:
+        00 06 00 00                                      ....            
+> LE-ACL: Handle 5 [94:4.. flags 0x02 dlen 12  #1976 2026-09-24 15:05:57.948912
+      ATT: Handle Value Notification (0x1b) len 7
+        Handle: 0x0009
+          Data[5]:
+        00 06 01 00 00                                   .....           
+< LE-ACL: Handle 5 [1/16.. flags 0x00 dlen 11  #1978 2026-09-24 15:05:58.008728
+      ATT: Write Command (0x52) len 6
+        Handle: 0x000c
+          Data[4]:
+        00 25 00 00                                      .%..            
+> LE-ACL: Handle 5 [94:4.. flags 0x02 dlen 12  #1983 2026-09-24 15:05:58.067449
+      ATT: Handle Value Notification (0x1b) len 7
+        Handle: 0x0009
+          Data[5]:
+        00 25 01 01 01                                   .%...           
+< LE-ACL: Handle 5 [1/16.. flags 0x00 dlen 11  #1984 2026-09-24 15:05:58.125317
+      ATT: Write Command (0x52) len 6
+        Handle: 0x000c
+          Data[4]:
+        00 29 00 00                                      .)..            
+> LE-ACL: Handle 5 [94:4.. flags 0x02 dlen 12  #1991 2026-09-24 15:05:58.187174
+      ATT: Handle Value Notification (0x1b) len 7
+        Handle: 0x0009
+          Data[5]:
+        00 29 01 00 00                                   .)...           
+< LE-ACL: Handle 5 [1/16.. flags 0x00 dlen 11  #1992 2026-09-24 15:05:58.247886
+      ATT: Write Command (0x52) len 6
+        Handle: 0x000c
+          Data[4]:
+        00 01 00 00                                      ....            
+> LE-ACL: Handle 5 [94:4.. flags 0x02 dlen 17  #2001 2026-09-24 15:05:58.336290
+      ATT: Handle Value Notification (0x1b) len 12
+        Handle: 0x0009
+          Data[10]:
+        00 01 06 00 05 02 00 05 02 0e                    ..........      
+< LE-ACL: Handle 5 [1/16.. flags 0x00 dlen 11  #2002 2026-09-24 15:05:58.396556
+      ATT: Write Command (0x52) len 6
+        Handle: 0x000c
+          Data[4]:
+        00 31 00 00                                      .1..            
+> LE-ACL: Handle 5 [94:4.. flags 0x02 dlen 13  #2007 2026-09-24 15:05:58.433653
+      ATT: Handle Value Notification (0x1b) len 8
+        Handle: 0x0009
+          Data[6]:
+        00 31 02 03 03 06                                .1....          
+< LE-ACL: Handle 5 [1/16.. flags 0x00 dlen 11  #2008 2026-09-24 15:05:58.492423
+      ATT: Write Command (0x52) len 6
+        Handle: 0x000c
+          Data[4]:
+        00 02 00 00                                      ....            
+> LE-ACL: Handle 5 [94:4.. flags 0x02 dlen 13  #2012 2026-09-24 15:05:58.530996
+      ATT: Handle Value Notification (0x1b) len 8
+        Handle: 0x0009
+          Data[6]:
+        00 02 02 64 64 c8                                ...dd.          
+< LE-ACL: Handle 5 [1/16.. flags 0x00 dlen 11  #2013 2026-09-24 15:05:58.588602
+      ATT: Write Command (0x52) len 6
+        Handle: 0x000c
+          Data[4]:
+        00 20 00 00                                      . ..            
+> LE-ACL: Handle 5 [94:4.. flags 0x02 dlen 17  #2020 2026-09-24 15:05:58.628926
+      ATT: Handle Value Notification (0x1b) len 12
+        Handle: 0x0009
+          Data[10]:
+        00 20 06 41 42 b1 f6 f8 4f 71                    . .AB...Oq      
+> LE-ACL: Handle 7 [41:42.. flags 0x02 dlen 7  #2138 2026-09-24 15:05:59.569511
+      ATT: Exchange MTU Request (0x02) len 2
+        Client RX MTU: 672
+< LE-ACL: Handle 7 [1/16.. flags 0x00 dlen 11  #2139 2026-09-24 15:05:59.571293
+      ATT: Read By Type Request (0x08) len 6
+        Handle range: 0x0001-0xffff
+        Attribute type: Appearance (0x2a01)
+> LE-ACL: Handle 7 [41:42.. flags 0x02 dlen 7  #2142 2026-09-24 15:05:59.572784
+      ATT: Exchange MTU Request (0x02) len 2
+        Client RX MTU: 256
+< LE-ACL: Handle 7 [2/16].. flags 0x00 dlen 7  #2143 2026-09-24 15:05:59.573174
+      ATT: Exchange MTU Response (0x03) len 2
+        Server RX MTU: 517
+< LE-ACL: Handle 7 [3/16].. flags 0x00 dlen 7  #2145 2026-09-24 15:05:59.574272
+      ATT: Exchange MTU Response (0x03) len 2
+        Server RX MTU: 517
+> LE-ACL: Handle 7 [41:42.. flags 0x02 dlen 9  #2149 2026-09-24 15:05:59.598798
+      ATT: Error Response (0x01) len 4
+        Read By Type Request (0x08)
+        Handle: 0x0001
+        Error: Attribute Not Found (0x0a)
+< LE-ACL: Handle 7 [1/16.. flags 0x00 dlen 11  #2150 2026-09-24 15:05:59.599181
+      ATT: Read By Type Request (0x08) len 6
+        Handle range: 0x0001-0xffff
+        Attribute type: Database Hash (0x2b2a)
+> LE-ACL: Handle 7 [41:42.. flags 0x02 dlen 9  #2155 2026-09-24 15:05:59.659170
+      ATT: Error Response (0x01) len 4
+        Read By Type Request (0x08)
+        Handle: 0x0001
+        Error: Attribute Not Found (0x0a)
+< LE-ACL: Handle 7 [1/16.. flags 0x00 dlen 11  #2159 2026-09-24 15:05:59.660342
+      ATT: Read By Group Type Request (0x10) len 6
+        Handle range: 0x0001-0xffff
+        Attribute group type: Primary Service (0x2800)
+> LE-ACL: Handle 7 [41:4.. flags 0x02 dlen 46  #2167 2026-09-24 15:05:59.722190
+      ATT: Read By Group Type Response (0x11) len 41
+        Attribute data length: 20
+        Attribute group list: 2 entries
+        Handle range: 0x0001-0x000b
+        UUID: Vendor specific (000001ff-3c17-d293-8e48-14fe2e4da212)
+        Handle range: 0x000c-0x0011
+        UUID: Vendor specific (00009966-3c17-d293-8e48-14fe2e4da212)
+< LE-ACL: Handle 7 [1/16.. flags 0x00 dlen 11  #2170 2026-09-24 15:05:59.722907
+      ATT: Read By Group Type Request (0x10) len 6
+        Handle range: 0x0012-0xffff
+        Attribute group type: Primary Service (0x2800)
+> LE-ACL: Handle 7 [41:42.. flags 0x02 dlen 9  #2172 2026-09-24 15:05:59.777913
+      ATT: Error Response (0x01) len 4
+        Read By Group Type Request (0x10)
+        Handle: 0x0012
+        Error: Attribute Not Found (0x0a)
+< LE-ACL: Handle 7 [1/16.. flags 0x00 dlen 11  #2178 2026-09-24 15:05:59.778803
+      ATT: Read By Type Request (0x08) len 6
+        Handle range: 0x0001-0x000b
+        Attribute type: Include (0x2802)
+> LE-ACL: Handle 7 [41:42.. flags 0x02 dlen 9  #2181 2026-09-24 15:05:59.839300
+      ATT: Error Response (0x01) len 4
+        Read By Type Request (0x08)
+        Handle: 0x0001
+        Error: Attribute Not Found (0x0a)
+< LE-ACL: Handle 7 [1/16.. flags 0x00 dlen 11  #2182 2026-09-24 15:05:59.839984
+      ATT: Read By Type Request (0x08) len 6
+        Handle range: 0x0001-0x000b
+        Attribute type: Characteristic (0x2803)
+> LE-ACL: Handle 7 [41:4.. flags 0x02 dlen 34  #2186 2026-09-24 15:05:59.929358
+      ATT: Read By Type Response (0x09) len 29
+        Attribute data length: 7
+        Attribute data list: 4 entries
+        Handle: 0x0002
+        Value[5]:
+        10 03 00 12 b6                                   .....           
+            Properties: 0x10
+              Notify (0x10)
+            Value Handle: 0x0003
+            Value UUID: Unknown (0xb612)
+        Handle: 0x0005
+        Value[5]:
+        04 06 00 11 b6                                   .....           
+            Properties: 0x04
+              Write Without Response (0x04)
+            Value Handle: 0x0006
+            Value UUID: Unknown (0xb611)
+        Handle: 0x0007
+        Value[5]:
+        0e 08 00 11 b5                                   .....           
+            Properties: 0x0e
+              Read (0x02)
+              Write Without Response (0x04)
+              Write (0x08)
+            Value Handle: 0x0008
+            Value UUID: Unknown (0xb511)
+        Handle: 0x0009
+        Value[5]:
+        12 0a 00 12 b5                                   .....           
+            Properties: 0x12
+              Read (0x02)
+              Notify (0x10)
+            Value Handle: 0x000a
+            Value UUID: Unknown (0xb512)
+< LE-ACL: Handle 7 [1/16.. flags 0x00 dlen 11  #2188 2026-09-24 15:05:59.930178
+      ATT: Read By Type Request (0x08) len 6
+        Handle range: 0x000a-0x000b
+        Attribute type: Characteristic (0x2803)
+> LE-ACL: Handle 7 [41:42.. flags 0x02 dlen 9  #2190 2026-09-24 15:05:59.989803
+      ATT: Error Response (0x01) len 4
+        Read By Type Request (0x08)
+        Handle: 0x000a
+        Error: Attribute Not Found (0x0a)
+< LE-ACL: Handle 7 [1/16].. flags 0x00 dlen 9  #2191 2026-09-24 15:05:59.990685
+      ATT: Find Information Request (0x04) len 4
+        Handle range: 0x0004-0x0004
+> LE-ACL: Handle 7 [41:4.. flags 0x02 dlen 10  #2194 2026-09-24 15:06:00.004814
+      ATT: Find Information Response (0x05) len 5
+        Format: UUID-16 (0x01)
+        Handle: 0x0004
+        UUID: Client Characteristic Configuration (0x2902)
+< LE-ACL: Handle 7 [1/16].. flags 0x00 dlen 9  #2195 2026-09-24 15:06:00.005391
+      ATT: Find Information Request (0x04) len 4
+        Handle range: 0x000b-0x000b
+> LE-ACL: Handle 7 [41:4.. flags 0x02 dlen 10  #2199 2026-09-24 15:06:00.027134
+      ATT: Find Information Response (0x05) len 5
+        Format: UUID-16 (0x01)
+        Handle: 0x000b
+        UUID: Client Characteristic Configuration (0x2902)
+< LE-ACL: Handle 7 [1/16.. flags 0x00 dlen 11  #2200 2026-09-24 15:06:00.027626
+      ATT: Read By Type Request (0x08) len 6
+        Handle range: 0x000c-0x0011
+        Attribute type: Include (0x2802)
+> LE-ACL: Handle 7 [41:42.. flags 0x02 dlen 9  #2202 2026-09-24 15:06:00.042159
+      ATT: Error Response (0x01) len 4
+        Read By Type Request (0x08)
+        Handle: 0x000c
+        Error: Attribute Not Found (0x0a)
+< LE-ACL: Handle 7 [1/16.. flags 0x00 dlen 11  #2203 2026-09-24 15:06:00.042688
+      ATT: Read By Type Request (0x08) len 6
+        Handle range: 0x000c-0x0011
+        Attribute type: Characteristic (0x2803)
+> LE-ACL: Handle 7 [41:4.. flags 0x02 dlen 20  #2205 2026-09-24 15:06:00.057510
+      ATT: Read By Type Response (0x09) len 15
+        Attribute data length: 7
+        Attribute data list: 2 entries
+        Handle: 0x000d
+        Value[5]:
+        0c 0e 00 b1 ff                                   .....           
+            Properties: 0x0c
+              Write Without Response (0x04)
+              Write (0x08)
+            Value Handle: 0x000e
+            Value UUID: Unknown (0xffb1)
+        Handle: 0x000f
+        Value[5]:
+        10 10 00 b2 ff                                   .....           
+            Properties: 0x10
+              Notify (0x10)
+            Value Handle: 0x0010
+            Value UUID: Unknown (0xffb2)
+< LE-ACL: Handle 7 [1/16.. flags 0x00 dlen 11  #2206 2026-09-24 15:06:00.057993
+      ATT: Read By Type Request (0x08) len 6
+        Handle range: 0x0010-0x0011
+        Attribute type: Characteristic (0x2803)
+> LE-ACL: Handle 7 [41:42.. flags 0x02 dlen 9  #2208 2026-09-24 15:06:00.072209
+      ATT: Error Response (0x01) len 4
+        Read By Type Request (0x08)
+        Handle: 0x0010
+        Error: Attribute Not Found (0x0a)
+< LE-ACL: Handle 7 [1/16].. flags 0x00 dlen 9  #2209 2026-09-24 15:06:00.073393
+      ATT: Find Information Request (0x04) len 4
+        Handle range: 0x0011-0x0011
+> LE-ACL: Handle 7 [41:4.. flags 0x02 dlen 10  #2211 2026-09-24 15:06:00.087210
+      ATT: Find Information Response (0x05) len 5
+        Format: UUID-16 (0x01)
+        Handle: 0x0011
+        UUID: Client Characteristic Configuration (0x2902)
+< LE-ACL: Handle 7 [1/16].. flags 0x00 dlen 9  #2214 2026-09-24 15:06:00.097767
+      ATT: Write Request (0x12) len 4
+        Handle: 0x0004 Type: Client Characteristic Configuration (0x2902)
+        Value Handle: 0x0003 Type: Unknown (0xb612)
+          Data[2]:
+        01 00                                            ..              
+            Notification (0x01)
+> LE-ACL: Handle 7 [41:42.. flags 0x02 dlen 5  #2218 2026-09-24 15:06:00.110477
+      ATT: Write Response (0x13) len 0
+< LE-ACL: Handle 7 [1/16].. flags 0x00 dlen 9  #2219 2026-09-24 15:06:00.113837
+      ATT: Write Request (0x12) len 4
+        Handle: 0x000b Type: Client Characteristic Configuration (0x2902)
+        Value Handle: 0x000a Type: Unknown (0xb512)
+          Data[2]:
+        01 00                                            ..              
+            Notification (0x01)
+> LE-ACL: Handle 7 [41:42.. flags 0x02 dlen 5  #2221 2026-09-24 15:06:00.126731
+      ATT: Write Response (0x13) len 0
+< LE-ACL: Handle 7 [1/16.. flags 0x00 dlen 12  #2229 2026-09-24 15:06:00.628209
+      ATT: Write Command (0x52) len 7
+        Handle: 0x0006 Type: Unknown (0xb611)
+          Data[5]:
+        11 0b 01 01 01                                   .....           
+< LE-ACL: Handle 5 [2/16.. flags 0x00 dlen 11  #2230 2026-09-24 15:06:00.637138
+      ATT: Write Command (0x52) len 6
+        Handle: 0x000c
+          Data[4]:
+        00 01 00 00                                      ....            
+> LE-ACL: Handle 5 [94:4.. flags 0x02 dlen 17  #2237 2026-09-24 15:06:00.678925
+      ATT: Handle Value Notification (0x1b) len 12
+        Handle: 0x0009
+          Data[10]:
+        00 01 06 00 05 02 00 05 02 0e                    ..........      
+< LE-ACL: Handle 7 [1/16.. flags 0x00 dlen 11  #2240 2026-09-24 15:06:00.980037
+      ATT: Write Command (0x52) len 6
+        Handle: 0x0006 Type: Unknown (0xb611)
+          Data[4]:
+        01 01 00 00                                      ....            
+> LE-ACL: Handle 7 [41:4.. flags 0x02 dlen 14  #2253 2026-09-24 15:06:01.037208
+      ATT: Handle Value Notification (0x1b) len 9
+        Handle: 0x0003 Type: Unknown (0xb612)
+          Data[7]:
+        01 01 03 01 01 05 07                             .......         
+< LE-ACL: Handle 7 [1/16.. flags 0x00 dlen 17  #2254 2026-09-24 15:06:01.091145
+      ATT: Write Command (0x52) len 12
+        Handle: 0x0006 Type: Unknown (0xb611)
+          Data[10]:
+        11 03 06 1a 09 18 16 06 00 57                    .........W      
+> LE-ACL: Handle 7 [41:4.. flags 0x02 dlen 12  #2258 2026-09-24 15:06:01.127156
+      ATT: Handle Value Notification (0x1b) len 7
+        Handle: 0x0003 Type: Unknown (0xb612)
+          Data[5]:
+        11 03 01 00 00                                   .....           
+< LE-ACL: Handle 7 [1/16.. flags 0x00 dlen 11  #2259 2026-09-24 15:06:01.180585
+      ATT: Write Command (0x52) len 6
+        Handle: 0x0006 Type: Unknown (0xb611)
+          Data[4]:
+        01 02 00 00                                      ....            
+> LE-ACL: Handle 7 [41:4.. flags 0x02 dlen 12  #2261 2026-09-24 15:06:01.217194
+      ATT: Handle Value Notification (0x1b) len 7
+        Handle: 0x0003 Type: Unknown (0xb612)
+          Data[5]:
+        01 02 01 64 64                                   ...dd           
+< LE-ACL: Handle 7 [1/16.. flags 0x00 dlen 11  #2262 2026-09-24 15:06:01.270169
+      ATT: Write Command (0x52) len 6
+        Handle: 0x0006 Type: Unknown (0xb611)
+          Data[4]:
+        01 0d 00 00                                      ....            
+> LE-ACL: Handle 7 [41:4.. flags 0x02 dlen 12  #2264 2026-09-24 15:06:01.308663
+      ATT: Handle Value Notification (0x1b) len 7
+        Handle: 0x0003 Type: Unknown (0xb612)
+          Data[5]:
+        01 0d 01 01 01                                   .....           
+< LE-ACL: Handle 7 [1/16.. flags 0x00 dlen 11  #2266 2026-09-24 15:06:01.360980
+      ATT: Write Command (0x52) len 6
+        Handle: 0x0006 Type: Unknown (0xb611)
+          Data[4]:
+        01 01 00 00                                      ....            
+< LE-ACL: Handle 5 [1/16.. flags 0x00 dlen 11  #2274 2026-09-24 15:06:01.417801
+      ATT: Write Command (0x52) len 6
+        Handle: 0x000c
+          Data[4]:
+        00 02 00 00                                      ....            
+> LE-ACL: Handle 7 [41:4.. flags 0x02 dlen 14  #2276 2026-09-24 15:06:01.427110
+      ATT: Handle Value Notification (0x1b) len 9
+        Handle: 0x0003 Type: Unknown (0xb612)
+          Data[7]:
+        01 01 03 01 01 05 07                             .......         
+> LE-ACL: Handle 5 [94:4.. flags 0x02 dlen 13  #2277 2026-09-24 15:06:01.455739
+      ATT: Handle Value Notification (0x1b) len 8
+        Handle: 0x0009
+          Data[6]:
+        00 02 02 64 64 c8                                ...dd.          
+< LE-ACL: Handle 7 [1/16.. flags 0x00 dlen 11  #2278 2026-09-24 15:06:01.478642
+      ATT: Write Command (0x52) len 6
+        Handle: 0x0006 Type: Unknown (0xb611)
+          Data[4]:
+        01 04 00 00                                      ....            
+> LE-ACL: Handle 7 [41:4.. flags 0x02 dlen 12  #2282 2026-09-24 15:06:01.517089
+      ATT: Handle Value Notification (0x1b) len 7
+        Handle: 0x0003 Type: Unknown (0xb612)
+          Data[5]:
+        01 04 01 01 01                                   .....           
+< LE-ACL: Handle 7 [1/16.. flags 0x00 dlen 11  #2283 2026-09-24 15:06:01.569367
+      ATT: Write Command (0x52) len 6
+        Handle: 0x0006 Type: Unknown (0xb611)
+          Data[4]:
+        01 05 00 00                                      ....            
+> LE-ACL: Handle 7 [41:4.. flags 0x02 dlen 13  #2289 2026-09-24 15:06:01.607265
+      ATT: Handle Value Notification (0x1b) len 8
+        Handle: 0x0003 Type: Unknown (0xb612)
+          Data[6]:
+        01 05 02 0a 00 0a                                ......          
+< LE-ACL: Handle 7 [1/16.. flags 0x00 dlen 11  #2290 2026-09-24 15:06:01.661328
+      ATT: Write Command (0x52) len 6
+        Handle: 0x0006 Type: Unknown (0xb611)
+          Data[4]:
+        01 06 00 00                                      ....            
+> LE-ACL: Handle 7 [41:4.. flags 0x02 dlen 12  #2293 2026-09-24 15:06:01.698827
+      ATT: Handle Value Notification (0x1b) len 7
+        Handle: 0x0003 Type: Unknown (0xb612)
+          Data[5]:
+        01 06 01 00 00                                   .....           
+< LE-ACL: Handle 7 [1/16.. flags 0x00 dlen 11  #2303 2026-09-24 15:06:01.753497
+      ATT: Write Command (0x52) len 6
+        Handle: 0x0006 Type: Unknown (0xb611)
+          Data[4]:
+        01 07 00 00                                      ....            
+> LE-ACL: Handle 7 [41:4.. flags 0x02 dlen 12  #2305 2026-09-24 15:06:01.789100
+      ATT: Handle Value Notification (0x1b) len 7
+        Handle: 0x0003 Type: Unknown (0xb612)
+          Data[5]:
+        01 07 01 02 02                                   .....           
+< LE-ACL: Handle 7 [1/16.. flags 0x00 dlen 11  #2308 2026-09-24 15:06:01.842638
+      ATT: Write Command (0x52) len 6
+        Handle: 0x0006 Type: Unknown (0xb611)
+          Data[4]:
+        01 02 00 00                                      ....            
+> LE-ACL: Handle 7 [41:4.. flags 0x02 dlen 12  #2313 2026-09-24 15:06:01.877621
+      ATT: Handle Value Notification (0x1b) len 7
+        Handle: 0x0003 Type: Unknown (0xb612)
+          Data[5]:
+        01 02 01 64 64                                   ...dd           
+< LE-ACL: Handle 5 [1/16.. flags 0x00 dlen 11  #2337 2026-09-24 15:06:04.706974
+      ATT: Write Command (0x52) len 6
+        Handle: 0x000c
+          Data[4]:
+        00 12 00 00                                      ....            
+> LE-ACL: Handle 5 [94:4.. flags 0x02 dlen 12  #2352 2026-09-24 15:06:04.770842
+      ATT: Handle Value Notification (0x1b) len 7
+        Handle: 0x0009
+          Data[5]:
+        00 12 01 00 00                                   .....           
+< LE-ACL: Handle 5 [1/16.. flags 0x00 dlen 11  #2353 2026-09-24 15:06:04.824445
+      ATT: Write Command (0x52) len 6
+        Handle: 0x000c
+          Data[4]:
+        00 30 00 00                                      .0..            
+> LE-ACL: Handle 5 [94:4.. flags 0x02 dlen 12  #2356 2026-09-24 15:06:04.900902
+      ATT: Handle Value Notification (0x1b) len 7
+        Handle: 0x0009
+          Data[5]:
+        00 30 01 02 02                                   .0...           
+< LE-ACL: Handle 5 [1/16.. flags 0x00 dlen 12  #2424 2026-09-24 15:06:07.831413
+      ATT: Write Command (0x52) len 7
+        Handle: 0x000c
+          Data[5]:
+        10 05 01 01 01                                   .....           
+> LE-ACL: Handle 5 [94:4.. flags 0x02 dlen 12  #2432 2026-09-24 15:06:07.890874
+      ATT: Handle Value Notification (0x1b) len 7
+        Handle: 0x0009
+          Data[5]:
+        10 05 01 00 00                                   .....           
+< LE-ACL: Handle 5 [1/16.. flags 0x00 dlen 12  #2549 2026-09-24 15:06:17.070158
+      ATT: Write Command (0x52) len 7
+        Handle: 0x000c
+          Data[5]:
+        10 04 01 01 01                                   .....           
+> LE-ACL: Handle 5 [94:4.. flags 0x02 dlen 12  #2561 2026-09-24 15:06:17.120937
+      ATT: Handle Value Notification (0x1b) len 7
+        Handle: 0x0009
+          Data[5]:
+        10 04 01 00 00                                   .....           
+< LE-ACL: Handle 5 [1/16.. flags 0x00 dlen 12  #2627 2026-09-24 15:06:22.520454
+      ATT: Write Command (0x52) len 7
+        Handle: 0x000c
+          Data[5]:
+        10 08 01 01 01                                   .....           
+> LE-ACL: Handle 5 [94:4.. flags 0x02 dlen 12  #2633 2026-09-24 15:06:22.582748
+      ATT: Handle Value Notification (0x1b) len 7
+        Handle: 0x0009
+          Data[5]:
+        10 08 01 00 00                                   .....           
+< LE-ACL: Handle 5 [1/16.. flags 0x00 dlen 12  #2689 2026-09-24 15:06:28.637298
+      ATT: Write Command (0x52) len 7
+        Handle: 0x000c
+          Data[5]:
+        10 07 01 01 01                                   .....           
+> LE-ACL: Handle 5 [94:4.. flags 0x02 dlen 12  #2703 2026-09-24 15:06:28.690919
+      ATT: Handle Value Notification (0x1b) len 7
+        Handle: 0x0009
+          Data[5]:
+        10 07 01 00 00                                   .....           
+< LE-ACL: Handle 5 [1/16.. flags 0x00 dlen 12  #2772 2026-09-24 15:06:35.079020
+      ATT: Write Command (0x52) len 7
+        Handle: 0x000c
+          Data[5]:
+        10 04 01 00 00                                   .....           
+> LE-ACL: Handle 5 [94:4.. flags 0x02 dlen 12  #2778 2026-09-24 15:06:35.126032
+      ATT: Handle Value Notification (0x1b) len 7
+        Handle: 0x0009
+          Data[5]:
+        10 04 01 00 00                                   .....           
+< LE-ACL: Handle 5 [1/16.. flags 0x00 dlen 12  #2827 2026-09-24 15:06:40.538719
+      ATT: Write Command (0x52) len 7
+        Handle: 0x000c
+          Data[5]:
+        10 11 01 01 01                                   .....           
+> LE-ACL: Handle 5 [94:4.. flags 0x02 dlen 12  #2842 2026-09-24 15:06:40.585994
+      ATT: Handle Value Notification (0x1b) len 7
+        Handle: 0x0009
+          Data[5]:
+        10 11 01 00 00                                   .....           
+< LE-ACL: Handle 5 [1/16.. flags 0x00 dlen 12  #2893 2026-09-24 15:06:46.340806
+      ATT: Write Command (0x52) len 7
+        Handle: 0x000c
+          Data[5]:
+        10 04 01 01 01                                   .....           
+> LE-ACL: Handle 5 [94:4.. flags 0x02 dlen 12  #2908 2026-09-24 15:06:46.403573
+      ATT: Handle Value Notification (0x1b) len 7
+        Handle: 0x0009
+          Data[5]:
+        10 04 01 00 00                                   .....           
+< LE-ACL: Handle 5 [1/16.. flags 0x00 dlen 12  #2934 2026-09-24 15:06:48.611582
+      ATT: Write Command (0x52) len 7
+        Handle: 0x000c
+          Data[5]:
+        10 05 01 01 01                                   .....           
+> LE-ACL: Handle 5 [94:4.. flags 0x02 dlen 12  #2940 2026-09-24 15:06:48.678612
+      ATT: Handle Value Notification (0x1b) len 7
+        Handle: 0x0009
+          Data[5]:
+        10 05 01 00 00                                   .....           
+< LE-ACL: Handle 5 [1/16.. flags 0x00 dlen 11  #2982 2026-09-24 15:06:52.173706
+      ATT: Write Command (0x52) len 6
+        Handle: 0x000c
+          Data[4]:
+        00 20 00 00                                      . ..            
+< LE-ACL: Handle 7 [2/16.. flags 0x00 dlen 11  #2983 2026-09-24 15:06:52.174216
+      ATT: Write Command (0x52) len 6
+        Handle: 0x0006 Type: Unknown (0xb611)
+          Data[4]:
+        01 09 00 00                                      ....            
+> LE-ACL: Handle 5 [94:4.. flags 0x02 dlen 17  #2993 2026-09-24 15:06:52.221596
+      ATT: Handle Value Notification (0x1b) len 12
+        Handle: 0x0009
+          Data[10]:
+        00 20 06 41 42 b1 f6 f8 4f 71                    . .AB...Oq      
+< LE-ACL: Handle 5 [1/16.. flags 0x00 dlen 12  #2995 2026-09-24 15:06:52.273897
+      ATT: Write Command (0x52) len 7
+        Handle: 0x000c
+          Data[5]:
+        10 22 01 00 00                                   ."...           
+< LE-ACL: Handle 7 [1/16.. flags 0x00 dlen 11  #2997 2026-09-24 15:06:52.529902
+      ATT: Write Command (0x52) len 6
+        Handle: 0x0006 Type: Unknown (0xb611)
+          Data[4]:
+        01 02 00 00                                      ....            
+> LE-ACL: Handle 7 [41:4.. flags 0x02 dlen 17  #2999 2026-09-24 15:06:52.686037
+      ATT: Handle Value Notification (0x1b) len 12
+        Handle: 0x0003 Type: Unknown (0xb612)
+          Data[10]:
+        01 09 06 94 4b f8 c1 5f 98 8f                    ....K.._..      
+< LE-ACL: Handle 5 [2/16.. flags 0x00 dlen 12  #3010 2026-09-24 15:06:52.705840
+      ATT: Write Command (0x52) len 7
+        Handle: 0x000c
+          Data[5]:
+        10 22 01 00 00                                   ."...           
+> LE-ACL: Handle 7 [41:4.. flags 0x02 dlen 12  #3017 2026-09-24 15:06:53.196821
+      ATT: Handle Value Notification (0x1b) len 7
+        Handle: 0x0003 Type: Unknown (0xb612)
+          Data[5]:
+        01 02 01 64 64                                   ...dd           
+< LE-ACL: Handle 5 [2/16.. flags 0x00 dlen 12  #3030 2026-09-24 15:06:53.203702
+      ATT: Write Command (0x52) len 7
+        Handle: 0x000c
+          Data[5]:
+        10 22 01 01 01                                   ."...           
+< LE-ACL: Handle 7 [2/16.. flags 0x00 dlen 11  #3032 2026-09-24 15:06:53.268744
+      ATT: Write Command (0x52) len 6
+        Handle: 0x0006 Type: Unknown (0xb611)
+          Data[4]:
+        01 02 00 00                                      ....            
+< LE-ACL: Handle 7 [3/16.. flags 0x00 dlen 11  #3033 2026-09-24 15:06:53.622541
+      ATT: Write Command (0x52) len 6
+        Handle: 0x0006 Type: Unknown (0xb611)
+          Data[4]:
+        01 0d 00 00                                      ....            
+< LE-ACL: Handle 7 [2/16.. flags 0x00 dlen 11  #3051 2026-09-24 15:06:53.978237
+      ATT: Write Command (0x52) len 6
+        Handle: 0x0006 Type: Unknown (0xb611)
+          Data[4]:
+        01 01 00 00                                      ....            
+> LE-ACL: Handle 7 [41:4.. flags 0x02 dlen 12  #3062 2026-09-24 15:06:54.183112
+      ATT: Handle Value Notification (0x1b) len 7
+        Handle: 0x0003 Type: Unknown (0xb612)
+          Data[5]:
+        01 02 01 64 64                                   ...dd           
+< LE-ACL: Handle 7 [2/16.. flags 0x00 dlen 11  #3070 2026-09-24 15:06:54.332589
+      ATT: Write Command (0x52) len 6
+        Handle: 0x0006 Type: Unknown (0xb611)
+          Data[4]:
+        01 04 00 00                                      ....            
+> LE-ACL: Handle 7 [41:4.. flags 0x02 dlen 12  #3076 2026-09-24 15:06:54.686038
+      ATT: Handle Value Notification (0x1b) len 7
+        Handle: 0x0003 Type: Unknown (0xb612)
+          Data[5]:
+        01 0d 01 01 01                                   .....           
+< LE-ACL: Handle 7 [3/16.. flags 0x00 dlen 11  #3082 2026-09-24 15:06:54.688557
+      ATT: Write Command (0x52) len 6
+        Handle: 0x0006 Type: Unknown (0xb611)
+          Data[4]:
+        01 05 00 00                                      ....            
+< LE-ACL: Handle 7 [4/16.. flags 0x00 dlen 11  #3083 2026-09-24 15:06:55.043447
+      ATT: Write Command (0x52) len 6
+        Handle: 0x0006 Type: Unknown (0xb611)
+          Data[4]:
+        01 06 00 00                                      ....            
+> LE-ACL: Handle 7 [41:4.. flags 0x02 dlen 14  #3085 2026-09-24 15:06:55.185505
+      ATT: Handle Value Notification (0x1b) len 9
+        Handle: 0x0003 Type: Unknown (0xb612)
+          Data[7]:
+        01 01 03 01 01 05 07                             .......         
+< LE-ACL: Handle 7 [4/16.. flags 0x00 dlen 11  #3097 2026-09-24 15:06:55.399510
+      ATT: Write Command (0x52) len 6
+        Handle: 0x0006 Type: Unknown (0xb611)
+          Data[4]:
+        01 07 00 00                                      ....            
+> LE-ACL: Handle 7 [41:4.. flags 0x02 dlen 12  #3107 2026-09-24 15:06:55.678516
+      ATT: Handle Value Notification (0x1b) len 7
+        Handle: 0x0003 Type: Unknown (0xb612)
+          Data[5]:
+        01 04 01 01 01                                   .....           
+> LE-ACL: Handle 7 [41:4.. flags 0x02 dlen 13  #3133 2026-09-24 15:06:56.694312
+      ATT: Handle Value Notification (0x1b) len 8
+        Handle: 0x0003 Type: Unknown (0xb612)
+          Data[6]:
+        01 05 02 0a 00 0a                                ......          
+> LE-ACL: Handle 7 [41:4.. flags 0x02 dlen 12  #3136 2026-09-24 15:06:56.694577
+      ATT: Handle Value Notification (0x1b) len 7
+        Handle: 0x0003 Type: Unknown (0xb612)
+          Data[5]:
+        01 06 01 00 00                                   .....           
+> LE-ACL: Handle 7 [41:4.. flags 0x02 dlen 12  #3137 2026-09-24 15:06:56.694622
+      ATT: Handle Value Notification (0x1b) len 7
+        Handle: 0x0003 Type: Unknown (0xb612)
+          Data[5]:
+        01 07 01 02 02                                   .....           
+< LE-ACL: Handle 7 [1/16.. flags 0x00 dlen 11  #3228 2026-09-24 15:07:00.527651
+      ATT: Write Command (0x52) len 6
+        Handle: 0x0006 Type: Unknown (0xb611)
+          Data[4]:
+        01 02 00 00                                      ....            
+< LE-ACL: Handle 5 [2/16.. flags 0x00 dlen 11  #3229 2026-09-24 15:07:00.532772
+      ATT: Write Command (0x52) len 6
+        Handle: 0x000c
+          Data[4]:
+        00 20 00 00                                      . ..            
+> LE-ACL: Handle 5 [94:4.. flags 0x02 dlen 17  #3236 2026-09-24 15:07:00.573943
+      ATT: Handle Value Notification (0x1b) len 12
+        Handle: 0x0009
+          Data[10]:
+        00 20 06 41 42 b1 f6 f8 4f 71                    . .AB...Oq      
+< LE-ACL: Handle 5 [1/16.. flags 0x00 dlen 12  #3237 2026-09-24 15:07:00.626540
+      ATT: Write Command (0x52) len 7
+        Handle: 0x000c
+          Data[5]:
+        10 22 01 00 00                                   ."...           
+> LE-ACL: Handle 7 [41:4.. flags 0x02 dlen 12  #3245 2026-09-24 15:07:00.667530
+      ATT: Handle Value Notification (0x1b) len 7
+        Handle: 0x0003 Type: Unknown (0xb612)
+          Data[5]:
+        01 02 01 64 64                                   ...dd           
+< LE-ACL: Handle 7 [1/16.. flags 0x00 dlen 11  #3246 2026-09-24 15:07:00.719863
+      ATT: Write Command (0x52) len 6
+        Handle: 0x0006 Type: Unknown (0xb611)
+          Data[4]:
+        01 09 00 00                                      ....            
+> LE-ACL: Handle 7 [41:4.. flags 0x02 dlen 17  #3251 2026-09-24 15:07:00.792870
+      ATT: Handle Value Notification (0x1b) len 12
+        Handle: 0x0003 Type: Unknown (0xb612)
+          Data[10]:
+        01 09 06 94 4b f8 c1 5f 98 8f                    ....K.._..      
+< LE-ACL: Handle 7 [1/16.. flags 0x00 dlen 11  #3253 2026-09-24 15:07:00.846045
+      ATT: Write Command (0x52) len 6
+        Handle: 0x0006 Type: Unknown (0xb611)
+          Data[4]:
+        01 02 00 00                                      ....            
+> LE-ACL: Handle 7 [41:4.. flags 0x02 dlen 12  #3258 2026-09-24 15:07:00.921236
+      ATT: Handle Value Notification (0x1b) len 7
+        Handle: 0x0003 Type: Unknown (0xb612)
+          Data[5]:
+        01 02 01 64 64                                   ...dd           
+< LE-ACL: Handle 5 [1/16.. flags 0x00 dlen 12  #3262 2026-09-24 15:07:00.980347
+      ATT: Write Command (0x52) len 7
+        Handle: 0x000c
+          Data[5]:
+        10 22 01 00 00                                   ."...           
+< LE-ACL: Handle 5 [1/16.. flags 0x00 dlen 12  #3278 2026-09-24 15:07:01.334649
+      ATT: Write Command (0x52) len 7
+        Handle: 0x000c
+          Data[5]:
+        10 22 01 01 01                                   ."...           
+< LE-ACL: Handle 5 [1/16.. flags 0x00 dlen 12  #3288 2026-09-24 15:07:01.689233
+      ATT: Write Command (0x52) len 7
+        Handle: 0x000c
+          Data[5]:
+        10 22 01 01 01                                   ."...           
+> LE-ACL: Handle 5 [94:4.. flags 0x02 dlen 13  #3437 2026-09-24 15:07:11.395006
+      ATT: Handle Value Notification (0x1b) len 8
+        Handle: 0x0009
+          Data[6]:
+        20 0d 02 01 03 04                                 .....          
+> LE-ACL: Handle 5 [94:4.. flags 0x02 dlen 13  #3481 2026-09-24 15:07:13.005062
+      ATT: Handle Value Notification (0x1b) len 8
+        Handle: 0x0009
+          Data[6]:
+        20 0d 02 01 01 02                                 .....          

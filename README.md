@@ -1,6 +1,6 @@
 # Omaphones for Omarchy
 
-<p align="center"><b>JBL</b> &nbsp;·&nbsp; <b>Sony</b> &nbsp;·&nbsp; <b>Samsung</b> &nbsp;·&nbsp; <b>Nothing / CMF</b> &nbsp;·&nbsp; <b>Soundcore</b> &nbsp;·&nbsp; <b>Xiaomi</b> &nbsp;·&nbsp; <b>OPPO</b> &nbsp;·&nbsp; <b>Bose</b></p>
+<p align="center"><b>JBL</b> &nbsp;·&nbsp; <b>Sony</b> &nbsp;·&nbsp; <b>Samsung</b> &nbsp;·&nbsp; <b>Nothing / CMF</b> &nbsp;·&nbsp; <b>Soundcore</b> &nbsp;·&nbsp; <b>Xiaomi</b> &nbsp;·&nbsp; <b>OPPO</b> &nbsp;·&nbsp; <b>Bose</b> &nbsp;·&nbsp; <b>TOZO</b></p>
 
 <p align="center"><b>Battery levels and noise-cancellation control for Bluetooth headphones, in the Omarchy bar.</b></p>
 
@@ -177,6 +177,7 @@ same idea, built for Apple's own protocol, and the plugin this one is modelled o
 | soundcore Space One Pro (A3062, over-ear) | <img src="docs/icons/yes.svg" width="14" alt="yes"> one figure | <img src="docs/icons/yes.svg" width="14" alt="yes"> Off · ANC · Ambient (level, wind noise reduction) | [@sasiruLK](https://github.com/sasiruLK) |
 | soundcore Life Q30 (A3028, over-ear) | <img src="docs/icons/yes.svg" width="14" alt="yes"> one figure (Fast Pair) | <img src="docs/icons/yes.svg" width="14" alt="yes"> Off · ANC · Ambient | [@kevinbsr](https://github.com/kevinbsr) |
 | Sony WH-CH520             | <img src="docs/icons/yes.svg" width="14" alt="yes"> one figure (BlueZ) | <img src="docs/icons/no.svg" width="14" alt="no"> none — Sony lists no ANC/Ambient on this model, confirmed on hardware | [@enobale](https://github.com/enobale) |
+| TOZO NC9 Pro (earbuds) | <img src="docs/icons/yes.svg" width="14" alt="yes"> left, right, case | <img src="docs/icons/yes.svg" width="14" alt="yes"> Normal · ANC · Transparency · Reduce Wind Noise · Leisure · Adaptive | [@seth-reee](https://github.com/seth-reee) |
 | other Fast Pair headphones  | <img src="docs/icons/yes.svg" width="14" alt="yes"> expected          | <img src="docs/icons/unknown.svg" width="14" alt="untested">                                    | —                              |
 
 CMF Headphone Pro's connection, reconnect recovery and all panel controls were

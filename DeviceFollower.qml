@@ -199,7 +199,7 @@ Item {
   // What this device serves, read once per connection with `bluetoothctl info`.
   // Empty while it is not connected, or while the probe is still out.
   property var deviceUuids: []
-  readonly property string controlBackend: Model.controlBackend(deviceUuids, bleAddress)
+  readonly property string controlBackend: Model.controlBackend(deviceUuids, bleAddress, reportedName)
   readonly property bool classicBackend: Model.isClassicBackend(controlBackend)
   // Which of Sony's two MDR services this device serves. Both read as "sony",
   // and both come out of the same UUID list, so this is non-empty exactly when
@@ -212,7 +212,7 @@ Item {
   // Which modes this device offers, in the order the panel draws them. The JBL
   // bridge names none and means all four; the Sony bridge lists what the headset
   // has, which for an over-ear WH is Off / NC / Ambient and no TalkThru.
-  readonly property var modesAvailable: Model.modesAvailable(ancState)
+  readonly property var modesAvailable: Model.modesAvailable(ancState, controlBackend)
   // How strong the noise cancelling is, on a device that grades it (Nothing:
   // Low / Mid / High / Adaptive). Empty on every other bridge, which hides the
   // row. `ancLevel` is the strength last seen, kept across Off and Ambient so

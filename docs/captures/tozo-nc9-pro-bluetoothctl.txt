@@ -1,0 +1,27 @@
+Device 94:4B:F8:C1:5F:98 (public)
+	Name: TOZO NC9 Pro
+	Alias: TOZO NC9 Pro
+	Class: 0x00240404 (2360324)
+	Icon: audio-headset
+	Paired: yes
+	Bonded: yes
+	Trusted: yes
+	Blocked: no
+	Connected: yes
+	LegacyPairing: no
+	CablePairing: no
+	UUID: Serial Port               (00001101-0000-1000-8000-00805f9b34fb)
+	UUID: Audio Sink                (0000110b-0000-1000-8000-00805f9b34fb)
+	UUID: A/V Remote Control Target (0000110c-0000-1000-8000-00805f9b34fb)
+	UUID: Advanced Audio Distribu.. (0000110d-0000-1000-8000-00805f9b34fb)
+	UUID: A/V Remote Control        (0000110e-0000-1000-8000-00805f9b34fb)
+	UUID: Handsfree                 (0000111e-0000-1000-8000-00805f9b34fb)
+	UUID: Unknown                   (0000a100-0000-1000-8000-00805f9b34fb)
+	UUID: Unknown                   (0000b5ff-0000-1000-8000-00805f9b34fb)
+	UUID: Unknown                   (0000b610-0000-1000-8000-00805f9b34fb)
+	ManufacturerData.Key: 0x4b94 (19348)
+	ManufacturerData.Value:
+  f8 c1 5f 98 16 57 52 0e                          .._..WR.        
+	AdvertisingFlags:
+  00                                               .               
+	Battery Percentage: 0x64 (100)

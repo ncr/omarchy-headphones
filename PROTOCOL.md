@@ -1974,3 +1974,72 @@ IPC run checked all controls, battery snapshots, mode persistence after a
 refresh request, mode recovery after reconnect of each pair, peer state and
 restoration: [`canonical-live.json`](docs/captures/canonical-live.json).
 See [`docs/CANONICAL-TESTS.md`](docs/CANONICAL-TESTS.md) for coverage and limits.
+
+## TOZO NC9 Pro
+
+Owner: [@seth-reee](https://github.com/seth-reee). Evidence is in
+`docs/captures/tozo-nc9-pro-phone.txt` (selected phone ATT packets with packet
+numbers and screenshot time mapping) and `tozo-nc9-pro-live.txt` (timestamped
+Linux readback). The earlier investigation is `tozo-nc9-pro.txt`. No other
+TOZO model is claimed. Earbud firmware query returned `00 01 06 00 05 02 00
+05 02 0e`; the case app screenshot displays V1.1.5 and its query returned
+`01 01 03 01 01 05 07`.
+
+The earbuds' public LE address equals their Classic address. Their GATT
+service is `0000b610-0000-1000-8000-00805f9b34fb`, write-without-response
+characteristic B611, notify B612. The Classic SDP list initially contains
+only standard audio and Serial Port UUIDs. Routing requires the exact
+reported name `TOZO NC9 Pro` and either that Serial Port UUID or B610; it
+cannot claim arbitrary Serial Port headphones. Existing vendor UUID rows
+retain priority.
+
+Each observed GATT value is `group command length payload checksum`, where
+checksum is the sum of payload bytes modulo 256. Queries have zero-length
+payload and zero checksum. Notifications are complete datagrams: partial,
+combined, bad-length, bad-checksum and unsupported values are rejected.
+
+| Operation | TX | Observed RX |
+|:--|:--|:--|
+| Earbud battery | `00 02 00 00` | `00 02 02 64 64 c8` (left/right 100%) |
+| Current mode | `00 30 00 00` | `00 30 01 xx xx` (observed values below) |
+| Associated case address | `00 20 00 00` | `00 20 06 41 42 b1 f6 f8 4f 71` |
+| Case's associated earbuds | `01 09 00 00` | `01 09 06 94 4b f8 c1 5f 98 8f` |
+| Case battery | `01 02 00 00` | `01 02 01 64 64` (100%) |
+
+The case has its own public LE address, provided by the earbuds, and service
+`000001ff-3c17-d293-8e48-14fe2e4da212`, also B611/B612. Its read group is 01,
+not the earbuds' 00. The bridge verifies its reverse address before accepting
+case battery. Case unavailability does not disable the earbuds. A previous
+case reading is marked stale after its link or response is lost. Case retries
+are bounded and target only the address reported by this pair.
+
+| App mode | Bridge name | Captured SET | Settled query reply |
+|:--|:--|:--|:--|
+| Normal | off | `10 04 01 00 00` | `00 30 01 00 00` |
+| Noise Cancellation | anc | `10 04 01 01 01` | `00 30 01 01 01` |
+| Transparency | ambient | `10 05 01 01 01` | `00 30 01 02 02` |
+| Reduce Wind Noise | wind | `10 07 01 01 01` | `00 30 01 03 03` |
+| Leisure Mode | leisure | `10 08 01 01 01` | `00 30 01 04 04` |
+| Adaptive Mode | adaptive | `10 11 01 01 01` | `00 30 01 06 06` |
+
+SET success is `10 <same command> 01 00 00`; it does not contain the resulting
+mode. Immediate mode queries were observed to return intermediate states.
+The bridge waits 1.5 seconds after the acknowledgement, then queries mode;
+it never displays the requested mode from the write or acknowledgement.
+Queued controls run one at a time. It also polls the mode every ten seconds
+and battery every thirty seconds. Observed `20 0d 02 01 03 04` and
+`20 0d 02 01 01 02` change notifications trigger delayed readback without
+assuming their payload is the query enum.
+
+All percentages in these owner captures are 100. There is no observed
+charging or unknown-value encoding; no high-bit charging interpretation is
+implemented. Tests label damaged frames and boundary values as synthetic.
+No EQ, case display settings, firmware writes, or unobserved mode values are
+implemented. Six-mode UI additions are enabled only for the TOZO backend;
+the legacy four-mode default is preserved.
+
+Capture using `tools/tozo_probe.py ADDRESS --cycle --listen 10` in an isolated
+checkout after releasing the widget's mode bridge. It reads the initial mode,
+cycles the six known modes, verifies each query reply and restores the
+observed initial mode in a `finally` block. A failed restoration is a failure,
+not a successful test. See `docs/TOZO-NC9-PRO-TESTS.md` for the final live report.

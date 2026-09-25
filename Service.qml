@@ -699,7 +699,7 @@ Item {
   }
 
   function writeMode(follower, mode) {
-    if (["off", "anc", "ambient", "talkthru"].indexOf(String(mode)) === -1)
+    if (Model.MODE_ORDER.concat(Model.EXTRA_MODE_ORDER).indexOf(String(mode)) === -1)
       return "unknown mode: " + mode
     if (!follower) return "unavailable"
     if (follower.setAncMode(mode)) return "ok"

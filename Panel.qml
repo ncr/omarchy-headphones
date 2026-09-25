@@ -189,26 +189,10 @@ Panel {
     return lines.join("\n")
   }
 
-  // Every mode this panel can draw, in the fixed order it draws them, each with
-  // the key that reaches it. The list is the same for every device; which of
-  // them are offered is not.
-  readonly property var allAncOptions: [
-    { value: "off", key: "o", label: "Off", tooltip: "No noise control" },
-    { value: "anc", key: "n", label: "ANC", tooltip: "Noise Cancelling" },
-    { value: "ambient", key: "a", label: "Ambient", tooltip: "Ambient Aware" },
-    { value: "talkthru", key: "t", label: "TalkThru", tooltip: "TalkThru" }
-  ]
-
-  // What this device offers, in that order. A button for a mode the device will
-  // not take is a button that does nothing, and its key would be a key that
-  // silently fails — so both come from the same filtered list, and so does the
-  // hint line that tells you which keys there are.
-  readonly property var ancOptions: {
-    var out = []
-    for (var i = 0; i < allAncOptions.length; i++)
-      if (modesAvailable.indexOf(allAncOptions[i].value) !== -1) out.push(allAncOptions[i])
-    return out
-  }
+  readonly property var ancOptions: Model.modeOptions(modesAvailable,
+    current ? current.controlBackend : "")
+  readonly property var modeRows: ancOptions.length > 4
+    ? [ancOptions.slice(0, 3), ancOptions.slice(3)] : [ancOptions]
 
   // The strengths, on digits: every letter near the hand already means a mode
   // or a panel, and h / l — the letters a person would reach for — are taken
@@ -726,18 +710,20 @@ Panel {
             fontFamily: root.fontFamily
           }
 
-          ButtonGroup {
-            width: parent.width
-            options: root.ancOptions
-            value: root.ancMode
-            foreground: root.foreground
-            background: Color.background
-            fontFamily: root.fontFamily
-            fontSize: Style.font.bodySmall
-            // The earbuds report their own state, including changes made by
-            // touching them, so the selection follows the device rather than the
-            // click: `value` is bound to what the device last said.
-            onChanged: function(mode) { root.setAncMode(mode) }
+          Repeater {
+            model: root.modeRows
+            ButtonGroup {
+              required property var modelData
+              width: parent.width
+              options: modelData
+              value: root.ancMode
+              foreground: root.foreground
+              background: Color.background
+              fontFamily: root.fontFamily
+              fontSize: Style.font.bodySmall
+              // Selection follows device readback, including physical changes.
+              onChanged: function(mode) { root.setAncMode(mode) }
+            }
           }
 
           // ---- How strong, on a device that grades its noise cancelling
