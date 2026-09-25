@@ -274,6 +274,7 @@ class Bridge:
         # Which question this headset answers, and what the [1.6] path knows:
         # the strength last seen and the values the headset's mask named.
         self.path = PATH_MODES
+        self.modes_answered = False
         self.level = None
         self.supported = None
 
@@ -443,13 +444,17 @@ class Bridge:
                 if changed:
                     self.report()
         elif (fblock, func) == (31, 3):
+            if op == OP_STATUS:
+                # Any STATUS counts, a custom slot the bridge does not name
+                # included: this headset serves the QC45's audio modes.
+                self.modes_answered = True
             if op == OP_STATUS and len(payload) == 1:
                 mode = MODE_BY_IDX.get(payload[0])
                 if mode is not None and mode != self.mode:
                     self.mode = mode
                     self.report()
             elif op == OP_ERROR and self.path == PATH_MODES \
-                    and self.mode is None:
+                    and not self.modes_answered:
                 # This headset does not serve the QC45's audio modes. Ask the
                 # QC35's question once, and poll that one from here on. Only
                 # a headset that has never answered [31.3] with a STATUS gets

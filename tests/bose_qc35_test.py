@@ -97,6 +97,17 @@ class PathSwitch(unittest.TestCase):
         self.assertNotIn("01 06 01 00", s.sent)
         self.assertEqual(s.bridge.mode, "ambient")
 
+    def test_an_error_after_an_unnamed_audio_mode_keeps_the_qc45_question(self):
+        """A STATUS naming a custom slot (2) leaves the mode unnamed, but the
+        headset still answered [31.3]. The slot and the ERROR are synthetic."""
+        s = Session()
+        s.do_open()
+        s.device("02 02 03 04 5a ff ff 00")
+        s.device("1f 03 03 01 02")  # synthetic: a custom slot
+        s.device("1f 03 04 01 03")  # synthetic: an ERROR after it
+        self.assertEqual(s.bridge.path, m.PATH_MODES)
+        self.assertNotIn("01 06 01 00", s.sent)
+
     def test_a_noise_reply_before_the_switch_is_ignored(self):
         s = Session()
         s.do_open()
