@@ -112,6 +112,17 @@ Headphones not on the list? [Add yours](#add-your-own-headphones).
 </tr>
 </table>
 
+<table>
+<tr>
+<td width="50%"><img src="docs/gallery/bose-qc35.png" alt="Bose QC35: one battery, Off / ANC, and the ANC level row Low / High" width="100%"></td>
+<td width="50%"></td>
+</tr>
+<tr>
+<td align="center">Bose QC35 — <a href="https://github.com/pedrohfp">@pedrohfp</a></td>
+<td align="center"></td>
+</tr>
+</table>
+
 ## What it does
 
 - **Battery level** — per earbud and the case, or the single battery of
@@ -120,10 +131,11 @@ Headphones not on the list? [Add yours](#add-your-own-headphones).
   headphones, filling up as they charge. Readable from the bar without opening
   anything.
 - **Noise control** — Off / ANC / Ambient / TalkThru, from the panel or a key.
-  JBL, Sony, Samsung, Nothing / CMF, Soundcore, Xiaomi Buds 5 Pro, OPPO Enco Air3 Pro and Bose QC45 today; built to learn
+  JBL, Sony, Samsung, Nothing / CMF, Soundcore, Xiaomi Buds 5 Pro, OPPO Enco Air3 Pro,
+  Bose QC45 and Bose QC35 today; built to learn
   your brand. Sony and Soundcore add the ambient level with Focus on Voice or
   wind noise reduction; Nothing / CMF the ANC strength (Low / Mid / High / Adaptive)
-  and a low-latency switch.
+  and a low-latency switch, and the Bose QC35 grades its ANC Low or High.
 - **Pause when you take them off, resume when you put them back on** — on a
   headset with a wear sensor (confirmed on the Sony WH-1000XM6). Only the
   players the sensor paused are resumed. Any headphones pause what is playing
@@ -157,6 +169,7 @@ same idea, built for Apple's own protocol, and the plugin this one is modelled o
 | Xiaomi Buds 5 Pro (earbuds) | <img src="docs/icons/yes.svg" width="14" alt="yes"> one figure        | <img src="docs/icons/yes.svg" width="14" alt="yes"> Off · ANC · Ambient                          | [@KentoNion](https://github.com/KentoNion)|
 | OPPO Enco Air3 Pro (earbuds) | <img src="docs/icons/yes.svg" width="14" alt="yes"> left, right, case | <img src="docs/icons/yes.svg" width="14" alt="yes"> Off · ANC · Ambient | [@Aryan447](https://github.com/Aryan447) |
 | Bose QC45 (over-ear)         | <img src="docs/icons/yes.svg" width="14" alt="yes"> one figure        | <img src="docs/icons/yes.svg" width="14" alt="yes"> ANC · Ambient (no Off) | [@Driskol](https://github.com/Driskol) |
+| Bose QC35 (over-ear)         | <img src="docs/icons/yes.svg" width="14" alt="yes"> one figure        | <img src="docs/icons/yes.svg" width="14" alt="yes"> Off · ANC (Low / High) — no Ambient | [@pedrohfp](https://github.com/pedrohfp) |
 | Nothing Ear (a) (earbuds)   | <img src="docs/icons/yes.svg" width="14" alt="yes"> left, right, case | <img src="docs/icons/yes.svg" width="14" alt="yes"> Off · ANC (Low / Mid / High / Adaptive) · Ambient · low latency | [@Jenesaispas69](https://github.com/Jenesaispas69) |
 | CMF Headphone Pro (over-ear) | <img src="docs/icons/yes.svg" width="14" alt="yes"> one figure | <img src="docs/icons/yes.svg" width="14" alt="yes"> Off · ANC (Low / Mid / High / Adaptive) · Ambient · low latency | [@adilahmad17](https://github.com/adilahmad17) |
 | CMF Buds 2 (earbuds)         | <img src="docs/icons/yes.svg" width="14" alt="yes"> left, right, case | <img src="docs/icons/yes.svg" width="14" alt="yes"> Off · ANC (Low / Mid / High / Adaptive) · Ambient · low latency | [@HanzGeeratz](https://github.com/HanzGeeratz) |

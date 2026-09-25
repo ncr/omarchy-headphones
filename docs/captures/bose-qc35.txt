@@ -1,0 +1,330 @@
+Bose QC35 — BMAP on RFCOMM channel 8
+====================================
+
+Device      Bose QC35 (over-ear), address 04:52:C7:C2:A9:3E
+Firmware    "1.0.4", as the [0.1] init STATUS reports it
+Modalias    bluetooth:v009Ep400Cd0303  (0x009E = Bose Corporation)
+Owner       @pedrohfp
+Captured    2026-09-22 and 2026-09-23, on Omarchy, kernel 7.2.5-3-omarchy
+Tools       tools/bose_qc35_session.py (sections B, C and D)
+
+The headset was connected to this machine and nothing else held the channel:
+the plugin was not installed while any of this was recorded.
+
+Every line marked `<<< RAW` is a socket read logged at receipt, before any
+framing; `<<< FRAME` is what the length field then took out of the buffer.
+A frame that arrived split across two reads therefore appears as two RAW
+lines and one FRAME line. Timestamps are seconds since the section started
+and mark receipt, not response latency: each step waits a fixed collection
+window before moving on, so a reply's timestamp is bounded by that window,
+not measured against the request.
+
+Redactions: the `Name` and `Alias` fields of the SDP listing are the owner's
+own words and are removed. Nothing else is removed, and nothing is
+reconstructed — a byte absent from the wire is absent here.
+
+Omissions: channels 2 and 9, the QC45's fallback candidates, were never
+reached on this headset, because channel 8 answered the [0.1] probe first.
+They are untried here, not refused.
+
+
+SECTION A — the SDP record
+==========================
+
+What `bluetoothctl info` prints. The QC45's capture has no equivalent, which
+is part of why no model table is keyed on any of this. The Bose BMAP vendor
+UUID 00000000-deca-fade-deca-deafdecacaff is the claim Model.js routes on,
+and this headset carries it as the QC45 does.
+
+Device 04:52:C7:C2:A9:3E (public)
+	Name: <redacted: the owner's own words>
+	Alias: <redacted: the owner's own words>
+	Class: 0x00240418 (2360344)
+	Icon: audio-headphones
+	Paired: yes
+	Bonded: yes
+	Trusted: yes
+	Blocked: no
+	Connected: yes
+	LegacyPairing: no
+	CablePairing: no
+	UUID: Vendor specific           (00000000-deca-fade-deca-deafdecacaff)
+	UUID: Serial Port               (00001101-0000-1000-8000-00805f9b34fb)
+	UUID: Headset                   (00001108-0000-1000-8000-00805f9b34fb)
+	UUID: Audio Source              (0000110a-0000-1000-8000-00805f9b34fb)
+	UUID: Audio Sink                (0000110b-0000-1000-8000-00805f9b34fb)
+	UUID: A/V Remote Control Target (0000110c-0000-1000-8000-00805f9b34fb)
+	UUID: Advanced Audio Distribu.. (0000110d-0000-1000-8000-00805f9b34fb)
+	UUID: A/V Remote Control        (0000110e-0000-1000-8000-00805f9b34fb)
+	UUID: A/V Remote Control Cont.. (0000110f-0000-1000-8000-00805f9b34fb)
+	UUID: Handsfree                 (0000111e-0000-1000-8000-00805f9b34fb)
+	UUID: Phonebook Access Client   (0000112e-0000-1000-8000-00805f9b34fb)
+	UUID: Phonebook Access          (00001130-0000-1000-8000-00805f9b34fb)
+	UUID: Headset HS                (00001131-0000-1000-8000-00805f9b34fb)
+	UUID: PnP Information           (00001200-0000-1000-8000-00805f9b34fb)
+	Modalias: bluetooth:v009Ep400Cd0303
+
+
+SECTION B — read-only discovery
+===============================
+
+The channel probe and the four queries, none of which changes a setting.
+[31.3], the QC45's audio-mode question, comes back an ERROR; [1.6] answers
+with two bytes, the current value and a mask.
+
+
+===== RFCOMM channel 8 =====
+   0.00s >>> [0.1]  version           00 01 01 00
+   0.02s <<< RAW   00 01 03 05 31 2e 30 2e 34
+   0.02s <<< FRAME [0.1] STATUS     00 01 03 05 31 2e 30 2e 34
+-- channel 8 speaks BMAP --
+   2.02s >>> [2.2]  battery           02 02 01 00
+   2.04s <<< RAW   02 02 03 01 46
+   2.04s <<< FRAME [2.2] STATUS     02 02 03 01 46
+   4.04s >>> [31.3] audio mode        1f 03 01 00
+   4.05s <<< RAW   1f 03 04 01 03
+   4.05s <<< FRAME [31.3] ERROR      1f 03 04 01 03
+   6.06s >>> [1.6]  noise cancelling  01 06 01 00
+   6.07s <<< RAW   01 06 03 02 01 0b
+   6.07s <<< FRAME [1.6] STATUS     01 06 03 02 01 0b
+
+
+SECTION C — the driven session
+==============================
+
+The initial value is read first. The first write re-sends the value the
+headset already holds, which confirms the SETGET operator without changing
+anything. Then each candidate value is driven and read back, including 2,
+the one value under 4 that the mask leaves clear — it is refused with
+`01 06 04 01 06` and the setting does not move. The initial value is
+restored at the end and the restoration is verified by a readback.
+
+   0.00s >>> init                   00 01 01 00
+   0.02s <<< RAW   00 01 03 05 31 2e 30 2e 34
+   0.02s <<< FRAME [0.1] STATUS     00 01 03 05 31 2e 30 2e 34
+   2.02s >>> battery                02 02 01 00
+   2.03s <<< RAW   02 02 03 01 46
+   2.03s <<< FRAME [2.2] STATUS     02 02 03 01 46
+   4.04s >>> [31.3] QC45 path       1f 03 01 00
+   4.05s <<< RAW   1f 03 04 01 03
+   4.05s <<< FRAME [31.3] ERROR      1f 03 04 01 03
+   6.05s >>> [1.6] initial          01 06 01 00
+   6.06s <<< RAW   01 06 03 02 01 0b
+   6.06s <<< FRAME [1.6] STATUS     01 06 03 02 01 0b
+   7.44s <<< RAW   05 01 03 09 00 02 01 00 00 00 00 00 00
+   7.44s <<< FRAME [5.1] STATUS     05 01 03 09 00 02 01 00 00 00 00 00 00
+   7.46s <<< RAW   04 02 06 06 08 b4 d2 34 88 65
+   7.46s <<< FRAME [4.2] RESULT     04 02 06 06 08 b4 d2 34 88 65
+   7.48s <<< RAW   04 02 06 06 08 b4 d2 34 88 65
+   7.48s <<< FRAME [4.2] RESULT     04 02 06 06 08 b4 d2 34 88 65
+
+== initial noise cancelling = 0x01 ==
+
+   8.08s >>> SETGET initial (no-op) 01 06 02 01 01
+   8.11s <<< RAW   01 06 03 02 01 0b
+   8.11s <<< FRAME [1.6] STATUS     01 06 03 02 01 0b
+  10.12s >>> readback               01 06 01 00
+  10.14s <<< RAW   01 06 03 02 01 0b
+  10.14s <<< FRAME [1.6] STATUS     01 06 03 02 01 0b
+  12.15s >>> SETGET 0x00            01 06 02 01 00
+  12.19s <<< RAW   01 06 03 02 00 0b
+  12.19s <<< FRAME [1.6] STATUS     01 06 03 02 00 0b
+  12.23s <<< RAW   01 06 03 02 00 0b
+  12.23s <<< FRAME [1.6] STATUS     01 06 03 02 00 0b
+  14.23s >>> readback               01 06 01 00
+  14.25s <<< RAW   01 06 03 02 00 0b
+  14.25s <<< FRAME [1.6] STATUS     01 06 03 02 00 0b
+   -> asked 0x00, device reports 0x00
+
+  16.25s >>> SETGET 0x01            01 06 02 01 01
+  16.27s <<< RAW   01 06 03 02 01 0b
+  16.27s <<< FRAME [1.6] STATUS     01 06 03 02 01 0b
+  16.32s <<< RAW   01 06 03 02 01 0b
+  16.32s <<< FRAME [1.6] STATUS     01 06 03 02 01 0b
+  18.32s >>> readback               01 06 01 00
+  18.33s <<< RAW   01 06 03 02 01 0b
+  18.33s <<< FRAME [1.6] STATUS     01 06 03 02 01 0b
+   -> asked 0x01, device reports 0x01
+
+  20.33s >>> SETGET 0x03            01 06 02 01 03
+  20.35s <<< RAW   01 06 03 02 03 0b
+  20.35s <<< FRAME [1.6] STATUS     01 06 03 02 03 0b
+  20.40s <<< RAW   01 06 03 02 03 0b
+  20.40s <<< FRAME [1.6] STATUS     01 06 03 02 03 0b
+  22.41s >>> readback               01 06 01 00
+  22.42s <<< RAW   01 06 03 02 03 0b
+  22.42s <<< FRAME [1.6] STATUS     01 06 03 02 03 0b
+   -> asked 0x03, device reports 0x03
+
+  24.43s >>> SETGET 0x02            01 06 02 01 02
+  24.44s <<< RAW   01 06 04 01 06
+  24.44s <<< FRAME [1.6] ERROR      01 06 04 01 06
+  26.45s >>> readback               01 06 01 00
+  26.46s <<< RAW   01 06 03 02 03 0b
+  26.46s <<< FRAME [1.6] STATUS     01 06 03 02 03 0b
+   -> asked 0x02, device reports 0x03
+
+  28.47s >>> restore 0x01           01 06 02 01 01
+  28.49s <<< RAW   01 06 03 02 01 0b
+  28.49s <<< FRAME [1.6] STATUS     01 06 03 02 01 0b
+  28.53s <<< RAW   01 06 03 02 01 0b
+  28.53s <<< FRAME [1.6] STATUS     01 06 03 02 01 0b
+  30.54s >>> restore check          01 06 01 00
+  30.55s <<< RAW   01 06 03 02 01 0b
+  30.55s <<< FRAME [1.6] STATUS     01 06 03 02 01 0b
+  32.55s == restored initial 0x01 ==
+
+
+SECTION D — naming the two strengths
+====================================
+
+The wire says 0, 1 and 3. It does not say which of 1 and 3 cancels more, and
+the published third-party tables for this protocol say the opposite of what
+this headset does, so they are not used.
+
+The owner ranked the three values by ear with the values unnamed during the
+test: state 1 = 0x00, state 2 = 0x01, state 3 = 0x03, twelve seconds each,
+two rounds, no music, with constant background noise. His answer was that
+state 3 was the quietest and state 1 the loudest, giving
+
+    0x00  off
+    0x01  low     the weaker strength
+    0x03  high    the stronger strength
+
+The run follows. What it proves on its own is only that the three values were
+driven and restored; the naming rests on the owner's report of hearing them.
+
+Also in this section: a 40-second window with nothing sent, to see whether
+the headset announces a change made on the headset itself. It recorded no
+unsolicited [1.6] frames — but the owner confirmed he did not operate the
+control during the window, so this is UNTESTED, not a negative result. The
+bridge polls every four seconds, which covers it either way.
+
+   0.00s >>> init             00 01 01 00
+   0.02s <<< RAW   00 01 03 05 31 2e 30 2e 34
+   2.03s >>> initial          01 06 01 00
+   2.05s <<< RAW   01 06 03 02 01 0b
+   4.05s == initial 0x01 ==
+
+==========================================================
+PUT THE HEADPHONES ON. No music. 30 seconds.
+==========================================================
+
+    starting in 30...
+    starting in 20...
+    starting in 10...
+
+==========================================================
+ROUND 1  --  STATE 1  --  listen for 12 seconds
+==========================================================
+
+  34.16s >>> state 1          01 06 02 01 00
+  34.96s <<< RAW   01 06 03 02 00 0b
+  35.02s <<< RAW   01 06 03 02 00 0b
+
+==========================================================
+ROUND 1  --  STATE 2  --  listen for 12 seconds
+==========================================================
+
+  48.26s >>> state 2          01 06 02 01 01
+  48.29s <<< RAW   01 06 03 02 01 0b
+  48.34s <<< RAW   01 06 03 02 01 0b
+
+==========================================================
+ROUND 1  --  STATE 3  --  listen for 12 seconds
+==========================================================
+
+  62.38s >>> state 3          01 06 02 01 03
+  62.41s <<< RAW   01 06 03 02 03 0b
+  62.46s <<< RAW   01 06 03 02 03 0b
+
+==========================================================
+ROUND 2  --  STATE 1  --  listen for 12 seconds
+==========================================================
+
+  76.50s >>> state 1          01 06 02 01 00
+  76.51s <<< RAW   01 06 03 02 00 0b
+  76.57s <<< RAW   01 06 03 02 00 0b
+
+==========================================================
+ROUND 2  --  STATE 2  --  listen for 12 seconds
+==========================================================
+
+  90.62s >>> state 2          01 06 02 01 01
+  90.63s <<< RAW   01 06 03 02 01 0b
+  90.68s <<< RAW   01 06 03 02 01 0b
+
+==========================================================
+ROUND 2  --  STATE 3  --  listen for 12 seconds
+==========================================================
+
+ 104.73s >>> state 3          01 06 02 01 03
+ 104.74s <<< RAW   01 06 03 02 03 0b
+ 104.80s <<< RAW   01 06 03 02 03 0b
+
+==========================================================
+RANKING DONE. Now press the buttons on the left earcup a
+few times, or change noise cancelling in the Bose Connect
+app. 40 seconds. Nothing is being sent from here.
+==========================================================
+
+
+==========================================================
+the headset sent 0 [1.6] frames unasked: []
+==========================================================
+
+ 158.93s >>> restore          01 06 02 01 01
+ 159.94s <<< RAW   01 06 03 02 01 0b
+ 159.98s <<< RAW   01 06 03 02 01 0b
+ 160.98s >>> restore check    01 06 01 00
+ 161.01s <<< RAW   01 06 03 02 01 0b
+ 163.01s == restored initial 0x01 ==
+
+
+SECTION E — the bridge against the headset
+==========================================
+
+bose-bridge itself, driven over its stdin and read on its stdout, against
+this headset. The first line is what it made of the frames above; then off,
+anc, each strength, the seven commands this headset does not serve (which
+send nothing), the restoration of the initial setting, and a clean exit.
+
+
+== first reading ==
+   <- {"modes":true,"mode":"anc","available":["off","anc"],"ancLevel":"low","ancLevels":["low","high"],"battery":{"headset":70,"charging":[]}}
+   OK  a live line
+   initial = ('anc', 'low')
+
+>> set off
+   <- {"modes":true,"mode":"off","available":["off","anc"],"ancLevel":"low","ancLevels":["low","high"],"battery":{"headset":70,"charging":[]}}
+   OK  mode off
+
+>> set anc
+   <- {"modes":true,"mode":"anc","available":["off","anc"],"ancLevel":"low","ancLevels":["low","high"],"battery":{"headset":70,"charging":[]}}
+   OK  mode anc
+
+>> level low
+   OK  anc at low
+
+>> level high
+   <- {"modes":true,"mode":"anc","available":["off","anc"],"ancLevel":"high","ancLevels":["low","high"],"battery":{"headset":70,"charging":[]}}
+   OK  anc at high
+
+>> set ambient
+
+>> set talkthru
+
+>> level mid
+
+>> voice on
+
+>> latency on
+   after the five unsupported commands: {'modes': True, 'mode': 'anc', 'available': ['off', 'anc'], 'ancLevel': 'high', 'ancLevels': ['low', 'high'], 'battery': {'headset': 70, 'charging': []}}
+
+== restoring anc / low ==
+
+>> level low
+   <- {"modes":true,"mode":"anc","available":["off","anc"],"ancLevel":"low","ancLevels":["low","high"],"battery":{"headset":70,"charging":[]}}
+   OK  restored anc at low
+
+== bridge exit code: 0 ==

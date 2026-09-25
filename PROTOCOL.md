@@ -1814,6 +1814,142 @@ Profile1 route, not the recommended QC45 capture tool.
 See [the review and owner confirmation](docs/BOSE-REVIEW.md) for the owner's
 test results on `fc8d7f9`, software coverage and remaining evidence limits.
 
+## Bose QC35 — the [1.6] noise-cancelling path
+
+Confirmed on a **Bose QC35** (`04:52:C7:C2:A9:3E`, firmware `1.0.4`, 70% at
+capture time) on 2026-09-23. Same brand, same channel, same framing as the
+QC45 above — and a different question, because this generation does not
+serve the QC45's audio modes at all.
+
+Its SDP record carries the Bose BMAP placeholder
+`00000000-deca-fade-deca-deafdecacaff` beside SPP and the audio profiles, so
+`Model.js` already routes it to `bose-bridge` with no new claim. The full
+listing is in the capture; the QC45 has no equivalent stored.
+
+### Which question a headset gets, and why the headset decides
+
+```
+->  1f 03 01 00                [31.3] GET   the QC45's audio modes
+<-  1f 03 04 01 03             [31.3] ERROR this headset does not serve them
+->  01 06 01 00                [1.6]  GET   asked only after that ERROR
+<-  01 06 03 02 01 0b          [1.6]  STATUS
+```
+
+There is no model table here and no new bridge argument. Keying on the
+reported name was the obvious design and it does not hold: a Bose name is
+whatever its owner typed into the app — this unit's is the owner's own first
+name — and the QC45's capture carries no SDP listing to write its row from,
+so that row would have to be invented.
+
+So every Bose is asked `[31.3]` first, exactly as before this model was
+added, and only one that answers with an **ERROR**, before it has ever
+answered `[31.3]` with a STATUS, is asked `[1.6]` and polled on it from then
+on. An ERROR after a STATUS — a refused START, say — leaves the headset on
+`[31.3]`: no QC45 capture shows such an ERROR, so it must not move a QC45. A QC45 answers `[31.3]` with a STATUS and never
+reaches the fallback: its wire is unchanged frame for frame, which is what
+`tests/pins/bose/qc45.json` passing untouched demonstrates.
+
+### The noise-cancelling setting
+
+```
+->  01 06 01 00                [1.6] GET
+<-  01 06 03 02 01 0b          [1.6] STATUS: value 1, mask 0b1011
+->  01 06 02 01 03             [1.6] SETGET value 3
+<-  01 06 03 02 03 0b          [1.6] STATUS: value 3 — the set is answered
+                                     with the result, not with an ack
+->  01 06 02 01 02             [1.6] SETGET value 2
+<-  01 06 04 01 06             [1.6] ERROR: refused, and nothing moved
+```
+
+The payload is two bytes: what the headset is set to, then a bitmask whose
+set bits are the values it takes. This unit answered `0x0b` — bits 0, 1 and
+3 — and refused 2, the one value under 4 whose bit the mask leaves clear.
+Four values driven, four agreements with the mask. A `[1.6]` STATUS with
+only the value byte was never seen from this headset; the bridge falls back
+to the strengths it can name rather than guessing a support set.
+
+**0 is off, 1 the weaker strength and 3 the stronger.** The wire does not
+say which of 1 and 3 cancels more, and the published third-party tables for
+this protocol say the reverse of what this headset does, so the naming is
+not taken from them: the owner ranked the three values by ear with the
+values unnamed during the test, twelve seconds each, two rounds, and
+reported 3 the quietest and 0 the loudest. A copied table would have put the
+panel's High button on the weaker setting.
+
+Because the two strengths are one mode graded twice rather than two modes,
+the line carries the panel's strength row — `ancLevel` and `ancLevels`, the
+keys `nothing-bridge` fills — and `set anc` asks for the strength last seen,
+as it does on every other brand. This headset has no ambient and no
+TalkThru; neither is offered or sent, and neither is an ambient dial, a
+voice switch nor a low-latency switch.
+
+### Battery
+
+```
+->  02 02 01 00                [2.2] GET
+<-  02 02 03 01 46             [2.2] STATUS: 70%
+```
+
+One byte on this generation, where the QC45 answers four. The existing
+parser reads the first byte and needs no change. 70% is what BlueZ's own
+`Battery Percentage` reported at the same moment. Charging is not
+established by this capture.
+
+### In the widget
+
+```json
+{"modes": true, "mode": "anc", "available": ["off","anc"],
+ "ancLevel": "low", "ancLevels": ["low","high"],
+ "battery": {"headset": 70, "charging": []}}
+```
+
+Commands on stdin: `set off`, `set anc`, `level low|high`. Exit codes are the
+shared ones. `tests/pins/bose/qc35.json` freezes the session and
+`tests/bose_qc35_test.py` covers what a pin cannot say: that the fallback is
+reached only on the headset's own ERROR, that a QC45 never reaches it, the
+mask, the naming, split and coalesced reads, the unsolicited `[5.1]` and
+`[4.2]` frames this headset emits after the init and the bridge steps over,
+and timeout, readback and link loss driven through the clock and the loop.
+
+### The capture and its limits
+
+[`docs/captures/bose-qc35.txt`](docs/captures/bose-qc35.txt) has the SDP
+record, the read-only discovery, the driven session with the refusal and the
+verified restoration, the ranking run behind the naming, and `bose-bridge`
+itself against the headset. Raw reads are logged at receipt before framing;
+each step waits a fixed collection window, so no timestamp there measures
+response latency.
+
+### Tested on the headset
+
+By [@pedrohfp](https://github.com/pedrohfp) on `3aa8974`, with the plugin
+installed from that revision and nothing else holding channel 8:
+
+| Run | Result |
+|:--|:--|
+| Read-only discovery | init `1.0.4`, battery `02 02 03 01 46` (70%, matching BlueZ), `[31.3]` ERROR, `[1.6]` `01 0b` |
+| Driven session | values 0, 1 and 3 accepted and read back; 2 refused with `01 06 04 01 06` and the setting did not move; initial value restored and the restoration verified |
+| Bridge over its own pipe | first reading, `set off`, `set anc`, `level low`, `level high`, seven unsupported commands that sent nothing, restoration, exit 0 |
+| Reconnect | `bluetoothctl disconnect` showed `not connected`; after reconnect mode, strength and battery all returned, and a strength set before the cycle survived it |
+| Panel | Off, ANC, Low and High all responded; the owner reports the three states audibly distinct, High the stronger cancelling |
+
+### Not established
+
+- **Unsolicited changes.** Three windows totalling 110 seconds recorded no
+  `[1.6]` frame the bridge had not asked for, but the owner did not operate
+  the headset's own controls during any of them, so whether it announces a
+  change made on the headset is unknown. A panel change travels through the
+  bridge and does not count. The bridge polls every four seconds either way.
+- **Channels 2 and 9** were never tried on this headset, because 8 answered
+  the probe first — untried, not refused.
+- **Charging.** The battery read 70% throughout; `charging` is always empty.
+- **The support mask** is an inference from four observations matching
+  `0x0b`. No other mask has been seen from any Bose.
+- **Peer isolation** is simulated in `tests/bose_qc35_test.py`; no second
+  headset was connected alongside.
+- **The `[5.1]` and `[4.2]` frames** sent after the init are recorded in the
+  capture and stepped over by the framer; their meaning is not known.
+
 ## Canonical owner captures — 2026-09-08
 
 The maintainer @ncr retested his **Sony WH-CH720N** and **JBL TUNE230NC TWS**.

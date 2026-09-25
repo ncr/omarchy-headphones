@@ -911,6 +911,29 @@ const DEVICES = [
     bleAddress: "48:B4:41:00:00:01",
   },
   {
+    model: "Bose QC35",
+    backend: "bose",
+    // The real list from docs/captures/bose-qc35.txt. Only the deca-fade
+    // placeholder claims it; unlike the QC45 it serves no 9b26d8c0 SPP UUID.
+    uuids: [
+      "00000000-deca-fade-deca-deafdecacaff",
+      "00001101-0000-1000-8000-00805f9b34fb",
+      "00001108-0000-1000-8000-00805f9b34fb",
+      "0000110a-0000-1000-8000-00805f9b34fb",
+      "0000110b-0000-1000-8000-00805f9b34fb",
+      "0000110c-0000-1000-8000-00805f9b34fb",
+      "0000110d-0000-1000-8000-00805f9b34fb",
+      "0000110e-0000-1000-8000-00805f9b34fb",
+      "0000110f-0000-1000-8000-00805f9b34fb",
+      "0000111e-0000-1000-8000-00805f9b34fb",
+      "0000112e-0000-1000-8000-00805f9b34fb",
+      "00001130-0000-1000-8000-00805f9b34fb",
+      "00001131-0000-1000-8000-00805f9b34fb",
+      "00001200-0000-1000-8000-00805f9b34fb",
+    ],
+    bleAddress: "48:B4:41:00:00:01",
+  },
+  {
     model: "Sony WH-1000XM4",
     backend: "sony",
     uuids: [
