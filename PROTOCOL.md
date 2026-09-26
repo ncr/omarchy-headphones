@@ -1985,7 +1985,10 @@ TOZO model is claimed. Earbud firmware query returned `00 01 06 00 05 02 00
 05 02 0e`; the case app screenshot displays V1.1.5 and its query returned
 `01 01 03 01 01 05 07`.
 
-The earbuds' public LE address equals their Classic address. Their GATT
+In the owner's confirmed session, the responding earbud's public LE address
+equalled its Classic address. A later scan also found `D5:4B:F8:C1:5F:99`
+advertising as TOZO NC9 Pro with B610, but it did not answer mode or battery
+queries, so it is not selected as a substitute. The responding GATT
 service is `0000b610-0000-1000-8000-00805f9b34fb`, write-without-response
 characteristic B611, notify B612. The Classic SDP list initially contains
 only standard audio and Serial Port UUIDs. Routing requires the exact

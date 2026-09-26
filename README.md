@@ -115,11 +115,11 @@ Headphones not on the list? [Add yours](#add-your-own-headphones).
 <table>
 <tr>
 <td width="50%"><img src="docs/gallery/bose-qc35.png" alt="Bose QC35: one battery, Off / ANC, and the ANC level row Low / High" width="100%"></td>
-<td width="50%"></td>
+<td width="50%"><img src="docs/gallery/tozo-nc9-pro.png" alt="TOZO NC9 Pro: left, right and case batteries, and all six noise control modes" width="100%"></td>
 </tr>
 <tr>
 <td align="center">Bose QC35 — <a href="https://github.com/pedrohfp">@pedrohfp</a></td>
-<td align="center"></td>
+<td align="center">TOZO NC9 Pro — <a href="https://github.com/seth-reee">@seth-reee</a></td>
 </tr>
 </table>
 
@@ -291,6 +291,7 @@ Keys, while the panel is open (the panel lists them itself, bottom rows):
 | Key | Does |
 |:--|:--|
 | `o` `n` `a` `t` | Off · ANC · Ambient · TalkThru — only the modes this device has |
+| `w` `e` `d` | Reduce Wind Noise · Leisure · Adaptive (TOZO NC9 Pro) |
 | `[` `]` | Ambient level down / up (Sony 0-20, Soundcore 1-5) |
 | `f` | Focus on voice (Sony) / wind noise reduction (Soundcore) on / off |
 | `1` `2` `3` `4` | ANC strength: Low · Mid · High · Adaptive (Nothing / CMF) — turns ANC on at it |
@@ -309,7 +310,7 @@ Everything is reachable over IPC — `omarchy-shell omaphones <method>`:
 | `status` | one line per device it follows, e.g. `JBL TUNE230NC TWS · L 90% · R 100% · case 78%` |
 | `battery` · `left` · `right` · `batteryCase` | a level 0-100, or `-1` |
 | `charging` | which parts say they are charging |
-| `mode` · `setMode <m>` | `off` `anc` `ambient` `talkthru`, or `pending` / `unsupported` · `ok` / `busy` / `unavailable` |
+| `mode` · `setMode <m>` | `off` `anc` `ambient` `talkthru`; also `wind` `leisure` `adaptive` on TOZO NC9 Pro. Reads may say `pending` / `unsupported`; writes say `ok` / `busy` / `unavailable`. |
 | `ambientLevel` · `setAmbientLevel <n>` | 0-20 (Sony), 1-5 (Soundcore) |
 | `ambientVoice` · `setAmbientVoice on\|off` | `on` / `off` — Focus on voice (Sony), wind noise reduction (Soundcore) |
 | `ancLevel` · `setAncLevel <l>` | `low` `mid` `high` `adaptive` (Nothing / CMF); setting one turns ANC on |

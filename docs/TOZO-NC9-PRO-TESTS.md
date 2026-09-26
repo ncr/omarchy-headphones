@@ -39,6 +39,23 @@ protocol interpretation and awaits an unequal-level physical sample. No EQ,
 case display configuration, firmware update or other unobserved control is
 exposed. Case firmware V1.1.5 is visible in the owner's app screenshot.
 
+The installed Omarchy widget was tested with both earbuds out and the case
+open. IPC reported `TOZO NC9 Pro · L 100% · R 100% · case 100%` and all six
+mode commands returned `ok`. A new query after each command reported the
+requested mode: `off`, `anc`, `ambient`, `wind`, `leisure`, `adaptive`. The
+observed starting mode was `ambient`; it was restored and confirmed by a
+new query. The gallery screenshot is
+[`tozo-nc9-pro.png`](gallery/tozo-nc9-pro.png); it shows all three battery
+rows and all six mode buttons. After restarting the Omarchy shell, the bridge
+reconnected, again reporting all three batteries and `ambient`.
+
+During the session, BlueZ temporarily retained Classic audio while GATT
+writes to the confirmed earbud address failed. Re-seating the earbuds and
+activating the right earbud first restored the control connection; both
+earbuds then worked together. A second advertised NC9 Pro address exposed
+B610 but did not answer queries, and the bridge did not substitute it.
+This is an observed reconnection limit, not evidence of another mode or
+battery format.
+
 `CHECK_BASE=upstream/main tools/check` passed with 215 Python tests and the
 Model.js tests. `qmllint` is unavailable; the script reports that check skipped.
-Final installed-widget validation and gallery capture are recorded below.
