@@ -1,0 +1,56 @@
+TOZO NC9 Pro owner investigation — 2026-09-24/25 UTC
+Owner: @seth-reee
+Bluetooth adapter: hci1 (E8:9C:25:5C:92:56)
+
+Classic audio device: 94:4B:F8:C1:5F:98 (public), TOZO NC9 Pro
+Connected at first inspection. BlueZ Battery Percentage: 0x64 (100).
+Advertised UUIDs: 00001101-0000-1000-8000-00805f9b34fb (Serial Port),
+0000110b-0000-1000-8000-00805f9b34fb (Audio Sink),
+0000110c-0000-1000-8000-00805f9b34fb (AVRCP Target),
+0000110e-0000-1000-8000-00805f9b34fb (AVRCP),
+0000111e-0000-1000-8000-00805f9b34fb (Handsfree).
+Widget IPC: "TOZO NC9 Pro · 100%". No mode row or component battery.
+
+Separate LE device with the case open and both earbuds inside:
+41:42:B1:F6:F8:4F (public), TOZO NC9 Pro Box.
+Manufacturer data: key 0x4241, value b1 f6 f8 4f 16 57 52 09.
+Before investigation: unpaired, unbonded, disconnected.
+Connected temporarily for GATT inspection; disconnected afterwards.
+Services:
+  000001ff-3c17-d293-8e48-14fe2e4da212
+    0000b611-0000-1000-8000-00805f9b34fb write without response
+    0000b612-0000-1000-8000-00805f9b34fb notify
+    0000b511-0000-1000-8000-00805f9b34fb read/write
+    0000b512-0000-1000-8000-00805f9b34fb read/notify
+  00009966-3c17-d293-8e48-14fe2e4da212
+    0000ffb1-0000-1000-8000-00805f9b34fb write
+    0000ffb2-0000-1000-8000-00805f9b34fb notify
+
+Direct reads of b511 and b512 returned empty values at
+2026-09-25T04:55:13.340985+00:00 and 04:55:14.140811+00:00.
+Twelve seconds subscribed to b612 and b512 with no writes: no notifications.
+Seventy-five seconds subscribed while the owner physically cycled modes:
+no notifications. This is a negative result, not evidence that the mode
+is unsupported on the device.
+
+Read-only protocol hypothesis, sourced from a TOZO T10 implementation at
+https://github.com/GabriWar/tozo-control ; this is NOT an NC9 Pro command
+confirmed to mean battery. It did not change settings. B611 TX 00 02 00 00
+with b612/b512 subscribed: no notification in twelve seconds.
+
+Second-service experiment (BLE GATT, ffB1 TX; ffB2 RX):
+2026-09-25T05:00:14.894+00:00 TX 00 02 00 00
+2026-09-25T05:00:19.893+00:00 RX a0 00 00 00 00 00 00 00 81 ce 01 00 16
+2026-09-25T05:00:24.684+00:00 RX 80 00 00 00 00 00 00 00 00 0f 01 00 14
+Twenty seconds subscribed to ffB2 without a write: no notification.
+2026-09-25T05:01:03.291+00:00 TX 00 02 00 00
+2026-09-25T05:01:08.792+00:00 RX a0 00 00 00 00 00 00 00 81 ce 01 00 16
+2026-09-25T05:01:13.601+00:00 RX 80 00 00 00 00 00 00 00 00 0f 01 00 14
+These frames are repeatable but their fields and relationship to battery or
+modes are unknown. Do not use them as a battery or mode pin yet.
+
+Owner reports six modes in the TOZO app / prompts: Transparency, Normal,
+Noise Cancellation, Reduce Wind Noise, Leisure Mode, Adaptive Mode.
+No per-component battery levels or mode replies have yet been observed.
+No mode settings were changed via software. Temporary case connection was
+closed; the connected Classic audio device was not disconnected.

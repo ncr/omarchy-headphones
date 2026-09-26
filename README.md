@@ -1,6 +1,6 @@
 # Omaphones for Omarchy
 
-<p align="center"><b>JBL</b> &nbsp;·&nbsp; <b>Sony</b> &nbsp;·&nbsp; <b>Samsung</b> &nbsp;·&nbsp; <b>Nothing / CMF</b> &nbsp;·&nbsp; <b>Soundcore</b> &nbsp;·&nbsp; <b>Xiaomi</b> &nbsp;·&nbsp; <b>OPPO</b> &nbsp;·&nbsp; <b>Bose</b></p>
+<p align="center"><b>JBL</b> &nbsp;·&nbsp; <b>Sony</b> &nbsp;·&nbsp; <b>Samsung</b> &nbsp;·&nbsp; <b>Nothing / CMF</b> &nbsp;·&nbsp; <b>Soundcore</b> &nbsp;·&nbsp; <b>Xiaomi</b> &nbsp;·&nbsp; <b>OPPO</b> &nbsp;·&nbsp; <b>Bose</b> &nbsp;·&nbsp; <b>TOZO</b></p>
 
 <p align="center"><b>Battery levels and noise-cancellation control for Bluetooth headphones, in the Omarchy bar.</b></p>
 
@@ -115,11 +115,11 @@ Headphones not on the list? [Add yours](#add-your-own-headphones).
 <table>
 <tr>
 <td width="50%"><img src="docs/gallery/bose-qc35.png" alt="Bose QC35: one battery, Off / ANC, and the ANC level row Low / High" width="100%"></td>
-<td width="50%"></td>
+<td width="50%"><img src="docs/gallery/tozo-nc9-pro.png" alt="TOZO NC9 Pro: left, right and case batteries, and all six noise control modes" width="100%"></td>
 </tr>
 <tr>
 <td align="center">Bose QC35 — <a href="https://github.com/pedrohfp">@pedrohfp</a></td>
-<td align="center"></td>
+<td align="center">TOZO NC9 Pro — <a href="https://github.com/seth-reee">@seth-reee</a></td>
 </tr>
 </table>
 
@@ -177,6 +177,7 @@ same idea, built for Apple's own protocol, and the plugin this one is modelled o
 | soundcore Space One Pro (A3062, over-ear) | <img src="docs/icons/yes.svg" width="14" alt="yes"> one figure | <img src="docs/icons/yes.svg" width="14" alt="yes"> Off · ANC · Ambient (level, wind noise reduction) | [@sasiruLK](https://github.com/sasiruLK) |
 | soundcore Life Q30 (A3028, over-ear) | <img src="docs/icons/yes.svg" width="14" alt="yes"> one figure (Fast Pair) | <img src="docs/icons/yes.svg" width="14" alt="yes"> Off · ANC · Ambient | [@kevinbsr](https://github.com/kevinbsr) |
 | Sony WH-CH520             | <img src="docs/icons/yes.svg" width="14" alt="yes"> one figure (BlueZ) | <img src="docs/icons/no.svg" width="14" alt="no"> none — Sony lists no ANC/Ambient on this model, confirmed on hardware | [@enobale](https://github.com/enobale) |
+| TOZO NC9 Pro (earbuds) | <img src="docs/icons/yes.svg" width="14" alt="yes"> left, right, case | <img src="docs/icons/yes.svg" width="14" alt="yes"> Normal · ANC · Transparency · Reduce Wind Noise · Leisure · Adaptive | [@seth-reee](https://github.com/seth-reee) |
 | other Fast Pair headphones  | <img src="docs/icons/yes.svg" width="14" alt="yes"> expected          | <img src="docs/icons/unknown.svg" width="14" alt="untested">                                    | —                              |
 
 CMF Headphone Pro's connection, reconnect recovery and all panel controls were
@@ -290,6 +291,7 @@ Keys, while the panel is open (the panel lists them itself, bottom rows):
 | Key | Does |
 |:--|:--|
 | `o` `n` `a` `t` | Off · ANC · Ambient · TalkThru — only the modes this device has |
+| `w` `e` `d` | Reduce Wind Noise · Leisure · Adaptive (TOZO NC9 Pro) |
 | `[` `]` | Ambient level down / up (Sony 0-20, Soundcore 1-5) |
 | `f` | Focus on voice (Sony) / wind noise reduction (Soundcore) on / off |
 | `1` `2` `3` `4` | ANC strength: Low · Mid · High · Adaptive (Nothing / CMF) — turns ANC on at it |
@@ -308,7 +310,7 @@ Everything is reachable over IPC — `omarchy-shell omaphones <method>`:
 | `status` | one line per device it follows, e.g. `JBL TUNE230NC TWS · L 90% · R 100% · case 78%` |
 | `battery` · `left` · `right` · `batteryCase` | a level 0-100, or `-1` |
 | `charging` | which parts say they are charging |
-| `mode` · `setMode <m>` | `off` `anc` `ambient` `talkthru`, or `pending` / `unsupported` · `ok` / `busy` / `unavailable` |
+| `mode` · `setMode <m>` | `off` `anc` `ambient` `talkthru`; also `wind` `leisure` `adaptive` on TOZO NC9 Pro. Reads may say `pending` / `unsupported`; writes say `ok` / `busy` / `unavailable`. |
 | `ambientLevel` · `setAmbientLevel <n>` | 0-20 (Sony), 1-5 (Soundcore) |
 | `ambientVoice` · `setAmbientVoice on\|off` | `on` / `off` — Focus on voice (Sony), wind noise reduction (Soundcore) |
 | `ancLevel` · `setAncLevel <l>` | `low` `mid` `high` `adaptive` (Nothing / CMF); setting one turns ANC on |

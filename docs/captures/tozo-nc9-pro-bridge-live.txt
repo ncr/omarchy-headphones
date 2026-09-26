@@ -1,0 +1,57 @@
+2026-09-25T05:45:03.049+00:00 TX buds BLE GATT 00 30 00 00
+2026-09-25T05:45:03.150+00:00 RX buds BLE GATT 00 30 01 02 02
+2026-09-25T05:45:03.150+00:00 STATE {"modes": true, "mode": "ambient", "available": ["off", "anc", "ambient", "wind", "leisure", "adaptive"]}
+2026-09-25T05:45:03.150+00:00 INITIAL ambient
+2026-09-25T05:45:03.150+00:00 INITIAL ambient
+2026-09-25T05:45:03.200+00:00 TX buds BLE GATT 00 02 00 00
+2026-09-25T05:45:03.351+00:00 RX buds BLE GATT 00 02 02 64 64 c8
+2026-09-25T05:45:03.351+00:00 STATE {"modes": true, "mode": "ambient", "available": ["off", "anc", "ambient", "wind", "leisure", "adaptive"], "battery": {"left": 100, "right": 100}}
+2026-09-25T05:45:03.351+00:00 TX buds BLE GATT 00 20 00 00
+2026-09-25T05:45:03.502+00:00 RX buds BLE GATT 00 20 06 41 42 b1 f6 f8 4f 71
+2026-09-25T05:45:03.504+00:00 TX buds BLE GATT 10 04 01 00 00
+2026-09-25T05:45:03.605+00:00 RX buds BLE GATT 10 04 01 00 00
+2026-09-25T05:45:04.575+00:00 TX case BLE GATT 01 09 00 00
+2026-09-25T05:45:05.127+00:00 TX buds BLE GATT 00 30 00 00
+2026-09-25T05:45:05.227+00:00 RX buds BLE GATT 00 30 01 00 00
+2026-09-25T05:45:05.227+00:00 STATE {"modes": true, "mode": "off", "available": ["off", "anc", "ambient", "wind", "leisure", "adaptive"], "battery": {"left": 100, "right": 100}}
+2026-09-25T05:45:05.227+00:00 RESULT requested=off reported=off
+2026-09-25T05:45:05.277+00:00 TX buds BLE GATT 10 04 01 01 01
+2026-09-25T05:45:05.428+00:00 RX buds BLE GATT 10 04 01 00 00
+2026-09-25T05:45:06.030+00:00 RX case BLE GATT 01 09 06 94 4b f8 c1 5f 98 8f
+2026-09-25T05:45:06.030+00:00 TX case BLE GATT 01 02 00 00
+2026-09-25T05:45:06.932+00:00 TX buds BLE GATT 00 30 00 00
+2026-09-25T05:45:07.033+00:00 RX case BLE GATT 01 02 01 64 64
+2026-09-25T05:45:07.033+00:00 STATE {"modes": true, "mode": "off", "available": ["off", "anc", "ambient", "wind", "leisure", "adaptive"], "battery": {"left": 100, "right": 100, "case": 100, "caseStale": false}}
+2026-09-25T05:45:07.083+00:00 RX buds BLE GATT 00 30 01 01 01
+2026-09-25T05:45:07.083+00:00 STATE {"modes": true, "mode": "anc", "available": ["off", "anc", "ambient", "wind", "leisure", "adaptive"], "battery": {"left": 100, "right": 100, "case": 100, "caseStale": false}}
+2026-09-25T05:45:07.083+00:00 RESULT requested=anc reported=anc
+2026-09-25T05:45:07.083+00:00 TX buds BLE GATT 10 05 01 01 01
+2026-09-25T05:45:07.184+00:00 RX buds BLE GATT 10 05 01 00 00
+2026-09-25T05:45:08.686+00:00 TX buds BLE GATT 00 30 00 00
+2026-09-25T05:45:08.837+00:00 RX buds BLE GATT 00 30 01 02 02
+2026-09-25T05:45:08.837+00:00 STATE {"modes": true, "mode": "ambient", "available": ["off", "anc", "ambient", "wind", "leisure", "adaptive"], "battery": {"left": 100, "right": 100, "case": 100, "caseStale": false}}
+2026-09-25T05:45:08.837+00:00 RESULT requested=ambient reported=ambient
+2026-09-25T05:45:08.837+00:00 TX buds BLE GATT 10 07 01 01 01
+2026-09-25T05:45:08.938+00:00 RX buds BLE GATT 10 07 01 00 00
+2026-09-25T05:45:10.440+00:00 TX buds BLE GATT 00 30 00 00
+2026-09-25T05:45:10.591+00:00 RX buds BLE GATT 00 30 01 03 03
+2026-09-25T05:45:10.591+00:00 STATE {"modes": true, "mode": "wind", "available": ["off", "anc", "ambient", "wind", "leisure", "adaptive"], "battery": {"left": 100, "right": 100, "case": 100, "caseStale": false}}
+2026-09-25T05:45:10.591+00:00 RESULT requested=wind reported=wind
+2026-09-25T05:45:10.591+00:00 TX buds BLE GATT 10 08 01 01 01
+2026-09-25T05:45:10.692+00:00 RX buds BLE GATT 10 08 01 00 00
+2026-09-25T05:45:12.194+00:00 TX buds BLE GATT 00 30 00 00
+2026-09-25T05:45:12.345+00:00 RX buds BLE GATT 00 30 01 04 04
+2026-09-25T05:45:12.345+00:00 STATE {"modes": true, "mode": "leisure", "available": ["off", "anc", "ambient", "wind", "leisure", "adaptive"], "battery": {"left": 100, "right": 100, "case": 100, "caseStale": false}}
+2026-09-25T05:45:12.345+00:00 RESULT requested=leisure reported=leisure
+2026-09-25T05:45:12.345+00:00 TX buds BLE GATT 10 11 01 01 01
+2026-09-25T05:45:12.446+00:00 RX buds BLE GATT 10 11 01 00 00
+2026-09-25T05:45:13.948+00:00 TX buds BLE GATT 00 30 00 00
+2026-09-25T05:45:14.099+00:00 RX buds BLE GATT 00 30 01 06 06
+2026-09-25T05:45:14.099+00:00 STATE {"modes": true, "mode": "adaptive", "available": ["off", "anc", "ambient", "wind", "leisure", "adaptive"], "battery": {"left": 100, "right": 100, "case": 100, "caseStale": false}}
+2026-09-25T05:45:14.099+00:00 RESULT requested=adaptive reported=adaptive
+2026-09-25T05:45:14.099+00:00 TX buds BLE GATT 10 05 01 01 01
+2026-09-25T05:45:14.200+00:00 RX buds BLE GATT 10 05 01 00 00
+2026-09-25T05:45:15.702+00:00 TX buds BLE GATT 00 30 00 00
+2026-09-25T05:45:15.853+00:00 RX buds BLE GATT 00 30 01 02 02
+2026-09-25T05:45:15.854+00:00 STATE {"modes": true, "mode": "ambient", "available": ["off", "anc", "ambient", "wind", "leisure", "adaptive"], "battery": {"left": 100, "right": 100, "case": 100, "caseStale": false}}
+2026-09-25T05:45:15.854+00:00 RESTORED ambient

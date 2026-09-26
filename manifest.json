@@ -5,7 +5,7 @@
   "version": "1.3.11",
   "author": "Jacek Becela",
   "license": "MIT",
-  "description": "Battery levels and noise-cancellation control for Bluetooth headphones, in the Omarchy bar. JBL, Sony, Samsung, Nothing / CMF, Soundcore, Xiaomi, OPPO, Bose; battery on anything with Google Fast Pair or BlueZ.",
+  "description": "Battery levels and noise-cancellation control for Bluetooth headphones, in the Omarchy bar. JBL, Sony, Samsung, Nothing / CMF, Soundcore, Xiaomi, OPPO, Bose, TOZO; battery on anything with Google Fast Pair or BlueZ.",
   "kinds": [
     "service",
     "bar-widget"
@@ -17,7 +17,7 @@
   },
   "barWidget": {
     "displayName": "Omaphones",
-    "description": "One icon per connected set, filling with its battery; the panel shows left, right and case, and switches Off / ANC / Ambient — with the ambient level on Sony and Soundcore, ANC strength and low latency on Nothing / CMF.",
+    "description": "One icon per connected set, filling with its battery; the panel shows left, right and case, and switches Off / ANC / Ambient \u2014 with the ambient level on Sony and Soundcore, ANC strength and low latency on Nothing / CMF. Six listening modes and left, right, case battery on TOZO NC9 Pro.",
     "category": "Audio",
     "aliases": [
       "jbl",
@@ -37,7 +37,9 @@
       "buds",
       "anc",
       "fastpair",
-      "battery"
+      "battery",
+      "tozo",
+      "nc9"
     ],
     "allowMultiple": false,
     "defaultSection": "right",
@@ -71,7 +73,7 @@
         "type": "boolean",
         "label": "Noise cancellation (Off / ANC / Ambient)",
         "defaultValue": true,
-        "description": "The MODE row, following changes made on the device too — plus the ambient level on Sony and Soundcore, and the ANC strength and low-latency switch on Nothing / CMF. Works on Sony MDR v1 and v2, Samsung Galaxy Buds2, Nothing / CMF, Soundcore, Xiaomi Buds 5 Pro, OPPO Enco Air3 Pro, Bose QC45, Bose QC35, and some JBL earbuds (JBL needs Fast Pair above). Hidden when the device answers for none."
+        "description": "The MODE row, following changes made on the device too — plus the ambient level on Sony and Soundcore, and the ANC strength and low-latency switch on Nothing / CMF. Works on Sony MDR v1 and v2, Samsung Galaxy Buds2, Nothing / CMF, Soundcore, Xiaomi Buds 5 Pro, OPPO Enco Air3 Pro, Bose QC45, Bose QC35, TOZO NC9 Pro, and some JBL earbuds (JBL needs Fast Pair above). Hidden when the device answers for none. TOZO NC9 Pro also offers Reduce Wind Noise, Leisure and Adaptive modes."
       },
       {
         "key": "lowBatteryThreshold",
@@ -106,7 +108,7 @@
         "type": "boolean",
         "label": "Pause media when a device disconnects or comes off your ears",
         "defaultValue": true,
-        "description": "Pauses every playing media player when a followed device disconnects (switched off, out of range) and, on headsets with a wear sensor (confirmed on the Sony WH-1000XM6), the moment it comes off your ears while still connected — and resumes exactly those players when it goes back on."
+        "description": "Pauses every playing media player when a followed device disconnects (switched off, out of range) and, on headsets with a wear sensor (confirmed on the Sony WH-1000XM6), the moment it comes off your ears while still connected \u2014 and resumes exactly those players when it goes back on."
       }
     ]
   }

@@ -1,0 +1,543 @@
+#!/usr/bin/env python3
+"""NC9 Pro BLE battery and six listening modes. See BRIDGE.md and PROTOCOL.md.
+
+    tozo-bridge <classic-address> <reported-name>
+
+Only the owner's captured NC9 Pro protocol is enabled. BlueZ owns GATT;
+notifications are datagrams, not a byte stream. The paired case address comes
+from the earbuds and is authenticated by asking the case for its earbuds.
+"""
+import ctypes
+import json
+import os
+import re
+import signal
+import sys
+import time
+from collections import deque
+
+ADDRESS = re.compile(r"^(?:[0-9a-fA-F]{2}:){5}[0-9a-fA-F]{2}$")
+MODELS = {
+    "TOZO NC9 Pro": {
+        "modes": {0: "off", 1: "anc", 2: "ambient", 3: "wind", 4: "leisure", 6: "adaptive"},
+        "sets": {
+            "off": "10 04 01 00 00", "anc": "10 04 01 01 01",
+            "ambient": "10 05 01 01 01", "wind": "10 07 01 01 01",
+            "leisure": "10 08 01 01 01", "adaptive": "10 11 01 01 01",
+        },
+    },
+}
+SERVICE = "0000b610-0000-1000-8000-00805f9b34fb"
+CASE_SERVICE = "000001ff-3c17-d293-8e48-14fe2e4da212"
+NOTIFY = "0000b612-0000-1000-8000-00805f9b34fb"
+WRITE = "0000b611-0000-1000-8000-00805f9b34fb"
+MODE_GET = bytes.fromhex("00 30 00 00")
+BATTERY_GET = bytes.fromhex("00 02 00 00")
+CASE_GET = bytes.fromhex("00 20 00 00")
+CASE_BATTERY_GET = bytes.fromhex("01 02 00 00")
+CASE_PEER_GET = bytes.fromhex("01 09 00 00")
+SETTLE = 1.5
+REPLY_TIMEOUT = 8.0
+CONNECT_TIMEOUT = 20.0
+
+
+def arm_parent_death():
+    ctypes.CDLL(None).prctl(1, signal.SIGTERM, 0, 0, 0)
+    if os.getppid() == 1:
+        os._exit(0)
+
+
+def emit(value):
+    try:
+        print(json.dumps(value, separators=(",", ":")), flush=True)
+    except (BrokenPipeError, ValueError):
+        raise BrokenPipeError()
+
+
+def packet(raw):
+    """Validate a whole GATT notification; partial/glued datagrams are invalid."""
+    raw = bytes(raw)
+    if len(raw) < 5 or len(raw) != raw[2] + 4:
+        return None
+    if sum(raw[3:-1]) & 255 != raw[-1]:
+        return None
+    return raw[0], raw[1], raw[3:-1]
+
+
+class Bridge:
+    """Protocol and scheduling; injected effects make the real run loop testable."""
+    def __init__(self, address, name, send, output=emit, clock=time.monotonic,
+                 open_case=lambda address: None, drop_case=lambda: None):
+        self.address = address.upper()
+        self.model = MODELS[name]
+        self.send = send
+        self.output = output
+        self.clock = clock
+        self.open_case = open_case
+        self.drop_case = drop_case
+        self.case_wait_until = None
+        self.mode = None
+        self.battery = {}
+        self.case_address = None
+        self.case_verified = False
+        self.linked = False
+        self.exit_code = None
+        self.last_output = None
+        self.pending = None
+        self.pending_read_sent = False
+        self.commands = deque()
+        self.outbox = deque()
+        self.next_send = 0
+        self.read_at = None
+        self.reply_deadline = None
+        self.poll_at = None
+        self.battery_at = None
+        self.case_retry_at = None
+
+    def publish(self):
+        state = {"modes": self.mode is not None}
+        if self.mode is not None:
+            state.update(mode=self.mode, available=list(self.model["sets"]))
+        if self.battery:
+            state["battery"] = dict(self.battery)
+        if state != self.last_output:
+            try:
+                self.output(state)
+            except (BrokenPipeError, ValueError):
+                self.finish(0)
+                return
+            self.last_output = state
+
+    def finish(self, code, error=None):
+        if self.exit_code is not None:
+            return
+        self.exit_code = code
+        self.outbox.clear()
+        self.commands.clear()
+        if error:
+            try:
+                self.output({"modes": False, "error": error})
+            except (BrokenPipeError, ValueError):
+                self.exit_code = 0
+
+    def queue(self, role, data):
+        if self.exit_code is None:
+            self.outbox.append((role, bytes(data)))
+
+    def connected(self, role):
+        if self.exit_code is not None:
+            return
+        if role == "buds":
+            self.linked = True
+            self.reply_deadline = self.clock() + REPLY_TIMEOUT
+            self.poll_at = self.clock() + 10
+            self.battery_at = self.clock() + 30
+            for data in (MODE_GET, BATTERY_GET, CASE_GET):
+                self.queue(role, data)
+        else:
+            self.case_verified = False
+            self.case_wait_until = self.clock() + REPLY_TIMEOUT
+            self.queue(role, CASE_PEER_GET)
+
+    def disconnected(self, role):
+        if role == "buds":
+            self.finish(1, "TOZO control connection closed")
+        else:
+            self.case_verified = False
+            self.case_wait_until = None
+            self.outbox = deque((r, d) for r, d in self.outbox if r != "case")
+            if "case" in self.battery:
+                self.battery["caseStale"] = True
+                self.publish()
+            self.case_retry_at = self.clock() + 60
+
+    def receive(self, role, raw):
+        if self.exit_code is not None:
+            return
+        parsed = packet(raw)
+        if parsed is None:
+            return
+        group, command, value = parsed
+        if role == "case":
+            if group != 1:
+                return
+            if command == 9 and len(value) == 6:
+                peer = ":".join("%02X" % b for b in value)
+                self.case_verified = peer == self.address
+                if not self.case_verified:
+                    self.case_wait_until = self.clock()
+                if self.case_verified:
+                    self.queue("case", CASE_BATTERY_GET)
+            elif command == 2 and len(value) == 1 and self.case_verified and value[0] <= 100:
+                self.case_wait_until = None
+                self.battery.update(case=value[0], caseStale=False)
+                self.publish()
+            return
+        if group == 0 and command == 0x30 and len(value) == 1:
+            mode = self.model["modes"].get(value[0])
+            if mode is None:
+                return
+            if self.pending is not None and not self.pending_read_sent:
+                return
+            self.mode = mode
+            self.reply_deadline = None
+            self.pending = None
+            self.publish()
+            self.start_command()
+        elif group == 0 and command == 2 and len(value) == 2:
+            # No charging or sentinel encoding has been observed on this model.
+            # Reject invalid values; do not guess high-bit or 255 meanings.
+            if all(v <= 100 for v in value):
+                self.battery.update(left=value[0], right=value[1])
+                self.publish()
+        elif group == 0 and command == 0x20 and len(value) == 6:
+            address = ":".join("%02X" % b for b in value)
+            if address not in ("00:00:00:00:00:00", "FF:FF:FF:FF:FF:FF", self.address):
+                if self.case_address is None:
+                    self.case_address = address
+                    self.open_case(address)
+        elif group == 0x10 and self.pending is not None:
+            expected = bytes.fromhex(self.model["sets"][self.pending])[1]
+            if command == expected and value == b"\x00":
+                # ACK is success, not the new mode. The device transitions after it.
+                self.read_at = self.clock() + SETTLE
+        elif group == 0x20 and command == 0x0D and len(value) == 2 and value[0] == 1:
+            # Observed change event; ask for authoritative mode instead of guessing
+            # how the event's second byte relates to the mode query enum.
+            self.read_at = self.clock() + SETTLE
+
+    def command(self, text):
+        parts = text.strip().split()
+        if self.exit_code is not None or self.mode is None or len(parts) != 2:
+            return
+        if parts[0] != "set" or parts[1] not in self.model["sets"]:
+            return
+        if len(self.commands) < 16:
+            self.commands.append(parts[1])
+        self.start_command()
+
+    def start_command(self):
+        if self.exit_code is not None or self.pending is not None or not self.commands:
+            return
+        self.pending = self.commands.popleft()
+        self.pending_read_sent = False
+        self.outbox = deque((r, d) for r, d in self.outbox if not (r == "buds" and d == MODE_GET))
+        self.queue("buds", bytes.fromhex(self.model["sets"][self.pending]))
+        self.read_at = self.clock() + SETTLE
+        self.reply_deadline = self.clock() + SETTLE + REPLY_TIMEOUT
+
+    def tick(self):
+        if self.exit_code is not None:
+            return False
+        now = self.clock()
+        if self.reply_deadline is not None and now >= self.reply_deadline:
+            self.finish(3 if self.mode is None else 1,
+                        None if self.mode is None else "TOZO mode readback timed out")
+            return False
+        if self.read_at is not None and now >= self.read_at:
+            self.read_at = None
+            self.queue("buds", MODE_GET)
+        if self.poll_at is not None and now >= self.poll_at:
+            self.poll_at = now + 10
+            if self.pending is None and self.read_at is None:
+                self.queue("buds", MODE_GET)
+        if self.battery_at is not None and now >= self.battery_at:
+            self.battery_at = now + 30
+            self.queue("buds", BATTERY_GET)
+            if self.case_verified:
+                self.queue("case", CASE_BATTERY_GET)
+        if self.case_wait_until is not None and now >= self.case_wait_until:
+            self.drop_case()
+            self.disconnected("case")
+        if self.case_retry_at is not None and now >= self.case_retry_at:
+            self.case_retry_at = None
+            if self.case_address:
+                self.open_case(self.case_address)
+        if self.outbox and now >= self.next_send:
+            role, data = self.outbox.popleft()
+            self.next_send = now + 0.15
+            if role == "case":
+                self.case_wait_until = now + REPLY_TIMEOUT
+            if role == "buds" and data == MODE_GET:
+                self.reply_deadline = now + REPLY_TIMEOUT
+                if self.pending is not None:
+                    self.pending_read_sent = True
+            try:
+                self.send(role, data)
+            except (OSError, RuntimeError):
+                self.disconnected(role)
+        return self.exit_code is None
+
+
+class BlueZ:
+    """Async BlueZ GATT transport, with bounded discovery of the reported case."""
+    def __init__(self, address, name, output=emit, wire=lambda *args: None):
+        import dbus
+        import dbus.mainloop.glib
+        from gi.repository import GLib
+        self.dbus, self.glib = dbus, GLib
+        dbus.mainloop.glib.DBusGMainLoop(set_as_default=True)
+        self.bus = dbus.SystemBus()
+        self.manager = dbus.Interface(self.bus.get_object("org.bluez", "/"),
+                                      "org.freedesktop.DBus.ObjectManager")
+        self.loop = GLib.MainLoop()
+        self.wire = wire
+        self.core = Bridge(address, name, self.send, output, open_case=self.open_case,
+                           drop_case=lambda: self.release("case"))
+        self.links = {}
+        self.scanning = None
+        self.stdin_buffer = b""
+        self.closed = False
+        self.signal_match = self.bus.add_signal_receiver(
+            self.changed, signal_name="PropertiesChanged",
+            dbus_interface="org.freedesktop.DBus.Properties", path_keyword="path")
+        self.disconnect_match = self.bus.add_signal_receiver(
+            self.bearer_lost, signal_name="Disconnected",
+            dbus_interface="org.bluez.Bearer.LE1", path_keyword="path")
+        self.address = address
+
+    def objects(self):
+        return self.manager.GetManagedObjects(timeout=2)
+
+    def interface(self, path, interface):
+        return self.dbus.Interface(self.bus.get_object("org.bluez", path), interface)
+
+    def open_case(self, address):
+        self.open("case", address)
+
+    def open(self, role, address):
+        if self.closed or self.core.exit_code is not None:
+            return
+        if role in self.links and self.links[role].get("ready"):
+            return
+        link = {"address": address, "deadline": time.monotonic() + CONNECT_TIMEOUT,
+                "ready": False, "connecting": False, "subscribing": False,
+                "owned": False, "path": None, "early": []}
+        self.links[role] = link
+        self.advance(role, self.objects())
+
+    def advance(self, role, objects):
+        if self.closed or self.core.exit_code is not None:
+            return
+        link = self.links[role]
+        path = next((str(p) for p, v in objects.items()
+                     if str(v.get("org.bluez.Device1", {}).get("Address", "")).upper()
+                     == link["address"]), None)
+        if path is None:
+            if role == "buds":
+                self.core.finish(1, "TOZO device is unavailable in BlueZ")
+            elif self.scanning is None:
+                buds = self.links["buds"].get("path")
+                if buds:
+                    adapter = buds.rsplit("/", 1)[0]
+                    self.scanning = adapter
+                    try:
+                        self.interface(adapter, "org.bluez.Adapter1").StartDiscovery(timeout=3)
+                    except self.dbus.DBusException as error:
+                        self.scan_failed(error)
+                    if self.core.exit_code is not None:
+                        self.stop_scan()
+            return
+        link["path"] = path
+        if role == "case":
+            self.stop_scan()
+        expected_service = CASE_SERVICE if role == "case" else SERVICE
+        services = {str(p) for p, v in objects.items()
+                    if str(p).startswith(path + "/")
+                    and str(v.get("org.bluez.GattService1", {}).get("UUID", "")) == expected_service}
+        chars = {str(v["org.bluez.GattCharacteristic1"]["UUID"]): str(p)
+                 for p, v in objects.items() if "org.bluez.GattCharacteristic1" in v
+                 and str(v["org.bluez.GattCharacteristic1"].get("Service", "")) in services}
+        if NOTIFY in chars and WRITE in chars and objects[path]["org.bluez.Device1"].get("Connected"):
+            if not link["subscribing"]:
+                link.update(notify=chars[NOTIFY], write=chars[WRITE], subscribing=True)
+                self.interface(link["notify"], "org.bluez.GattCharacteristic1").StartNotify(
+                    reply_handler=lambda: self.subscribed(role, link),
+                    error_handler=lambda error: self.failed(role, link, error), timeout=5)
+        elif not link["connecting"]:
+            link["connecting"] = True
+            link["owned"] = role == "case" and not objects[path]["org.bluez.Device1"].get("Connected")
+            self.interface(path, "org.bluez.Device1").Connect(
+                reply_handler=lambda: None,
+                error_handler=lambda error: self.failed(role, link, error), timeout=15)
+
+    def scan_failed(self, error):
+        self.scanning = None
+        link = self.links.get("case")
+        if link:
+            self.failed("case", link, error)
+
+    def stop_scan(self):
+        adapter, self.scanning = self.scanning, None
+        if adapter:
+            try:
+                self.interface(adapter, "org.bluez.Adapter1").StopDiscovery(timeout=2)
+            except self.dbus.DBusException:
+                pass
+
+    def subscribed(self, role, link):
+        if self.closed or self.core.exit_code is not None or self.links.get(role) is not link:
+            try:
+                self.interface(link["notify"], "org.bluez.GattCharacteristic1").StopNotify(timeout=1)
+            except self.dbus.DBusException:
+                pass
+            return
+        link["ready"] = True
+        self.core.connected(role)
+        for data in link.pop("early", []):
+            self.core.receive(role, data)
+
+    def failed(self, role, link, error):
+        if self.closed or self.links.get(role) is not link:
+            return
+        self.release(role)
+        self.core.disconnected(role)
+
+    def send(self, role, data):
+        if self.closed or self.core.exit_code is not None:
+            return
+        link = self.links.get(role)
+        if not link or not link["ready"]:
+            raise RuntimeError("GATT link not ready")
+        self.wire("TX", role, data)
+        self.interface(link["write"], "org.bluez.GattCharacteristic1").WriteValue(
+            self.dbus.Array(data, signature="y"),
+            self.dbus.Dictionary({"type": "command"}, signature="sv"),
+            reply_handler=lambda: None,
+            error_handler=lambda error: self.failed(role, link, error), timeout=3)
+
+    def changed(self, interface, values, invalidated, path=None):
+        if self.closed:
+            return
+        for role, link in list(self.links.items()):
+            if path == link.get("notify") and interface == "org.bluez.GattCharacteristic1" and "Value" in values:
+                data = bytes(values["Value"])
+                self.wire("RX", role, data)
+                if link["ready"]:
+                    self.core.receive(role, data)
+                elif len(link.setdefault("early", [])) < 16:
+                    link["early"].append(data)
+            elif path == link.get("path") and interface == "org.bluez.Device1" and "Connected" in values and not bool(values["Connected"]):
+                self.failed(role, link, None)
+
+    def bearer_lost(self, *args, path=None):
+        for role, link in list(self.links.items()):
+            if path == link.get("path"):
+                self.failed(role, link, None)
+
+    def tick(self):
+        if self.core.exit_code is not None:
+            self.loop.quit()
+            return False
+        try:
+            unfinished = [r for r, v in self.links.items() if not v["ready"]]
+            if unfinished:
+                objects = self.objects()
+                for role in unfinished:
+                    link = self.links.get(role)
+                    if not link:
+                        continue
+                    if time.monotonic() >= link["deadline"]:
+                        self.failed(role, link, None)
+                    else:
+                        self.advance(role, objects)
+            self.core.tick()
+        except self.dbus.DBusException:
+            self.core.finish(1, "TOZO Bluetooth service is unavailable")
+        return True
+
+    def stdin(self, fd, condition):
+        try:
+            data = os.read(fd, 4096)
+        except BlockingIOError:
+            return True
+        except OSError:
+            data = b""
+        if not data:
+            self.core.finish(0)
+            return False
+        self.stdin_buffer += data
+        if len(self.stdin_buffer) > 8192:
+            self.stdin_buffer = b""
+        while b"\n" in self.stdin_buffer:
+            line, self.stdin_buffer = self.stdin_buffer.split(b"\n", 1)
+            self.core.command(line.decode(errors="replace"))
+        return True
+
+    def release(self, role):
+        link = self.links.pop(role, None)
+        if not link:
+            return
+        if link.get("ready"):
+            try:
+                self.interface(link["notify"], "org.bluez.GattCharacteristic1").StopNotify(timeout=1)
+            except self.dbus.DBusException:
+                pass
+        if link["owned"] and link["path"]:
+            try:
+                self.interface(link["path"], "org.bluez.Device1").Disconnect(timeout=2)
+            except self.dbus.DBusException:
+                pass
+
+    def close(self):
+        if self.closed:
+            return
+        self.closed = True
+        self.stop_scan()
+        self.signal_match.remove()
+        self.disconnect_match.remove()
+        for role in list(self.links):
+            self.release(role)
+
+    def run(self):
+        if self.core.exit_code is None:
+            self.open("buds", self.address)
+        self.glib.timeout_add(100, self.tick)
+        os.set_blocking(sys.stdin.fileno(), False)
+        self.glib.io_add_watch(sys.stdin.fileno(), self.glib.IO_IN | self.glib.IO_HUP | self.glib.IO_ERR, self.stdin)
+        try:
+            self.loop.run()
+        finally:
+            self.close()
+        return self.core.exit_code or 0
+
+
+def main(argv=None):
+    argv = sys.argv[1:] if argv is None else argv
+    usage = "usage: tozo-bridge <classic-address> <reported-name>"
+    if argv in (["-h"], ["--help"]):
+        print(usage)
+        return 0
+    if len(argv) != 2 or not ADDRESS.fullmatch(argv[0]) or argv[1] not in MODELS:
+        emit({"modes": False, "error": usage})
+        return 4
+    arm_parent_death()
+    transport = None
+    stopping = False
+    def stop(*args):
+        nonlocal stopping
+        stopping = True
+        if transport:
+            transport.core.finish(0)
+    signal.signal(signal.SIGTERM, stop)
+    signal.signal(signal.SIGINT, stop)
+    try:
+        transport = BlueZ(argv[0], argv[1])
+        if stopping:
+            transport.core.finish(0)
+        return transport.run()
+    except ImportError as error:
+        emit({"modes": False, "error": "missing Python module: " + str(error.name)})
+        return 4
+    except BrokenPipeError:
+        return 0
+    except Exception as error:
+        emit({"modes": False, "error": "TOZO connection failed: " + str(error)})
+        return 1
+    finally:
+        if transport:
+            transport.close()
+
+
+if __name__ == "__main__":
+    sys.exit(main())

@@ -1,0 +1,312 @@
+{
+  "model": "TOZO NC9 Pro",
+  "owner": "seth-reee",
+  "bridge": "tozo-bridge",
+  "capture": "docs/captures/tozo-nc9-pro-live.txt",
+  "notes": "Complete observed GATT values from owner phone and live capture. Case association authenticated in both directions. Delayed readback values establish all six modes. Phone event from tozo-nc9-pro-phone.txt triggers authoritative query; no guessed event enum. Replay order, not capture timing.",
+  "steps": [
+    {
+      "call": [
+        "connected",
+        "buds"
+      ]
+    },
+    {
+      "call": [
+        "advance",
+        0.5
+      ]
+    },
+    {
+      "sent": [
+        "buds 00 30 00 00",
+        "buds 00 02 00 00",
+        "buds 00 20 00 00"
+      ]
+    },
+    {
+      "device": "00 30 01 01 01"
+    },
+    {
+      "line": {
+        "modes": true,
+        "mode": "anc",
+        "available": [
+          "off",
+          "anc",
+          "ambient",
+          "wind",
+          "leisure",
+          "adaptive"
+        ]
+      }
+    },
+    {
+      "device": "00 02 02 64 64 c8"
+    },
+    {
+      "device": "00 20 06 41 42 b1 f6 f8 4f 71"
+    },
+    {
+      "call": [
+        "connected",
+        "case"
+      ]
+    },
+    {
+      "call": [
+        "advance",
+        0.2
+      ]
+    },
+    {
+      "sent_last": "case 01 09 00 00"
+    },
+    {
+      "device": {
+        "role": "case",
+        "wire": "01 09 06 94 4b f8 c1 5f 98 8f"
+      }
+    },
+    {
+      "call": [
+        "advance",
+        0.2
+      ]
+    },
+    {
+      "sent_last": "case 01 02 00 00"
+    },
+    {
+      "device": {
+        "role": "case",
+        "wire": "01 02 01 64 64"
+      }
+    },
+    {
+      "line_has": {
+        "battery": {
+          "left": 100,
+          "right": 100,
+          "case": 100,
+          "caseStale": false
+        }
+      }
+    },
+    {
+      "command": "set off"
+    },
+    {
+      "call": [
+        "advance",
+        0.2
+      ]
+    },
+    {
+      "sent_last": "buds 10 04 01 00 00"
+    },
+    {
+      "device": "10 04 01 00 00"
+    },
+    {
+      "call": [
+        "advance",
+        1.6
+      ]
+    },
+    {
+      "sent_last": "buds 00 30 00 00"
+    },
+    {
+      "device": "00 30 01 00 00"
+    },
+    {
+      "line_has": {
+        "mode": "off"
+      }
+    },
+    {
+      "command": "set anc"
+    },
+    {
+      "call": [
+        "advance",
+        0.2
+      ]
+    },
+    {
+      "sent_last": "buds 10 04 01 01 01"
+    },
+    {
+      "device": "10 04 01 00 00"
+    },
+    {
+      "call": [
+        "advance",
+        1.6
+      ]
+    },
+    {
+      "sent_last": "buds 00 30 00 00"
+    },
+    {
+      "device": "00 30 01 01 01"
+    },
+    {
+      "line_has": {
+        "mode": "anc"
+      }
+    },
+    {
+      "command": "set ambient"
+    },
+    {
+      "call": [
+        "advance",
+        0.2
+      ]
+    },
+    {
+      "sent_last": "buds 10 05 01 01 01"
+    },
+    {
+      "device": "10 05 01 00 00"
+    },
+    {
+      "call": [
+        "advance",
+        1.6
+      ]
+    },
+    {
+      "sent_last": "buds 00 30 00 00"
+    },
+    {
+      "device": "00 30 01 02 02"
+    },
+    {
+      "line_has": {
+        "mode": "ambient"
+      }
+    },
+    {
+      "command": "set wind"
+    },
+    {
+      "call": [
+        "advance",
+        0.2
+      ]
+    },
+    {
+      "sent_last": "buds 10 07 01 01 01"
+    },
+    {
+      "device": "10 07 01 00 00"
+    },
+    {
+      "call": [
+        "advance",
+        1.6
+      ]
+    },
+    {
+      "sent_last": "buds 00 30 00 00"
+    },
+    {
+      "device": "00 30 01 03 03"
+    },
+    {
+      "line_has": {
+        "mode": "wind"
+      }
+    },
+    {
+      "command": "set leisure"
+    },
+    {
+      "call": [
+        "advance",
+        0.2
+      ]
+    },
+    {
+      "sent_last": "buds 10 08 01 01 01"
+    },
+    {
+      "device": "10 08 01 00 00"
+    },
+    {
+      "call": [
+        "advance",
+        1.6
+      ]
+    },
+    {
+      "sent_last": "buds 00 30 00 00"
+    },
+    {
+      "device": "00 30 01 04 04"
+    },
+    {
+      "line_has": {
+        "mode": "leisure"
+      }
+    },
+    {
+      "command": "set adaptive"
+    },
+    {
+      "call": [
+        "advance",
+        0.2
+      ]
+    },
+    {
+      "sent_last": "buds 10 11 01 01 01"
+    },
+    {
+      "device": "10 11 01 00 00"
+    },
+    {
+      "call": [
+        "advance",
+        1.6
+      ]
+    },
+    {
+      "sent_last": "buds 00 30 00 00"
+    },
+    {
+      "device": "00 30 01 06 06"
+    },
+    {
+      "line_has": {
+        "mode": "adaptive"
+      }
+    },
+    {
+      "device": "20 0d 02 01 03 04"
+    },
+    {
+      "call": [
+        "advance",
+        1.6
+      ]
+    },
+    {
+      "sent_last": "buds 00 30 00 00"
+    },
+    {
+      "device": "00 30 01 03 03"
+    },
+    {
+      "line_has": {
+        "mode": "wind"
+      }
+    },
+    {
+      "exit": null
+    }
+  ]
+}

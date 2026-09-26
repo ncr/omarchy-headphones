@@ -1,8 +1,8 @@
 # The bridge contract
 
 A bridge is one process that holds one link to one device and mirrors its
-listening mode. Eight exist — `jbl-bridge`, `sony-bridge`, `samsung-bridge`,
-`nothing-bridge`, `xiaomi-bridge`, `soundcore-bridge`, `oppo-bridge`, `bose-bridge` — and the shell does not
+listening mode. Nine exist — `jbl-bridge`, `sony-bridge`, `samsung-bridge`,
+`nothing-bridge`, `xiaomi-bridge`, `soundcore-bridge`, `oppo-bridge`, `bose-bridge`, `tozo-bridge` — and the shell does not
 care which is running: they all print the same lines, read the same commands
 and end the same four ways. This file is that contract, written once. A
 bridge's docstring says what is particular to its protocol and points here
@@ -38,7 +38,7 @@ device changed on its own. Flush after every line. Keys:
 |:--|:--|:--|
 | `modes` | bool | required. `true`: the device answered and the row is live. `false`: something is wrong, and `error` says what |
 | `error` | string | with `modes: false` — the one sentence the panel shows |
-| `mode` | string | `off` · `anc` · `ambient` · `talkthru` — `MODE_ORDER` in `Model.js`, the only names there are |
+| `mode` | string | `off` · `anc` · `ambient` · `talkthru` — `MODE_ORDER` in `Model.js`, the legacy default names. TOZO explicitly adds `wind`, `leisure`, `adaptive` |
 | `available` | list | the modes this device has, from the list above. Absent means all four (the JBL protocol has fixed slots); otherwise list exactly what the device offers |
 | `level` | int | the Ambient dial — Sony 0-20, Soundcore 1-5; the range is the row's `ambient` in `BACKENDS`. Only on a device that has one |
 | `voice` | bool | the switch beside the dial — Focus on voice (Sony), wind noise reduction (Soundcore). Only with `level` |
@@ -124,3 +124,17 @@ The canonical owner examples are JBL TUNE230NC TWS and Sony WH-CH720N,
 prepared by @ncr. `docs/CANONICAL-TESTS.md` maps their captures, pins, fault
 cases, shared battery tests and live integration check. Use that coverage
 as the reference for new support, with the new device's own observed frames.
+
+
+### TOZO NC9 Pro extension
+
+`tozo-bridge <classic-address> <reported-name>` uses BlueZ GATT on the earbuds'
+public address. It accepts only its owner's model row. Its optional case link
+uses the address reported by the earbuds and validates the reverse association.
+Case failure preserves modes and earbud battery; a retained case reading has
+`caseStale: true`. Charging state is omitted because no encoding was observed.
+The six explicit `available` values are `off`, `anc`, `ambient`, `wind`,
+`leisure`, `adaptive`. The three additional names are accepted and displayed
+only by the TOZO backend; a missing `available` still means the original four.
+Their stdin commands are `set wind`, `set leisure`, `set adaptive`, following
+the same device-reported-state rule as the existing commands.
