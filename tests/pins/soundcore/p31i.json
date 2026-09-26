@@ -1,0 +1,179 @@
+{
+  "model": "soundcore P31i",
+  "owner": "mikesmenzvdsa",
+  "bridge": "soundcore-bridge",
+  "notes": "Vendor UUID suffix d1202. Captured on hardware 2026-09-26 at 34:09:C9:A4:68:10. Fast Pair reported left 100%, right 100%, case 20%. The 06 01 reply was eight bytes; the existing six-byte Soundcore bridge path reported Off / ANC / Ambient and restored Off after the live set sequence.",
+  "session": {
+    "uuid": "0cf12d31-fac3-4553-bd80-d6832e7d1202"
+  },
+  "steps": [
+    {
+      "device": {
+        "cmd": "01 01",
+        "body": "01 01 09 09 00 00 30 32 2e 38 39 30 32 2e 38 39 31 32 30 32 33 34 30 39 43 39 41 34 36 38 31 30 30 32 2e 38 39 01 00 00 78 78 78 78 78 78 78 78 78 78 ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff 00 00 00 ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff 00 00 0a ff ff 63 66 ff ff 44 44 33 02 51 00 00 00 00 00 00 31 01 01 00 01 01 02 00 5a 00 00 00 00 00 01 00 00 00 00 00 ff ff ff ff ff"
+      }
+    },
+    {
+      "sent": [
+        "08 ee 00 00 00 06 01 0a 00 07"
+      ]
+    },
+    {
+      "lines": [
+        {
+          "modes": true,
+          "mode": "",
+          "available": [
+            "off",
+            "anc",
+            "ambient"
+          ],
+          "level": 255,
+          "voice": true
+        }
+      ]
+    },
+    {
+      "device": {
+        "cmd": "06 01",
+        "body": "02 51 00 00 00 00 00 00"
+      }
+    },
+    {
+      "command": "set anc"
+    },
+    {
+      "device": {
+        "cmd": "06 81"
+      }
+    },
+    {
+      "timers": [
+        400
+      ]
+    },
+    {
+      "fire": true
+    },
+    {
+      "sent": [
+        "08 ee 00 00 00 06 01 0a 00 07",
+        "08 ee 00 00 00 06 81 10 00 00 51 00 00 00 00 de",
+        "08 ee 00 00 00 06 01 0a 00 07"
+      ]
+    },
+    {
+      "device": {
+        "cmd": "06 01",
+        "body": "00 51 00 00 00 00 00 00"
+      }
+    },
+    {
+      "command": "set ambient"
+    },
+    {
+      "device": {
+        "cmd": "06 81"
+      }
+    },
+    {
+      "timers": [
+        400
+      ]
+    },
+    {
+      "fire": true
+    },
+    {
+      "device": {
+        "cmd": "06 01",
+        "body": "01 51 00 00 00 00 00 00"
+      }
+    },
+    {
+      "command": "set off"
+    },
+    {
+      "device": {
+        "cmd": "06 81"
+      }
+    },
+    {
+      "timers": [
+        400
+      ]
+    },
+    {
+      "fire": true
+    },
+    {
+      "device": {
+        "cmd": "06 01",
+        "body": "02 51 00 00 00 00 00 00"
+      }
+    },
+    {
+      "lines": [
+        {
+          "modes": true,
+          "mode": "",
+          "available": [
+            "off",
+            "anc",
+            "ambient"
+          ],
+          "level": 255,
+          "voice": true
+        },
+        {
+          "modes": true,
+          "mode": "off",
+          "available": [
+            "off",
+            "anc",
+            "ambient"
+          ],
+          "level": 0,
+          "voice": false
+        },
+        {
+          "modes": true,
+          "mode": "anc",
+          "available": [
+            "off",
+            "anc",
+            "ambient"
+          ],
+          "level": 0,
+          "voice": false
+        },
+        {
+          "modes": true,
+          "mode": "ambient",
+          "available": [
+            "off",
+            "anc",
+            "ambient"
+          ],
+          "level": 0,
+          "voice": false
+        },
+        {
+          "modes": true,
+          "mode": "off",
+          "available": [
+            "off",
+            "anc",
+            "ambient"
+          ],
+          "level": 0,
+          "voice": false
+        }
+      ]
+    },
+    {
+      "exit": null
+    }
+  ],
+  "capture": "docs/captures/soundcore-p31i.txt"
+}

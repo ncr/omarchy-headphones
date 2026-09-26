@@ -89,6 +89,11 @@ MODELS = {
     # ambient level and no wind-noise switch, so the row reports neither and
     # the panel draws no dial.
     "b302a": {"name": "Life Q30", "offset": 35, "width": 4, "query": True},
+    # P31i — mikesmenzvdsa, captured on hardware 2026-09-26. Its state
+    # packet does not expose the mode block at the generic offset; 06 01
+    # answered with the device's own mode bytes, so keep the existing
+    # six-byte Soundcore interpretation without changing another model.
+    "d1202": {"name": "P31i", "offset": 71, "query": True},
 }
 # A model nobody has held is read at the Space 2's offset and then asked, so
 # a block that sits elsewhere is corrected by the reply before anyone clicks.
