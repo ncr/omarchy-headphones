@@ -57,5 +57,5 @@ B610 but did not answer queries, and the bridge did not substitute it.
 This is an observed reconnection limit, not evidence of another mode or
 battery format.
 
-`CHECK_BASE=upstream/main tools/check` passed with 215 Python tests and the
+`CHECK_BASE=upstream/main tools/check` passed with 261 Python tests and the
 Model.js tests. `qmllint` is unavailable; the script reports that check skipped.
