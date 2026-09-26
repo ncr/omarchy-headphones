@@ -123,6 +123,17 @@ Headphones not on the list? [Add yours](#add-your-own-headphones).
 </tr>
 </table>
 
+<table>
+<tr>
+<td width="50%"><img src="docs/gallery/soundcore-p31i.png" alt="soundcore P31i: left, right and case, Off / ANC / Ambient" width="100%"></td>
+<td width="50%"></td>
+</tr>
+<tr>
+<td align="center">soundcore P31i — <a href="https://github.com/mikesmenzvdsa">@mikesmenzvdsa</a></td>
+<td align="center"></td>
+</tr>
+</table>
+
 ## What it does
 
 - **Battery level** — per earbud and the case, or the single battery of
@@ -176,6 +187,7 @@ same idea, built for Apple's own protocol, and the plugin this one is modelled o
 | Nothing Ear · Headphone (1) | <img src="docs/icons/yes.svg" width="14" alt="yes"> expected (one figure on Headphone (1)) | <img src="docs/icons/yes.svg" width="14" alt="yes"> expected — same protocol, per [omarchy-nothing-ear](https://github.com/r-witz/omarchy-nothing-ear) | — |
 | soundcore Space One Pro (A3062, over-ear) | <img src="docs/icons/yes.svg" width="14" alt="yes"> one figure | <img src="docs/icons/yes.svg" width="14" alt="yes"> Off · ANC · Ambient (level, wind noise reduction) | [@sasiruLK](https://github.com/sasiruLK) |
 | soundcore Life Q30 (A3028, over-ear) | <img src="docs/icons/yes.svg" width="14" alt="yes"> one figure (Fast Pair) | <img src="docs/icons/yes.svg" width="14" alt="yes"> Off · ANC · Ambient | [@kevinbsr](https://github.com/kevinbsr) |
+| soundcore P31i (earbuds) | <img src="docs/icons/yes.svg" width="14" alt="yes"> left, right, case (Fast Pair) | <img src="docs/icons/yes.svg" width="14" alt="yes"> Off · ANC · Ambient | [@mikesmenzvdsa](https://github.com/mikesmenzvdsa) |
 | Sony WH-CH520             | <img src="docs/icons/yes.svg" width="14" alt="yes"> one figure (BlueZ) | <img src="docs/icons/no.svg" width="14" alt="no"> none — Sony lists no ANC/Ambient on this model, confirmed on hardware | [@enobale](https://github.com/enobale) |
 | other Fast Pair headphones  | <img src="docs/icons/yes.svg" width="14" alt="yes"> expected          | <img src="docs/icons/unknown.svg" width="14" alt="untested">                                    | —                              |
 

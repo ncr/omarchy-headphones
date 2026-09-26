@@ -1531,6 +1531,46 @@ sub-mode at byte 36 (transport / outdoor / indoor / custom in OpenSCQ30's A3028
 parser, and writable — that is how `1f` landed there), and the equalizer, which
 lives on a command this bridge does not send.
 
+## Soundcore P31i — vendor RFCOMM
+
+Notes from a **soundcore P31i** (`34:09:C9:A4:68:10`), captured on
+2026-09-26. Its complete Bluetooth record is in
+[`docs/captures/soundcore-p31i-bluetoothctl.txt`](docs/captures/soundcore-p31i-bluetoothctl.txt);
+the raw probe session is in
+[`docs/captures/soundcore-p31i.txt`](docs/captures/soundcore-p31i.txt).
+The vendor UUID is `0cf12d31-fac3-4553-bd80-d6832e7d1202`, model suffix
+`d1202`, and the Fast Pair Message Stream UUID is also present.
+
+The P31i uses the existing Soundcore RFCOMM framing and commands. Its `01 01`
+state response is a complete 152-byte payload, but the generic offset contains
+`ff` bytes rather than a mode. A `06 01` query answers with the device's own
+eight-byte mode body:
+
+```
+02 51 00 00 00 00 00 00   Off
+00 51 00 00 00 00 00 00   ANC
+01 51 00 00 00 00 00 00   Ambient
+```
+
+The existing six-byte Soundcore bridge path asks `06 01`, then writes the
+observed mode block with only byte 0 changed. The three owner captures sent
+these device-specific frames:
+
+```
+08 ee 00 00 00 06 81 10 00 00 51 00 00 00 00 de   ANC
+08 ee 00 00 00 06 81 10 00 01 51 00 00 00 00 df   Ambient
+08 ee 00 00 00 06 81 10 00 02 51 00 00 00 00 e0   Off
+```
+
+Fast Pair reported left 100%, right 100% and case 20% during the live check.
+Off, ANC and Ambient were each set through the shell and read back from the
+headphones; Off was restored at the end. The mode row is confirmed. Ambient
+level and wind-noise reduction were not separately confirmed on this model;
+charging transitions, disconnect/reconnect recovery, peer isolation and
+acoustic effect are untested. The bridge's generic six-byte interpretation
+currently exposes the observed trailing fields as level `0` and voice
+`false`; no control was sent for either.
+
 ## Samsung Galaxy Buds2 — SPPNew
 
 Confirmed on **Samsung Galaxy Buds2** (`84:5F:04:B5:D6:74`, modalias
