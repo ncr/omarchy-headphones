@@ -1050,6 +1050,17 @@ Deno.test('captured Life Q30 record selects the soundcore bridge', async () => {
                ['88:0E:85:5F:64:B4']);
 });
 
+Deno.test('captured soundcore P31i record selects the soundcore bridge', async () => {
+  const record = await Deno.readTextFile(
+    new URL('../docs/captures/soundcore-p31i-bluetoothctl.txt', import.meta.url));
+  const ids = Model.uuidsFromBluetoothctl(record);
+  assertEquals(Model.controlBackend(ids, ''), 'soundcore');
+  assertEquals(Model.controlBackend([...ids].reverse(), ''), 'soundcore');
+  assertEquals(Model.controlBackend(ids.map(id => id.toUpperCase()), ''), 'soundcore');
+  assertEquals(Model.bridgeArgs('soundcore', { address: '34:09:C9:A4:68:10' }),
+               ['34:09:C9:A4:68:10']);
+});
+
 Deno.test('canonical Sony and JBL SDP records select their own bridge', async () => {
   for (const [brand, fixture] of Object.entries(canonical)) {
     const record = await Deno.readTextFile(new URL('../' + fixture.uuid_capture, import.meta.url));

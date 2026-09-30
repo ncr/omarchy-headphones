@@ -9,7 +9,9 @@ the behaviour of UNKNOWN, the one row that may change.
 No hardware and no D-Bus: the bridge's only two effects on the world are
 `write()` and `emit()`, and both are captured.
 """
+import re
 import unittest
+from pathlib import Path
 
 from tests import harness
 
@@ -64,6 +66,10 @@ class ModelLookup(unittest.TestCase):
         row = bridge_module.model_for("0cf12d31-fac3-4553-bd80-d6832e7d1402")
         self.assertEqual(row["name"], "Space 2")
 
+    def test_p31i_by_uuid_suffix(self):
+        row = bridge_module.model_for("0cf12d31-fac3-4553-bd80-d6832e7d1202")
+        self.assertEqual(row["name"], "P31i")
+
     def test_case_insensitive(self):
         row = bridge_module.model_for("0CF12D31-FAC3-4553-BD80-D6832E7D1402")
         self.assertEqual(row["name"], "Space 2")
@@ -88,6 +94,29 @@ class ShortState(unittest.TestCase):
         s.receive(inbound((0x01, 0x01), bytes(40)))
         self.assertEqual(s.sent, [])
         self.assertEqual(s.bridge.exit_code, bridge_module.EXIT_UNSUPPORTED)
+
+
+class P31iState(unittest.TestCase):
+    """Replay complete observed frames, including their original checksums."""
+
+    def test_captured_states_report_mode_before_query_reply(self):
+        capture = (Path(harness.ROOT) / "docs/captures/soundcore-p31i.txt").read_text()
+        observed = set()
+        for raw in re.findall(r"<<< RAW ([0-9a-f]+)", capture):
+            frame = bytes.fromhex(raw)
+            if frame[5:7] != b"\x01\x01":
+                continue
+            body = frame[9:-1]
+            mode = {0x02: "off", 0x00: "anc", 0x01: "ambient"}[body[119]]
+            with self.subTest(mode=mode, raw=raw):
+                s = Session("0cf12d31-fac3-4553-bd80-d6832e7d1202")
+                s.receive(frame)
+                self.assertEqual(s.lines, [{"modes": True, "mode": mode,
+                                          "available": ["off", "anc", "ambient"],
+                                          "level": 0, "voice": False}])
+                self.assertEqual(s.sent, ["08 ee 00 00 00 06 01 0a 00 07"])
+            observed.add(mode)
+        self.assertEqual(observed, {"off", "anc", "ambient"})
 
 
 class Unknown(unittest.TestCase):
