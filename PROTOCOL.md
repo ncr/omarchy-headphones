@@ -2046,3 +2046,49 @@ checkout after releasing the widget's mode bridge. It reads the initial mode,
 cycles the six known modes, verifies each query reply and restores the
 observed initial mode in a `finally` block. A failed restoration is a failure,
 not a successful test. See `docs/TOZO-NC9-PRO-TESTS.md` for the final live report.
+
+## QCY H3: battery only, no reachable control channel
+
+Owner: [@carraly](https://github.com/carraly). The evidence is in
+[`docs/captures/qcy-h3-bluetoothctl.txt`](docs/captures/qcy-h3-bluetoothctl.txt)
+(the BlueZ device view) and
+[`docs/captures/qcy-h3-live.txt`](docs/captures/qcy-h3-live.txt) (the live
+probe). This model is documented as a battery-only finding because that is
+the whole of what the headset answered on this host: the battery figure via
+BlueZ's native battery service, and nothing on any control channel.
+
+A **QCY H3** (`84:AC:60:4A:43:F0`, public). Its Classic SDP lists only the
+standard set — Serial Port `00001101`, Audio Sink `0000110b`,
+A/V Remote Control Target `0000110c`, A2DP `0000110d`, AVRCP `0000110e`,
+Handsfree `0000111e`, PnP `00001200` — and no GATT UUID. The hardware is a
+Jieli JL7018F6 (per teardown), which Quicky's protocol-variant table routes
+via its `JLDeviceImpl` Jieli BLE command set rather than the pure QCY
+Standard `0000a001`/`00001001` channel.
+
+What the probe tried and what the device did:
+
+- **LE advertisement: never seen.** `StartDiscovery` (with
+  `DuplicateData=true` and no filter, and during a page-then-scan window)
+  returns only RSSI ticks — Classic inquiry replies — for the known device,
+  with no `AdvertisingData`, `ManufacturerData`, `ServiceData` at any point.
+  The QCY discovery CompanyID `0x521c` and a control MAC are absent: the H3
+  appears to have no separate control address, and it does not advertise its
+  `a001` service to this BlueZ. (`hcitool lescan` needs root, which the
+  probe machine does not grant.)
+- **GATT: no service ever appears.** The managed-objects tree under the
+  device path holds only the BR/EDR media endpoints (`sep1`…`sep5`, `fd0`);
+  no `GattService1`/`GattCharacteristic1` object appears at any point of a
+  45-second probe.
+- **`ConnectProfile` on the QCY channel: refused.**
+  `00001800` (GAP), `0000a001` (QCY service) and `00001001` (QCY write) all
+  answer `org.bluez.Error.BREDR.ProfileUnavailable: No more profiles to
+  connect to`.
+- **Serial Port (00001101) test.** The exact request frames sent in the SPP test appear in the live capture:
+  `fe 01 02`, `fe 01 0c 01 00`, `fe 01 17 01 00`, `fe 01 30`. No replies were observed over the open channel.
+
+So the mode row is correct as `unsupported`: there is a battery (one figure
+via BlueZ, 70 % in these captures) and no control channel the plugin could
+hold. No `qcy-bridge` exists or is intended from this finding; the QCY
+Standard BLE channel and the Jieli variant both stay unreachable without a
+new capture from a channel that opens, and the plugin does not invent bytes
+for a headset that answered none.
