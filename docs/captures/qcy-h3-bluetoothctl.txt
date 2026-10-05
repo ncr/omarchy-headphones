@@ -1,0 +1,34 @@
+# QCY H3 - bluetoothctl view (Classic only; no LE advertisement, no GATT)
+
+Captured: 2026-09-28T13:00:28-03:00
+
+```
+Attempting to connect to 84:AC:60:4A:43:F0
+Connection successful
+Device 84:AC:60:4A:43:F0 (public)
+	Name: QCY H3
+	Alias: QCY H3
+	Class: 0x00240404 (2360324)
+	Icon: audio-headset
+	Paired: yes
+	Bonded: yes
+	Trusted: yes
+	Blocked: no
+	Connected: yes
+	LegacyPairing: no
+	CablePairing: no
+	UUID: Serial Port               (00001101-0000-1000-8000-00805f9b34fb)
+	UUID: Audio Sink                (0000110b-0000-1000-8000-00805f9b34fb)
+	UUID: A/V Remote Control Target (0000110c-0000-1000-8000-00805f9b34fb)
+	UUID: Advanced Audio Distribu.. (0000110d-0000-1000-8000-00805f9b34fb)
+	UUID: A/V Remote Control        (0000110e-0000-1000-8000-00805f9b34fb)
+	UUID: Handsfree                 (0000111e-0000-1000-8000-00805f9b34fb)
+	UUID: PnP Information           (00001200-0000-1000-8000-00805f9b34fb)
+	Modalias: bluetooth:v05D6p000Ad0240
+	Battery Percentage: 0x46 (70)
+
+## No LE advertisement/control MAC: RSSI updates during scan_on are Classic inquiry replies.
+## GATT service ObjectManager tree for the device: (empty - running probe shows only sep1..sep5 BR/EDR endpoints)
+## ConnectProfile a001/GATT/1800 => org.bluez.Error.BREDR.ProfileUnavailable
+## SPP (00001101) opens a channel; QCY standard frames get no reply (Jieli JL7018F6).
+```
