@@ -1,0 +1,425 @@
+#!/usr/bin/env python3
+"""Hold one RFCOMM link to Huawei FreeBuds and mirror their battery.
+
+    huawei-bridge <classic-address> <reported-name>
+
+Prints one JSON object per line, and reads one command per line:
+
+    stdout   {"modes": true, "available": [],
+              "battery": {"left": 95, "right": 96, "case": 64,
+                          "caseStale": false}}
+             {"modes": false, "error": "..."}
+    stdin    nothing it acts on: the FreeBuds SE 2 has no listening modes,
+             so every line is ignored, and EOF is a clean stop
+
+Exit codes are BRIDGE.md's: 0 clean stop, 1 transient (the channel never
+opened, or closed under us; also the channel refused — the earbuds serve it
+to one client, and a phone's AI Life app holding it is the case seen),
+3 linked but silent (the battery query went unanswered), 4 setup failure
+(bad arguments, a model this bridge has no row for, a Python without
+Bluetooth sockets).
+
+A battery-only bridge. The FreeBuds SE 2 has no noise control, so the line
+says `"available": []` — the panel draws no mode row — and carries the
+per-bud battery the Fast Pair stream would otherwise give: these earbuds have
+no Fast Pair stream, and BlueZ alone sees one figure for the pair.
+
+The socket is opened directly on the channel the model's row names, rather
+than through an org.bluez.Profile1. The reported name picks the row; the
+widget only starts this bridge for a name in `modelNames` of the `huawei` row
+in Model.js, and a name with no row here is exit 4.
+
+Protocol, as the FreeBuds SE 2 answered it (docs/captures/huawei-freebuds-se-2.txt,
+PROTOCOL.md):
+
+    frame    5A <len u16 BE> 00 <service> <command> <tlv...> <crc u16 BE>
+             len counts from the 00 to the last TLV byte; CRC-16/XMODEM
+             (init 0, poly 1021) over everything before it
+    tlv      <tag> <length> <value>
+    01 08    battery: asked with empty tags 1, 2 and 3; answered with
+             1 = the overall level, 2 = left, right, case, 3 = a charging
+             byte for each, not read: the case's goes stale with no bud
+             docked, and the buds' never changed
+    01 27    the same tags, sent by the earbuds on their own on a change
+    01 06    sent once, empty, when the channel opens; not a battery answer
+    2B 5F    sent as the lid closes on a bud (01) and opens again (00);
+             not read
+
+A bud in a closed case reads 0, and is left out of the line rather than
+drawn empty. Charging is never reported: the case's byte is relayed by a
+docked bud and goes stale without one, and the buds' bytes never changed.
+"""
+import ctypes
+import errno
+import json
+import os
+import re
+import select
+import signal
+import socket
+import sys
+import time
+
+USAGE = "usage: huawei-bridge <classic-address> <reported-name>"
+ADDRESS = re.compile(r"^([0-9A-Fa-f]{2}:){5}[0-9A-Fa-f]{2}$")
+
+# Keyed by the name the earbuds report, exactly as bluetoothctl prints it.
+MODELS = {
+    "HUAWEI FreeBuds SE 2": {"channel": 1},
+}
+
+SOF = 0x5A
+SERVICE = 0x01
+CMD_BATTERY = 0x08
+CMD_BATTERY_EVENT = 0x27
+PARTS = ("left", "right", "case")
+
+EXIT_TRANSIENT = 1
+EXIT_UNSUPPORTED = 3
+EXIT_SETUP = 4
+
+# The channel is not always ready the instant BlueZ reports the connection.
+CONNECT_TIMEOUT = 5.0
+CONNECT_ATTEMPTS = 6
+CONNECT_RETRY = 1.5
+# How long the battery query gets before the device is called silent.
+ANSWER_TIMEOUT = 5.0
+# The earbuds announce a change on their own; the poll is a backstop for an
+# announcement missed, not the main path.
+POLL_INTERVAL = 60.0
+
+
+class Stop(Exception):
+    """Raised into whatever the main thread is doing when asked to quit."""
+
+
+def emit(payload):
+    try:
+        sys.stdout.write(json.dumps(payload, separators=(",", ":")) + "\n")
+        sys.stdout.flush()
+    except (BrokenPipeError, ValueError):
+        os._exit(0)
+
+
+def arm_parent_death_signal():
+    """Die with the shell that started us, like the other bridges."""
+    try:
+        libc = ctypes.CDLL("libc.so.6", use_errno=True)
+        libc.prctl(1, signal.SIGTERM)
+    except Exception:
+        return
+    if os.getppid() == 1:
+        os._exit(0)
+
+
+# The clock and the wait, as names the tests can replace.
+def now():
+    return time.monotonic()
+
+
+def wait_ready(readers, timeout):
+    ready, _, _ = select.select(readers, [], [], timeout)
+    return ready
+
+
+def crc16(data):
+    crc = 0
+    for byte in data:
+        crc ^= byte << 8
+        for _ in range(8):
+            crc = ((crc << 1) ^ 0x1021) if crc & 0x8000 else crc << 1
+            crc &= 0xFFFF
+    return crc
+
+
+def frame(service, command, tags=()):
+    body = bytes([service, command])
+    for tag, value in tags:
+        body += bytes([tag, len(value)]) + bytes(value)
+    head = bytes([SOF]) + (len(body) + 1).to_bytes(2, "big") + b"\x00"
+    return head + body + crc16(head + body).to_bytes(2, "big")
+
+
+BATTERY_QUERY = frame(SERVICE, CMD_BATTERY, [(1, b""), (2, b""), (3, b"")])
+
+
+def take_frames(buffer):
+    """Whole frames from a byte buffer as (service, command, tlv-bytes).
+
+    A frame whose CRC does not match is dropped; so is one too short to carry
+    a service and a command.
+    """
+    frames = []
+    while True:
+        try:
+            start = buffer.index(SOF)
+        except ValueError:
+            buffer.clear()
+            break
+        if start:
+            del buffer[:start]
+        if len(buffer) < 3:
+            break
+        length = int.from_bytes(buffer[1:3], "big")
+        total = 3 + length + 2
+        if len(buffer) < total:
+            break
+        raw = bytes(buffer[:total])
+        del buffer[:total]
+        if length < 3 or raw[3] != 0x00:
+            continue
+        if int.from_bytes(raw[-2:], "big") != crc16(raw[:-2]):
+            continue
+        frames.append((raw[4], raw[5], raw[6:-2]))
+    return frames
+
+
+def parse_tlv(data):
+    """{tag: value} for each whole TLV; None when a length runs off the end."""
+    out = {}
+    index = 0
+    while index < len(data):
+        if index + 2 > len(data):
+            return None
+        tag, size = data[index], data[index + 1]
+        if index + 2 + size > len(data):
+            return None
+        out[tag] = bytes(data[index + 2:index + 2 + size])
+        index += 2 + size
+    return out
+
+
+def parse_battery(data):
+    """{"left": 95, "right": 96, "case": 64}, or None.
+
+    Tag 2 must be three levels, each 0-100. A 0 is a part that is not
+    reporting, not an empty one: a bud in the case reads 0 once the lid
+    closes, while the overall level (tag 1) stays put, and an empty bud would
+    be off. It is left out.
+
+    Tag 3 is not read. Its case byte is relayed through a bud and refreshed
+    only when one is docked: unplugged with no bud inside,
+    the case still read 01, and a bolt saying "charging" with the cable out
+    is the lie the panel's Case row refuses. The buds' bytes stayed 00
+    throughout, a bud charging in the case included.
+    """
+    tags = parse_tlv(data)
+    if tags is None:
+        return None
+    levels_raw = tags.get(2)
+    if levels_raw is None or len(levels_raw) != 3:
+        return None
+    if any(level > 100 for level in levels_raw):
+        return None
+    return {part: level for part, level in zip(PARTS, levels_raw) if level}
+
+
+class Bridge:
+    def __init__(self, address, name):
+        self.address = address
+        self.model = MODELS[name]
+        self.sock = None
+        self.buffer = bytearray()
+        self.pending_stdin = ""
+        self.exit_code = None
+        self.stopping = False
+
+        self.levels = None
+        self.last_line = None
+        self.next_poll = None
+
+    # ---- The link.
+
+    def connect(self):
+        last_error = None
+        for attempt in range(CONNECT_ATTEMPTS):
+            if attempt:
+                time.sleep(CONNECT_RETRY)
+            if self.stopping:
+                return False
+            sock = socket.socket(socket.AF_BLUETOOTH, socket.SOCK_STREAM,
+                                 socket.BTPROTO_RFCOMM)
+            sock.settimeout(CONNECT_TIMEOUT)
+            try:
+                sock.connect((self.address, self.model["channel"]))
+            except OSError as error:
+                sock.close()
+                last_error = error
+                continue
+            sock.setblocking(False)
+            self.sock = sock
+            return True
+        if getattr(last_error, "errno", None) == errno.ECONNREFUSED:
+            # The earbuds serve the channel to one client at a time; with a
+            # phone's AI Life app on it, they refuse everyone else. Retrying
+            # is right: it comes free when the phone lets go.
+            self.finish(EXIT_TRANSIENT, "the earbuds refused the battery channel"
+                        " — another device (Huawei AI Life) may hold it")
+            return False
+        reason = getattr(last_error, "strerror", None) or str(last_error)
+        self.finish(EXIT_TRANSIENT, "cannot open the Huawei channel: %s" % reason)
+        return False
+
+    def finish(self, code, message=None):
+        if self.exit_code is not None:
+            return
+        self.exit_code = code
+        if message:
+            emit({"modes": False, "error": message})
+
+    def ask_battery(self):
+        if self.sock is None:
+            return
+        try:
+            self.sock.sendall(BATTERY_QUERY)
+        except OSError as error:
+            self.finish(EXIT_TRANSIENT, "the Huawei channel closed: %s" % error)
+            return
+        self.next_poll = now() + POLL_INTERVAL
+
+    # ---- What the device said.
+
+    def on_frame(self, service, command, data):
+        if service != SERVICE or command not in (CMD_BATTERY, CMD_BATTERY_EVENT):
+            return
+        levels = parse_battery(data)
+        if levels is None:
+            return
+        self.levels = levels
+        self.report()
+
+    def report(self):
+        if self.levels is None:
+            return
+        battery = dict(self.levels)
+        battery["caseStale"] = False
+        line = {"modes": True, "available": [], "battery": battery}
+        if line != self.last_line:
+            self.last_line = line
+            emit(line)
+
+    # ---- What the widget asks: nothing this device can do.
+
+    def command(self, _line):
+        return
+
+    def on_stdin(self):
+        try:
+            chunk = os.read(0, 4096)
+        except OSError:
+            chunk = b""
+        if not chunk:
+            # The widget closed the pipe: a clean stop, not a failure.
+            self.finish(0)
+            return
+        self.pending_stdin += chunk.decode("utf-8", "replace")
+        while "\n" in self.pending_stdin:
+            line, self.pending_stdin = self.pending_stdin.split("\n", 1)
+            self.command(line)
+
+    def on_socket(self):
+        try:
+            data = self.sock.recv(4096)
+        except BlockingIOError:
+            return
+        except OSError as error:
+            self.finish(EXIT_TRANSIENT, "the Huawei channel closed: %s" % error)
+            return
+        if not data:
+            self.finish(EXIT_TRANSIENT, "the Huawei channel closed")
+            return
+        self.buffer += data
+        for parsed in take_frames(self.buffer):
+            self.on_frame(*parsed)
+            if self.exit_code is not None:
+                return
+
+    # ---- The loop.
+
+    def run(self):
+        if not self.connect():
+            return self.exit_code if self.exit_code is not None else 0
+        self.ask_battery()
+        answer_deadline = now() + ANSWER_TIMEOUT
+
+        while self.exit_code is None and not self.stopping:
+            current = now()
+            if self.levels is None and current >= answer_deadline:
+                self.finish(EXIT_UNSUPPORTED,
+                            "the earbuds did not answer the battery query")
+                break
+            if self.next_poll is not None and current >= self.next_poll:
+                self.ask_battery()
+                continue
+            deadlines = [answer_deadline if self.levels is None else None,
+                         self.next_poll]
+            timeout = min([d for d in deadlines if d is not None],
+                          default=current + 1.0) - current
+            try:
+                ready = wait_ready([0, self.sock], max(0.0, min(timeout, 1.0)))
+            except (OSError, ValueError):
+                self.finish(EXIT_TRANSIENT, "the Huawei channel closed")
+                break
+            if self.sock in ready:
+                self.on_socket()
+            if 0 in ready and self.exit_code is None:
+                self.on_stdin()
+        return self.exit_code if self.exit_code is not None else 0
+
+    def close(self):
+        if self.sock is not None:
+            try:
+                self.sock.close()
+            except OSError:
+                pass
+            self.sock = None
+
+
+def main():
+    argv = sys.argv[1:]
+    if argv and argv[0] in ("-h", "--help"):
+        print(USAGE)
+        return 0
+    address = argv[0].strip() if argv else ""
+    if not ADDRESS.match(address):
+        emit({"modes": False,
+              "error": "%s (not a Bluetooth address: %r)" % (USAGE, address)})
+        return EXIT_SETUP
+    name = argv[1] if len(argv) > 1 else ""
+    if name not in MODELS:
+        emit({"modes": False,
+              "error": "%s (no row for the model %r)" % (USAGE, name)})
+        return EXIT_SETUP
+    if not hasattr(socket, "AF_BLUETOOTH"):
+        emit({"modes": False,
+              "error": "this Python was built without Bluetooth sockets"})
+        return EXIT_SETUP
+
+    bridge = Bridge(address, name)
+
+    def stop(*_args):
+        bridge.stopping = True
+        raise Stop()
+
+    signal.signal(signal.SIGTERM, stop)
+    signal.signal(signal.SIGINT, stop)
+    try:
+        code = bridge.run()
+    except Stop:
+        code = 0
+    finally:
+        bridge.close()
+    return code or 0
+
+
+if __name__ == "__main__":
+    arm_parent_death_signal()
+    try:
+        sys.exit(main())
+    except SystemExit:
+        raise
+    except Stop:
+        sys.exit(0)
+    except BaseException as error:
+        emit({"modes": False, "error": "%s: %s" % (type(error).__name__, error)})
+        sys.exit(EXIT_TRANSIENT)

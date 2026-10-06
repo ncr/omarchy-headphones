@@ -1,8 +1,8 @@
 # The bridge contract
 
 A bridge is one process that holds one link to one device and mirrors its
-listening mode. Nine exist — `jbl-bridge`, `sony-bridge`, `samsung-bridge`,
-`nothing-bridge`, `xiaomi-bridge`, `soundcore-bridge`, `oppo-bridge`, `bose-bridge`, `tozo-bridge` — and the shell does not
+listening mode — or, where the device has none, its battery. Ten exist — `jbl-bridge`, `sony-bridge`, `samsung-bridge`,
+`nothing-bridge`, `xiaomi-bridge`, `soundcore-bridge`, `oppo-bridge`, `bose-bridge`, `tozo-bridge`, `huawei-bridge` — and the shell does not
 care which is running: they all print the same lines, read the same commands
 and end the same four ways. This file is that contract, written once. A
 bridge's docstring says what is particular to its protocol and points here
@@ -139,3 +139,14 @@ The six explicit `available` values are `off`, `anc`, `ambient`, `wind`,
 row lists them; a missing `available` still means the original four.
 Their stdin commands are `set wind`, `set leisure`, `set adaptive`, following
 the same device-reported-state rule as the existing commands.
+
+
+### HUAWEI FreeBuds SE 2 extension
+
+`huawei-bridge <classic-address> <reported-name>` opens RFCOMM channel 1
+directly and accepts only its owner's model row. The model has no noise
+control: every line is `"modes": true, "available": []` with the `battery`
+object, so the panel draws no mode row and every stdin command is ignored
+without a frame. Exit 3 means the battery query went unanswered. The
+earbuds serve the channel to one client: while a phone's AI Life app holds
+it, they refuse the connection, which is exit 1 with an error line saying so.

@@ -1,0 +1,186 @@
+{
+  "model": "HUAWEI FreeBuds SE 2",
+  "owner": "defkode",
+  "bridge": "huawei-bridge",
+  "capture": "docs/captures/huawei-freebuds-se-2.txt",
+  "notes": "Battery only, on RFCOMM channel 1 (16 refused). The earbuds send an empty 01 06 when the channel opens, announce the battery on their own (01 27) and answer the query (01 08) with the same tags. A bud reads 0 once the case lid closes on it, and is left out. Tag 3 is not read: its case byte is relayed by a docked bud and goes stale without one, and the buds' bytes never changed. No noise control: the line lists no modes. Frames from sessions 2 and 3 of the capture.",
+  "session": {},
+  "steps": [
+    {
+      "call": "open",
+      "note": "the socket is up: ask for the battery"
+    },
+    {
+      "sent": [
+        "5a 00 09 00 01 08 01 00 02 00 03 00 fb b9"
+      ]
+    },
+    {
+      "device": "5a 00 03 00 01 06 3e bd",
+      "note": "the empty hello the channel opens with"
+    },
+    {
+      "lines": [],
+      "note": "not a battery reading, so nothing is printed"
+    },
+    {
+      "device": "5a 00 14 00 01 27 01 01 61 02 03 61 61 17 03 03 00 00 00 04 02 14 0a a8 e2",
+      "note": "announced on their own: left 97, right 97, case 23"
+    },
+    {
+      "line": {
+        "modes": true,
+        "available": [],
+        "battery": {
+          "left": 97,
+          "right": 97,
+          "case": 23,
+          "caseStale": false
+        }
+      }
+    },
+    {
+      "device": "5a 00 14 00 01 08 01 01 61 02 03 61 61 17 03 03 00 00 00 04 02 14 0a 5c 87",
+      "note": "the answer to the query, the same reading"
+    },
+    {
+      "line_count": 1,
+      "note": "an unchanged reading is not printed again"
+    },
+    {
+      "device": "5a 00 06 00 2b 5f 01 01 01 13 24",
+      "note": "the lid closes on the left bud"
+    },
+    {
+      "line_count": 1,
+      "note": "2b 5f is not read"
+    },
+    {
+      "device": "5a 00 14 00 01 27 01 01 61 02 03 00 61 17 03 03 00 00 00 04 02 14 0a 18 77",
+      "note": "left reads 0 in the closed case"
+    },
+    {
+      "line": {
+        "modes": true,
+        "available": [],
+        "battery": {
+          "right": 97,
+          "case": 23,
+          "caseStale": false
+        }
+      },
+      "note": "left left out, not drawn empty"
+    },
+    {
+      "device": "5a 00 06 00 2b 5f 01 01 00 03 05",
+      "note": "the lid opens"
+    },
+    {
+      "device": "5a 00 14 00 01 27 01 01 60 02 03 60 61 17 03 03 00 00 00 04 02 14 0a 05 6b",
+      "note": "left back, at 96"
+    },
+    {
+      "line": {
+        "modes": true,
+        "available": [],
+        "battery": {
+          "left": 96,
+          "right": 97,
+          "case": 23,
+          "caseStale": false
+        }
+      }
+    },
+    {
+      "device": "5a 00 14 00 01 27 01 01 60 02 03 60 00 17 03 03 00 00 00 04 02 14 0a 33 8d",
+      "note": "the right bud in the closed case"
+    },
+    {
+      "line": {
+        "modes": true,
+        "available": [],
+        "battery": {
+          "left": 96,
+          "case": 23,
+          "caseStale": false
+        }
+      }
+    },
+    {
+      "device": "5a 00 14 00 01 08 01 01 60 02 03 60 61 17 03 03 00 00 00 04 02 14 0a f1 0e",
+      "note": "the lid open again, answered to a poll"
+    },
+    {
+      "line": {
+        "modes": true,
+        "available": [],
+        "battery": {
+          "left": 96,
+          "right": 97,
+          "case": 23,
+          "caseStale": false
+        }
+      }
+    },
+    {
+      "device": "5a 00 14 00 01 27 01 01 5f 02 03 5f 60 3f 03 03 00 00 01 04 02 14 0a c2 6a",
+      "note": "session 3: case byte 01, case at 63; not a charging state"
+    },
+    {
+      "line": {
+        "modes": true,
+        "available": [],
+        "battery": {
+          "left": 95,
+          "right": 96,
+          "case": 63,
+          "caseStale": false
+        }
+      }
+    },
+    {
+      "device": "5a 00 14 00 01 27 01 01 60 02 03 00 60 40 03 03 00 00 01 04 02 14 0a 3e e5",
+      "note": "the lid closes on the left bud"
+    },
+    {
+      "line": {
+        "modes": true,
+        "available": [],
+        "battery": {
+          "right": 96,
+          "case": 64,
+          "caseStale": false
+        }
+      }
+    },
+    {
+      "device": "5a 00 14 00 01 27 01 01 5f 02 03 5f 60 40 03 03 00 00 00 04 02 14 0a e1 0b",
+      "note": "case byte back to 00: nothing printed changes but the level"
+    },
+    {
+      "line": {
+        "modes": true,
+        "available": [],
+        "battery": {
+          "left": 95,
+          "right": 96,
+          "case": 64,
+          "caseStale": false
+        }
+      }
+    },
+    {
+      "command": "set anc",
+      "note": "no modes on this model"
+    },
+    {
+      "sent": [
+        "5a 00 09 00 01 08 01 00 02 00 03 00 fb b9"
+      ],
+      "note": "so nothing is sent"
+    },
+    {
+      "exit": null
+    }
+  ]
+}

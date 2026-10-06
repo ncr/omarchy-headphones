@@ -523,6 +523,13 @@ var BACKENDS = [
     // the two it shares with everyone else.
     extraModes: ["wind", "leisure", "adaptive"],
     modeLabels: { off: "Normal", ambient: "Transparency" } },
+  { name: "huawei", bridge: "huawei-bridge",
+    // Battery only: the FreeBuds SE 2 has no noise control, and its bridge
+    // lists no modes. Claimed by its reported name and the plain SPP service
+    // its battery channel sits behind, like the TOZO row above.
+    modelNames: ["HUAWEI FreeBuds SE 2"],
+    modelUuids: ["00001101-0000-1000-8000-00805f9b34fb"],
+    args: ["address", "name"] },
   { name: "jbl", bridge: "jbl-bridge",
     ble: true, args: ["bleAddress", "modelId"] }
 ]

@@ -1,0 +1,269 @@
+Owner: defkode
+Model: HUAWEI FreeBuds SE 2 (BTFT0016), firmware 1.0.1.129
+Date: 2026-10-05
+Source: tools/huawei_probe.py on RFCOMM channel 1 (channel 16 refused the
+  connection). Read only: the probe sends no set. Three sessions.
+Redactions: the serial numbers in the device-info answer (tags 09 and 18)
+  are masked "**" by the probe; every other byte is verbatim. Timestamps
+  are the probe's own elapsed clock, kept for ordering, not a timing model.
+
+Session 3 separates what sessions 1 and 2 could not: the 0 and the 2b 5f
+arrive with the lid closing on a bud, not with the bud going in. The
+"into the case" notes in sessions 1 and 2 are the owner's account of
+putting a bud away; their timings do not tell the two apart.
+
+### SESSION 1 — huawei_probe.py --info --listen 75 --poll 3
+At ~10s the owner put the left bud in the case; at ~20s took it out.
+  0.07s connected to channel 1
+  0.07s -> battery       5a 00 09 00 01 08 01 00 02 00 03 00 fb b9   tag 1=, tag 2=, charging 
+  0.26s <- hello         5a 00 03 00 01 06 3e bd
+  0.26s <- battery-event 5a 00 14 00 01 27 01 01 61 02 03 61 61 17 03 03 00 00 00 04 02 14 0a a8 e2   overall 97%, left 97% right 97% case 23%, charging 00 00 00, tag 4=14 0a
+  0.28s <- battery       5a 00 14 00 01 08 01 01 61 02 03 61 61 17 03 03 00 00 00 04 02 14 0a 5c 87   overall 97%, left 97% right 97% case 23%, charging 00 00 00, tag 4=14 0a
+  1.07s -> device-info   5a 00 35 00 01 07 00 00 01 00 02 00 03 00 04 00 05 00 06 00 07 00 08 00 09 00 0a 00 0b 00 0c 00 0d 00 0e 00 0f 00 10 00 11 00 12 00 13 00 14 00 15 00 16 00 17 00 18 00 1e 41   tag 0 , tag 1 , hardware , region , tag 4 , tag 5 , tag 6 , firmware , tag 8 , serial (redacted), build , tag 11 , tag 12 , tag 13 , tag 14 , model , tag 16 , tag 17 , tag 18 , tag 19 , tag 20 , tag 21 , tag 22 , tag 23 , bud serials (redacted)
+  1.13s <- device-info   5a 00 6e 00 01 07 02 02 01 47 03 03 55 4c 43 07 09 31 2e 30 2e 31 2e 31 32 39 09 10 ** ** ** ** ** ** ** ** ** ** ** ** ** ** ** ** 0a 0f 42 54 46 54 30 30 31 36 2d 30 30 30 31 34 37 0f 08 42 54 46 54 30 30 31 36 18 25 ** ** ** ** ** ** ** ** ** ** ** ** ** ** ** ** ** ** ** ** ** ** ** ** ** ** ** ** ** ** ** ** ** ** ** ** ** 19 01 00 66 d2   hardware 01 47, region ULC, firmware 1.0.1.129, serial (redacted), build BTFT0016-000147, model BTFT0016, bud serials (redacted), flag 00
+  4.07s -> battery       5a 00 09 00 01 08 01 00 02 00 03 00 fb b9   tag 1=, tag 2=, charging 
+  4.15s <- battery       5a 00 14 00 01 08 01 01 61 02 03 61 61 17 03 03 00 00 00 04 02 14 0a 5c 87   overall 97%, left 97% right 97% case 23%, charging 00 00 00, tag 4=14 0a
+  6.06s <- battery-event 5a 00 14 00 01 27 01 01 61 02 03 61 61 17 03 03 00 00 00 04 02 14 0a a8 e2   overall 97%, left 97% right 97% case 23%, charging 00 00 00, tag 4=14 0a
+  7.07s -> battery       5a 00 09 00 01 08 01 00 02 00 03 00 fb b9   tag 1=, tag 2=, charging 
+  7.16s <- battery       5a 00 14 00 01 08 01 01 61 02 03 61 61 17 03 03 00 00 00 04 02 14 0a 5c 87   overall 97%, left 97% right 97% case 23%, charging 00 00 00, tag 4=14 0a
+  9.77s <- battery-event 5a 00 14 00 01 27 01 01 61 02 03 61 61 17 03 03 00 00 00 04 02 14 0a a8 e2   overall 97%, left 97% right 97% case 23%, charging 00 00 00, tag 4=14 0a
+ 10.01s <- 2b 5f         5a 00 06 00 2b 5f 01 01 01 13 24
+ 10.03s <- battery-event 5a 00 14 00 01 27 01 01 61 02 03 00 61 17 03 03 00 00 00 04 02 14 0a 18 77   overall 97%, left 0% right 97% case 23%, charging 00 00 00, tag 4=14 0a
+ 10.08s -> battery       5a 00 09 00 01 08 01 00 02 00 03 00 fb b9   tag 1=, tag 2=, charging 
+ 10.13s <- battery       5a 00 14 00 01 08 01 01 61 02 03 00 61 17 03 03 00 00 00 04 02 14 0a ec 12   overall 97%, left 0% right 97% case 23%, charging 00 00 00, tag 4=14 0a
+ 13.08s -> battery       5a 00 09 00 01 08 01 00 02 00 03 00 fb b9   tag 1=, tag 2=, charging 
+ 13.14s <- battery       5a 00 14 00 01 08 01 01 61 02 03 00 61 17 03 03 00 00 00 04 02 14 0a ec 12   overall 97%, left 0% right 97% case 23%, charging 00 00 00, tag 4=14 0a
+ 16.08s -> battery       5a 00 09 00 01 08 01 00 02 00 03 00 fb b9   tag 1=, tag 2=, charging 
+ 16.16s <- battery       5a 00 14 00 01 08 01 01 61 02 03 00 61 17 03 03 00 00 00 04 02 14 0a ec 12   overall 97%, left 0% right 97% case 23%, charging 00 00 00, tag 4=14 0a
+ 19.09s -> battery       5a 00 09 00 01 08 01 00 02 00 03 00 fb b9   tag 1=, tag 2=, charging 
+ 19.19s <- battery       5a 00 14 00 01 08 01 01 61 02 03 00 61 17 03 03 00 00 00 04 02 14 0a ec 12   overall 97%, left 0% right 97% case 23%, charging 00 00 00, tag 4=14 0a
+ 20.06s <- 2b 5f         5a 00 06 00 2b 5f 01 01 00 03 05
+ 20.07s <- battery-event 5a 00 14 00 01 27 01 01 61 02 03 61 61 17 03 03 00 00 00 04 02 14 0a a8 e2   overall 97%, left 97% right 97% case 23%, charging 00 00 00, tag 4=14 0a
+ 22.09s -> battery       5a 00 09 00 01 08 01 00 02 00 03 00 fb b9   tag 1=, tag 2=, charging 
+ 22.12s <- battery       5a 00 14 00 01 08 01 01 61 02 03 61 61 17 03 03 00 00 00 04 02 14 0a 5c 87   overall 97%, left 97% right 97% case 23%, charging 00 00 00, tag 4=14 0a
+ 25.09s -> battery       5a 00 09 00 01 08 01 00 02 00 03 00 fb b9   tag 1=, tag 2=, charging 
+ 25.11s <- battery       5a 00 14 00 01 08 01 01 61 02 03 61 61 17 03 03 00 00 00 04 02 14 0a 5c 87   overall 97%, left 97% right 97% case 23%, charging 00 00 00, tag 4=14 0a
+ 28.10s -> battery       5a 00 09 00 01 08 01 00 02 00 03 00 fb b9   tag 1=, tag 2=, charging 
+ 28.18s <- battery       5a 00 14 00 01 08 01 01 61 02 03 61 61 17 03 03 00 00 00 04 02 14 0a 5c 87   overall 97%, left 97% right 97% case 23%, charging 00 00 00, tag 4=14 0a
+ 31.10s -> battery       5a 00 09 00 01 08 01 00 02 00 03 00 fb b9   tag 1=, tag 2=, charging 
+ 31.17s <- battery       5a 00 14 00 01 08 01 01 61 02 03 61 61 17 03 03 00 00 00 04 02 14 0a 5c 87   overall 97%, left 97% right 97% case 23%, charging 00 00 00, tag 4=14 0a
+ 34.10s -> battery       5a 00 09 00 01 08 01 00 02 00 03 00 fb b9   tag 1=, tag 2=, charging 
+ 34.18s <- battery       5a 00 14 00 01 08 01 01 61 02 03 61 61 17 03 03 00 00 00 04 02 14 0a 5c 87   overall 97%, left 97% right 97% case 23%, charging 00 00 00, tag 4=14 0a
+ 37.11s -> battery       5a 00 09 00 01 08 01 00 02 00 03 00 fb b9   tag 1=, tag 2=, charging 
+ 37.18s <- battery       5a 00 14 00 01 08 01 01 61 02 03 61 61 17 03 03 00 00 00 04 02 14 0a 5c 87   overall 97%, left 97% right 97% case 23%, charging 00 00 00, tag 4=14 0a
+ 40.11s -> battery       5a 00 09 00 01 08 01 00 02 00 03 00 fb b9   tag 1=, tag 2=, charging 
+ 40.17s <- battery       5a 00 14 00 01 08 01 01 61 02 03 61 61 17 03 03 00 00 00 04 02 14 0a 5c 87   overall 97%, left 97% right 97% case 23%, charging 00 00 00, tag 4=14 0a
+ 43.11s -> battery       5a 00 09 00 01 08 01 00 02 00 03 00 fb b9   tag 1=, tag 2=, charging 
+ 43.18s <- battery       5a 00 14 00 01 08 01 01 61 02 03 61 61 17 03 03 00 00 00 04 02 14 0a 5c 87   overall 97%, left 97% right 97% case 23%, charging 00 00 00, tag 4=14 0a
+ 46.12s -> battery       5a 00 09 00 01 08 01 00 02 00 03 00 fb b9   tag 1=, tag 2=, charging 
+ 46.20s <- battery       5a 00 14 00 01 08 01 01 61 02 03 61 61 17 03 03 00 00 00 04 02 14 0a 5c 87   overall 97%, left 97% right 97% case 23%, charging 00 00 00, tag 4=14 0a
+ 49.12s -> battery       5a 00 09 00 01 08 01 00 02 00 03 00 fb b9   tag 1=, tag 2=, charging 
+ 49.19s <- battery       5a 00 14 00 01 08 01 01 61 02 03 61 61 17 03 03 00 00 00 04 02 14 0a 5c 87   overall 97%, left 97% right 97% case 23%, charging 00 00 00, tag 4=14 0a
+ 52.13s -> battery       5a 00 09 00 01 08 01 00 02 00 03 00 fb b9   tag 1=, tag 2=, charging 
+ 52.18s <- battery       5a 00 14 00 01 08 01 01 61 02 03 61 61 17 03 03 00 00 00 04 02 14 0a 5c 87   overall 97%, left 97% right 97% case 23%, charging 00 00 00, tag 4=14 0a
+ 55.13s -> battery       5a 00 09 00 01 08 01 00 02 00 03 00 fb b9   tag 1=, tag 2=, charging 
+ 55.19s <- battery       5a 00 14 00 01 08 01 01 61 02 03 61 61 17 03 03 00 00 00 04 02 14 0a 5c 87   overall 97%, left 97% right 97% case 23%, charging 00 00 00, tag 4=14 0a
+ 58.13s -> battery       5a 00 09 00 01 08 01 00 02 00 03 00 fb b9   tag 1=, tag 2=, charging 
+ 58.22s <- battery       5a 00 14 00 01 08 01 01 61 02 03 61 61 17 03 03 00 00 00 04 02 14 0a 5c 87   overall 97%, left 97% right 97% case 23%, charging 00 00 00, tag 4=14 0a
+ 61.14s -> battery       5a 00 09 00 01 08 01 00 02 00 03 00 fb b9   tag 1=, tag 2=, charging 
+ 61.21s <- battery       5a 00 14 00 01 08 01 01 61 02 03 61 61 17 03 03 00 00 00 04 02 14 0a 5c 87   overall 97%, left 97% right 97% case 23%, charging 00 00 00, tag 4=14 0a
+ 64.14s -> battery       5a 00 09 00 01 08 01 00 02 00 03 00 fb b9   tag 1=, tag 2=, charging 
+ 64.21s <- battery       5a 00 14 00 01 08 01 01 61 02 03 61 61 17 03 03 00 00 00 04 02 14 0a 5c 87   overall 97%, left 97% right 97% case 23%, charging 00 00 00, tag 4=14 0a
+ 67.15s -> battery       5a 00 09 00 01 08 01 00 02 00 03 00 fb b9   tag 1=, tag 2=, charging 
+ 67.22s <- battery       5a 00 14 00 01 08 01 01 61 02 03 61 61 17 03 03 00 00 00 04 02 14 0a 5c 87   overall 97%, left 97% right 97% case 23%, charging 00 00 00, tag 4=14 0a
+ 70.15s -> battery       5a 00 09 00 01 08 01 00 02 00 03 00 fb b9   tag 1=, tag 2=, charging 
+ 70.21s <- battery       5a 00 14 00 01 08 01 01 61 02 03 61 61 17 03 03 00 00 00 04 02 14 0a 5c 87   overall 97%, left 97% right 97% case 23%, charging 00 00 00, tag 4=14 0a
+ 73.15s -> battery       5a 00 09 00 01 08 01 00 02 00 03 00 fb b9   tag 1=, tag 2=, charging 
+ 73.22s <- battery       5a 00 14 00 01 08 01 01 61 02 03 61 61 17 03 03 00 00 00 04 02 14 0a 5c 87   overall 97%, left 97% right 97% case 23%, charging 00 00 00, tag 4=14 0a
+
+### SESSION 2 — huawei_probe.py --listen 120 --poll 5
+At ~31s the left bud went into the case, and came out at ~42s; the lid was
+asked to be closed and opened before the right bud — not timed; the
+earbuds sent unchanged readings at ~54s, ~61s and ~73s, and the case
+figure never moved;
+at ~73s the right bud went into the case, and came out at ~81s.
+  0.05s connected to channel 1
+  0.05s -> battery       5a 00 09 00 01 08 01 00 02 00 03 00 fb b9   tag 1=, tag 2=, charging 
+  0.20s <- hello         5a 00 03 00 01 06 3e bd
+  0.22s <- battery-event 5a 00 14 00 01 27 01 01 61 02 03 61 61 17 03 03 00 00 00 04 02 14 0a a8 e2   overall 97%, left 97% right 97% case 23%, charging 00 00 00, tag 4=14 0a
+  0.22s <- battery       5a 00 14 00 01 08 01 01 61 02 03 61 61 17 03 03 00 00 00 04 02 14 0a 5c 87   overall 97%, left 97% right 97% case 23%, charging 00 00 00, tag 4=14 0a
+  5.06s -> battery       5a 00 09 00 01 08 01 00 02 00 03 00 fb b9   tag 1=, tag 2=, charging 
+  5.13s <- battery       5a 00 14 00 01 08 01 01 61 02 03 61 61 17 03 03 00 00 00 04 02 14 0a 5c 87   overall 97%, left 97% right 97% case 23%, charging 00 00 00, tag 4=14 0a
+ 10.06s -> battery       5a 00 09 00 01 08 01 00 02 00 03 00 fb b9   tag 1=, tag 2=, charging 
+ 10.12s <- battery       5a 00 14 00 01 08 01 01 61 02 03 61 61 17 03 03 00 00 00 04 02 14 0a 5c 87   overall 97%, left 97% right 97% case 23%, charging 00 00 00, tag 4=14 0a
+ 15.07s -> battery       5a 00 09 00 01 08 01 00 02 00 03 00 fb b9   tag 1=, tag 2=, charging 
+ 15.14s <- battery       5a 00 14 00 01 08 01 01 61 02 03 61 61 17 03 03 00 00 00 04 02 14 0a 5c 87   overall 97%, left 97% right 97% case 23%, charging 00 00 00, tag 4=14 0a
+ 20.08s -> battery       5a 00 09 00 01 08 01 00 02 00 03 00 fb b9   tag 1=, tag 2=, charging 
+ 20.15s <- battery       5a 00 14 00 01 08 01 01 61 02 03 61 61 17 03 03 00 00 00 04 02 14 0a 5c 87   overall 97%, left 97% right 97% case 23%, charging 00 00 00, tag 4=14 0a
+ 25.08s -> battery       5a 00 09 00 01 08 01 00 02 00 03 00 fb b9   tag 1=, tag 2=, charging 
+ 25.14s <- battery       5a 00 14 00 01 08 01 01 61 02 03 61 61 17 03 03 00 00 00 04 02 14 0a 5c 87   overall 97%, left 97% right 97% case 23%, charging 00 00 00, tag 4=14 0a
+ 30.09s -> battery       5a 00 09 00 01 08 01 00 02 00 03 00 fb b9   tag 1=, tag 2=, charging 
+ 30.15s <- battery       5a 00 14 00 01 08 01 01 61 02 03 61 61 17 03 03 00 00 00 04 02 14 0a 5c 87   overall 97%, left 97% right 97% case 23%, charging 00 00 00, tag 4=14 0a
+ 30.82s <- battery-event 5a 00 14 00 01 27 01 01 61 02 03 61 61 17 03 03 00 00 00 04 02 14 0a a8 e2   overall 97%, left 97% right 97% case 23%, charging 00 00 00, tag 4=14 0a
+ 31.05s <- 2b 5f         5a 00 06 00 2b 5f 01 01 01 13 24
+ 31.07s <- battery-event 5a 00 14 00 01 27 01 01 61 02 03 00 61 17 03 03 00 00 00 04 02 14 0a 18 77   overall 97%, left 0% right 97% case 23%, charging 00 00 00, tag 4=14 0a
+ 35.09s -> battery       5a 00 09 00 01 08 01 00 02 00 03 00 fb b9   tag 1=, tag 2=, charging 
+ 35.15s <- battery       5a 00 14 00 01 08 01 01 61 02 03 00 61 17 03 03 00 00 00 04 02 14 0a ec 12   overall 97%, left 0% right 97% case 23%, charging 00 00 00, tag 4=14 0a
+ 40.10s -> battery       5a 00 09 00 01 08 01 00 02 00 03 00 fb b9   tag 1=, tag 2=, charging 
+ 40.16s <- battery       5a 00 14 00 01 08 01 01 61 02 03 00 61 17 03 03 00 00 00 04 02 14 0a ec 12   overall 97%, left 0% right 97% case 23%, charging 00 00 00, tag 4=14 0a
+ 42.46s <- 2b 5f         5a 00 06 00 2b 5f 01 01 00 03 05
+ 42.49s <- battery-event 5a 00 14 00 01 27 01 01 60 02 03 60 61 17 03 03 00 00 00 04 02 14 0a 05 6b   overall 96%, left 96% right 97% case 23%, charging 00 00 00, tag 4=14 0a
+ 45.10s -> battery       5a 00 09 00 01 08 01 00 02 00 03 00 fb b9   tag 1=, tag 2=, charging 
+ 45.13s <- battery       5a 00 14 00 01 08 01 01 60 02 03 60 61 17 03 03 00 00 00 04 02 14 0a f1 0e   overall 96%, left 96% right 97% case 23%, charging 00 00 00, tag 4=14 0a
+ 50.11s -> battery       5a 00 09 00 01 08 01 00 02 00 03 00 fb b9   tag 1=, tag 2=, charging 
+ 50.17s <- battery       5a 00 14 00 01 08 01 01 60 02 03 60 61 17 03 03 00 00 00 04 02 14 0a f1 0e   overall 96%, left 96% right 97% case 23%, charging 00 00 00, tag 4=14 0a
+ 53.80s <- battery-event 5a 00 14 00 01 27 01 01 60 02 03 60 61 17 03 03 00 00 00 04 02 14 0a 05 6b   overall 96%, left 96% right 97% case 23%, charging 00 00 00, tag 4=14 0a
+ 55.11s -> battery       5a 00 09 00 01 08 01 00 02 00 03 00 fb b9   tag 1=, tag 2=, charging 
+ 55.18s <- battery       5a 00 14 00 01 08 01 01 60 02 03 60 61 17 03 03 00 00 00 04 02 14 0a f1 0e   overall 96%, left 96% right 97% case 23%, charging 00 00 00, tag 4=14 0a
+ 60.11s -> battery       5a 00 09 00 01 08 01 00 02 00 03 00 fb b9   tag 1=, tag 2=, charging 
+ 60.21s <- battery       5a 00 14 00 01 08 01 01 60 02 03 60 61 17 03 03 00 00 00 04 02 14 0a f1 0e   overall 96%, left 96% right 97% case 23%, charging 00 00 00, tag 4=14 0a
+ 61.45s <- battery-event 5a 00 14 00 01 27 01 01 60 02 03 60 61 17 03 03 00 00 00 04 02 14 0a 05 6b   overall 96%, left 96% right 97% case 23%, charging 00 00 00, tag 4=14 0a
+ 65.12s -> battery       5a 00 09 00 01 08 01 00 02 00 03 00 fb b9   tag 1=, tag 2=, charging 
+ 65.17s <- battery       5a 00 14 00 01 08 01 01 60 02 03 60 61 17 03 03 00 00 00 04 02 14 0a f1 0e   overall 96%, left 96% right 97% case 23%, charging 00 00 00, tag 4=14 0a
+ 70.12s -> battery       5a 00 09 00 01 08 01 00 02 00 03 00 fb b9   tag 1=, tag 2=, charging 
+ 70.20s <- battery       5a 00 14 00 01 08 01 01 60 02 03 60 61 17 03 03 00 00 00 04 02 14 0a f1 0e   overall 96%, left 96% right 97% case 23%, charging 00 00 00, tag 4=14 0a
+ 73.08s <- battery-event 5a 00 14 00 01 27 01 01 60 02 03 60 61 17 03 03 00 00 00 04 02 14 0a 05 6b   overall 96%, left 96% right 97% case 23%, charging 00 00 00, tag 4=14 0a
+ 73.42s <- 2b 5f         5a 00 06 00 2b 5f 01 01 01 13 24
+ 73.42s <- battery-event 5a 00 14 00 01 27 01 01 60 02 03 60 00 17 03 03 00 00 00 04 02 14 0a 33 8d   overall 96%, left 96% right 0% case 23%, charging 00 00 00, tag 4=14 0a
+ 75.13s -> battery       5a 00 09 00 01 08 01 00 02 00 03 00 fb b9   tag 1=, tag 2=, charging 
+ 75.19s <- battery       5a 00 14 00 01 08 01 01 60 02 03 60 00 17 03 03 00 00 00 04 02 14 0a c7 e8   overall 96%, left 96% right 0% case 23%, charging 00 00 00, tag 4=14 0a
+ 80.13s -> battery       5a 00 09 00 01 08 01 00 02 00 03 00 fb b9   tag 1=, tag 2=, charging 
+ 80.22s <- battery       5a 00 14 00 01 08 01 01 60 02 03 60 00 17 03 03 00 00 00 04 02 14 0a c7 e8   overall 96%, left 96% right 0% case 23%, charging 00 00 00, tag 4=14 0a
+ 81.18s <- 2b 5f         5a 00 06 00 2b 5f 01 01 00 03 05
+ 81.19s <- battery-event 5a 00 14 00 01 27 01 01 60 02 03 60 61 17 03 03 00 00 00 04 02 14 0a 05 6b   overall 96%, left 96% right 97% case 23%, charging 00 00 00, tag 4=14 0a
+ 85.14s -> battery       5a 00 09 00 01 08 01 00 02 00 03 00 fb b9   tag 1=, tag 2=, charging 
+ 85.17s <- battery       5a 00 14 00 01 08 01 01 60 02 03 60 61 17 03 03 00 00 00 04 02 14 0a f1 0e   overall 96%, left 96% right 97% case 23%, charging 00 00 00, tag 4=14 0a
+ 90.14s -> battery       5a 00 09 00 01 08 01 00 02 00 03 00 fb b9   tag 1=, tag 2=, charging 
+ 90.21s <- battery       5a 00 14 00 01 08 01 01 60 02 03 60 61 17 03 03 00 00 00 04 02 14 0a f1 0e   overall 96%, left 96% right 97% case 23%, charging 00 00 00, tag 4=14 0a
+ 95.15s -> battery       5a 00 09 00 01 08 01 00 02 00 03 00 fb b9   tag 1=, tag 2=, charging 
+ 95.21s <- battery       5a 00 14 00 01 08 01 01 60 02 03 60 61 17 03 03 00 00 00 04 02 14 0a f1 0e   overall 96%, left 96% right 97% case 23%, charging 00 00 00, tag 4=14 0a
+100.15s -> battery       5a 00 09 00 01 08 01 00 02 00 03 00 fb b9   tag 1=, tag 2=, charging 
+100.21s <- battery       5a 00 14 00 01 08 01 01 60 02 03 60 61 17 03 03 00 00 00 04 02 14 0a f1 0e   overall 96%, left 96% right 97% case 23%, charging 00 00 00, tag 4=14 0a
+105.16s -> battery       5a 00 09 00 01 08 01 00 02 00 03 00 fb b9   tag 1=, tag 2=, charging 
+105.21s <- battery       5a 00 14 00 01 08 01 01 60 02 03 60 61 17 03 03 00 00 00 04 02 14 0a f1 0e   overall 96%, left 96% right 97% case 23%, charging 00 00 00, tag 4=14 0a
+110.16s -> battery       5a 00 09 00 01 08 01 00 02 00 03 00 fb b9   tag 1=, tag 2=, charging 
+110.22s <- battery       5a 00 14 00 01 08 01 01 60 02 03 60 61 17 03 03 00 00 00 04 02 14 0a f1 0e   overall 96%, left 96% right 97% case 23%, charging 00 00 00, tag 4=14 0a
+115.17s -> battery       5a 00 09 00 01 08 01 00 02 00 03 00 fb b9   tag 1=, tag 2=, charging 
+115.23s <- battery       5a 00 14 00 01 08 01 01 60 02 03 60 61 17 03 03 00 00 00 04 02 14 0a f1 0e   overall 96%, left 96% right 97% case 23%, charging 00 00 00, tag 4=14 0a
+
+### SESSION 3 — huawei_probe.py --listen 210 --poll 5, guided
+Each "### STEP" line is the moment the step was shown to the owner as a
+notification, on the probe's clock; the owner did it within a few seconds.
+The case byte in tag 3 read 01 when the session began and dropped to 00 at
+~49s, just after the left bud docked; it rose to 01 again after step 6 put
+the case on a cable, with the left bud still docked. Read alone, that looks
+like a cable flag. It is not a live one: afterwards, with the bridge running,
+the owner unplugged the case and it went on reading 01 (and its level rose
+68 -> 72 after the unplug). The case's figures are relayed by a docked bud:
+the owner saw them refresh when the left bud docked, and later when the
+right one did (case 72 -> 84).
+  0.03s ### STEP: Recording — wear both buds, wait
+  0.05s connected to channel 1
+  0.05s -> battery       5a 00 09 00 01 08 01 00 02 00 03 00 fb b9   tag 1=, tag 2=, charging 
+  0.20s <- hello         5a 00 03 00 01 06 3e bd
+  0.22s <- battery-event 5a 00 14 00 01 27 01 01 5f 02 03 5f 60 38 03 03 00 00 01 04 02 14 0a de 90   overall 95%, left 95% right 96% case 56%, charging 00 00 01, tag 4=14 0a
+  0.22s <- battery       5a 00 14 00 01 08 01 01 5f 02 03 5f 60 38 03 03 00 00 01 04 02 14 0a 2a f5   overall 95%, left 95% right 96% case 56%, charging 00 00 01, tag 4=14 0a
+  5.05s -> battery       5a 00 09 00 01 08 01 00 02 00 03 00 fb b9   tag 1=, tag 2=, charging 
+  5.11s <- battery       5a 00 14 00 01 08 01 01 5f 02 03 5f 60 38 03 03 00 00 01 04 02 14 0a 2a f5   overall 95%, left 95% right 96% case 56%, charging 00 00 01, tag 4=14 0a
+ 10.06s -> battery       5a 00 09 00 01 08 01 00 02 00 03 00 fb b9   tag 1=, tag 2=, charging 
+ 10.12s <- battery       5a 00 14 00 01 08 01 01 5f 02 03 5f 60 38 03 03 00 00 01 04 02 14 0a 2a f5   overall 95%, left 95% right 96% case 56%, charging 00 00 01, tag 4=14 0a
+ 15.03s ### STEP: 1. Take LEFT bud out of your ear, hold it in your hand
+ 15.06s -> battery       5a 00 09 00 01 08 01 00 02 00 03 00 fb b9   tag 1=, tag 2=, charging 
+ 15.13s <- battery       5a 00 14 00 01 08 01 01 5f 02 03 5f 60 38 03 03 00 00 01 04 02 14 0a 2a f5   overall 95%, left 95% right 96% case 56%, charging 00 00 01, tag 4=14 0a
+ 20.07s -> battery       5a 00 09 00 01 08 01 00 02 00 03 00 fb b9   tag 1=, tag 2=, charging 
+ 20.15s <- battery       5a 00 14 00 01 08 01 01 5f 02 03 5f 60 38 03 03 00 00 01 04 02 14 0a 2a f5   overall 95%, left 95% right 96% case 56%, charging 00 00 01, tag 4=14 0a
+ 25.08s -> battery       5a 00 09 00 01 08 01 00 02 00 03 00 fb b9   tag 1=, tag 2=, charging 
+ 25.16s <- battery       5a 00 14 00 01 08 01 01 5f 02 03 5f 60 38 03 03 00 00 01 04 02 14 0a 2a f5   overall 95%, left 95% right 96% case 56%, charging 00 00 01, tag 4=14 0a
+ 30.03s ### STEP: 2. Put LEFT bud back in your ear
+ 30.08s -> battery       5a 00 09 00 01 08 01 00 02 00 03 00 fb b9   tag 1=, tag 2=, charging 
+ 30.15s <- battery       5a 00 14 00 01 08 01 01 5f 02 03 5f 60 38 03 03 00 00 01 04 02 14 0a 2a f5   overall 95%, left 95% right 96% case 56%, charging 00 00 01, tag 4=14 0a
+ 35.09s -> battery       5a 00 09 00 01 08 01 00 02 00 03 00 fb b9   tag 1=, tag 2=, charging 
+ 35.14s <- battery       5a 00 14 00 01 08 01 01 5f 02 03 5f 60 38 03 03 00 00 01 04 02 14 0a 2a f5   overall 95%, left 95% right 96% case 56%, charging 00 00 01, tag 4=14 0a
+ 40.09s -> battery       5a 00 09 00 01 08 01 00 02 00 03 00 fb b9   tag 1=, tag 2=, charging 
+ 40.16s <- battery       5a 00 14 00 01 08 01 01 5f 02 03 5f 60 38 03 03 00 00 01 04 02 14 0a 2a f5   overall 95%, left 95% right 96% case 56%, charging 00 00 01, tag 4=14 0a
+ 45.02s ### STEP: 3. Put LEFT bud in the case, lid OPEN
+ 45.10s -> battery       5a 00 09 00 01 08 01 00 02 00 03 00 fb b9   tag 1=, tag 2=, charging 
+ 45.17s <- battery       5a 00 14 00 01 08 01 01 5f 02 03 5f 60 38 03 03 00 00 01 04 02 14 0a 2a f5   overall 95%, left 95% right 96% case 56%, charging 00 00 01, tag 4=14 0a
+ 49.24s <- battery-event 5a 00 14 00 01 27 01 01 5f 02 03 5f 60 40 03 03 00 00 00 04 02 14 0a e1 0b   overall 95%, left 95% right 96% case 64%, charging 00 00 00, tag 4=14 0a
+ 50.10s -> battery       5a 00 09 00 01 08 01 00 02 00 03 00 fb b9   tag 1=, tag 2=, charging 
+ 50.17s <- battery       5a 00 14 00 01 08 01 01 5f 02 03 5f 60 40 03 03 00 00 00 04 02 14 0a 15 6e   overall 95%, left 95% right 96% case 64%, charging 00 00 00, tag 4=14 0a
+ 55.10s -> battery       5a 00 09 00 01 08 01 00 02 00 03 00 fb b9   tag 1=, tag 2=, charging 
+ 55.15s <- battery       5a 00 14 00 01 08 01 01 5f 02 03 5f 60 40 03 03 00 00 00 04 02 14 0a 15 6e   overall 95%, left 95% right 96% case 64%, charging 00 00 00, tag 4=14 0a
+ 60.03s ### STEP: 4. CLOSE the lid
+ 60.11s -> battery       5a 00 09 00 01 08 01 00 02 00 03 00 fb b9   tag 1=, tag 2=, charging 
+ 60.17s <- battery       5a 00 14 00 01 08 01 01 5f 02 03 5f 60 40 03 03 00 00 00 04 02 14 0a 15 6e   overall 95%, left 95% right 96% case 64%, charging 00 00 00, tag 4=14 0a
+ 64.20s <- battery-event 5a 00 14 00 01 27 01 01 5f 02 03 5f 60 40 03 03 00 00 00 04 02 14 0a e1 0b   overall 95%, left 95% right 96% case 64%, charging 00 00 00, tag 4=14 0a
+ 64.45s <- 2b 5f         5a 00 06 00 2b 5f 01 01 01 13 24
+ 64.45s <- battery-event 5a 00 14 00 01 27 01 01 60 02 03 00 60 40 03 03 00 00 00 04 02 14 0a 94 b4   overall 96%, left 0% right 96% case 64%, charging 00 00 00, tag 4=14 0a
+ 65.11s -> battery       5a 00 09 00 01 08 01 00 02 00 03 00 fb b9   tag 1=, tag 2=, charging 
+ 65.16s <- battery       5a 00 14 00 01 08 01 01 60 02 03 00 60 40 03 03 00 00 00 04 02 14 0a 60 d1   overall 96%, left 0% right 96% case 64%, charging 00 00 00, tag 4=14 0a
+ 70.12s -> battery       5a 00 09 00 01 08 01 00 02 00 03 00 fb b9   tag 1=, tag 2=, charging 
+ 70.17s <- battery       5a 00 14 00 01 08 01 01 60 02 03 00 60 40 03 03 00 00 00 04 02 14 0a 60 d1   overall 96%, left 0% right 96% case 64%, charging 00 00 00, tag 4=14 0a
+ 75.03s ### STEP: 5. OPEN the lid
+ 75.12s -> battery       5a 00 09 00 01 08 01 00 02 00 03 00 fb b9   tag 1=, tag 2=, charging 
+ 75.17s <- battery       5a 00 14 00 01 08 01 01 60 02 03 00 60 40 03 03 00 00 00 04 02 14 0a 60 d1   overall 96%, left 0% right 96% case 64%, charging 00 00 00, tag 4=14 0a
+ 77.77s <- 2b 5f         5a 00 06 00 2b 5f 01 01 00 03 05
+ 77.77s <- battery-event 5a 00 14 00 01 27 01 01 5f 02 03 5f 60 40 03 03 00 00 00 04 02 14 0a e1 0b   overall 95%, left 95% right 96% case 64%, charging 00 00 00, tag 4=14 0a
+ 80.12s -> battery       5a 00 09 00 01 08 01 00 02 00 03 00 fb b9   tag 1=, tag 2=, charging 
+ 80.16s <- battery       5a 00 14 00 01 08 01 01 5f 02 03 5f 60 40 03 03 00 00 00 04 02 14 0a 15 6e   overall 95%, left 95% right 96% case 64%, charging 00 00 00, tag 4=14 0a
+ 85.13s -> battery       5a 00 09 00 01 08 01 00 02 00 03 00 fb b9   tag 1=, tag 2=, charging 
+ 85.19s <- battery       5a 00 14 00 01 08 01 01 5f 02 03 5f 60 40 03 03 00 00 00 04 02 14 0a 15 6e   overall 95%, left 95% right 96% case 64%, charging 00 00 00, tag 4=14 0a
+ 90.03s ### STEP: 6. Plug the case into the USB-C cable (leave it)
+ 90.14s -> battery       5a 00 09 00 01 08 01 00 02 00 03 00 fb b9   tag 1=, tag 2=, charging 
+ 90.23s <- battery       5a 00 14 00 01 08 01 01 5f 02 03 5f 60 40 03 03 00 00 00 04 02 14 0a 15 6e   overall 95%, left 95% right 96% case 64%, charging 00 00 00, tag 4=14 0a
+ 95.14s -> battery       5a 00 09 00 01 08 01 00 02 00 03 00 fb b9   tag 1=, tag 2=, charging 
+ 95.22s <- battery       5a 00 14 00 01 08 01 01 5f 02 03 5f 60 40 03 03 00 00 00 04 02 14 0a 15 6e   overall 95%, left 95% right 96% case 64%, charging 00 00 00, tag 4=14 0a
+100.15s -> battery       5a 00 09 00 01 08 01 00 02 00 03 00 fb b9   tag 1=, tag 2=, charging 
+100.21s <- battery       5a 00 14 00 01 08 01 01 5f 02 03 5f 60 40 03 03 00 00 00 04 02 14 0a 15 6e   overall 95%, left 95% right 96% case 64%, charging 00 00 00, tag 4=14 0a
+103.18s <- battery-event 5a 00 14 00 01 27 01 01 5f 02 03 5f 60 3f 03 03 00 00 01 04 02 14 0a c2 6a   overall 95%, left 95% right 96% case 63%, charging 00 00 01, tag 4=14 0a
+105.15s -> battery       5a 00 09 00 01 08 01 00 02 00 03 00 fb b9   tag 1=, tag 2=, charging 
+105.20s <- battery       5a 00 14 00 01 08 01 01 5f 02 03 5f 60 3f 03 03 00 00 01 04 02 14 0a 36 0f   overall 95%, left 95% right 96% case 63%, charging 00 00 01, tag 4=14 0a
+110.16s -> battery       5a 00 09 00 01 08 01 00 02 00 03 00 fb b9   tag 1=, tag 2=, charging 
+110.25s <- battery       5a 00 14 00 01 08 01 01 5f 02 03 5f 60 3f 03 03 00 00 01 04 02 14 0a 36 0f   overall 95%, left 95% right 96% case 63%, charging 00 00 01, tag 4=14 0a
+115.16s -> battery       5a 00 09 00 01 08 01 00 02 00 03 00 fb b9   tag 1=, tag 2=, charging 
+115.23s <- battery       5a 00 14 00 01 08 01 01 5f 02 03 5f 60 3f 03 03 00 00 01 04 02 14 0a 36 0f   overall 95%, left 95% right 96% case 63%, charging 00 00 01, tag 4=14 0a
+120.03s ### STEP: 7. CLOSE the lid
+120.17s -> battery       5a 00 09 00 01 08 01 00 02 00 03 00 fb b9   tag 1=, tag 2=, charging 
+120.24s <- battery       5a 00 14 00 01 08 01 01 5f 02 03 5f 60 3f 03 03 00 00 01 04 02 14 0a 36 0f   overall 95%, left 95% right 96% case 63%, charging 00 00 01, tag 4=14 0a
+124.46s <- battery-event 5a 00 14 00 01 27 01 01 5f 02 03 5f 60 40 03 03 00 00 01 04 02 14 0a 4b 5a   overall 95%, left 95% right 96% case 64%, charging 00 00 01, tag 4=14 0a
+124.68s <- 2b 5f         5a 00 06 00 2b 5f 01 01 01 13 24
+124.70s <- battery-event 5a 00 14 00 01 27 01 01 60 02 03 00 60 40 03 03 00 00 01 04 02 14 0a 3e e5   overall 96%, left 0% right 96% case 64%, charging 00 00 01, tag 4=14 0a
+125.17s -> battery       5a 00 09 00 01 08 01 00 02 00 03 00 fb b9   tag 1=, tag 2=, charging 
+125.23s <- battery       5a 00 14 00 01 08 01 01 60 02 03 00 60 40 03 03 00 00 01 04 02 14 0a ca 80   overall 96%, left 0% right 96% case 64%, charging 00 00 01, tag 4=14 0a
+130.18s -> battery       5a 00 09 00 01 08 01 00 02 00 03 00 fb b9   tag 1=, tag 2=, charging 
+130.23s <- battery       5a 00 14 00 01 08 01 01 60 02 03 00 60 40 03 03 00 00 01 04 02 14 0a ca 80   overall 96%, left 0% right 96% case 64%, charging 00 00 01, tag 4=14 0a
+135.03s ### STEP: 8. OPEN the lid
+135.18s -> battery       5a 00 09 00 01 08 01 00 02 00 03 00 fb b9   tag 1=, tag 2=, charging 
+135.24s <- battery       5a 00 14 00 01 08 01 01 60 02 03 00 60 40 03 03 00 00 01 04 02 14 0a ca 80   overall 96%, left 0% right 96% case 64%, charging 00 00 01, tag 4=14 0a
+139.05s <- 2b 5f         5a 00 06 00 2b 5f 01 01 00 03 05
+139.05s <- battery-event 5a 00 14 00 01 27 01 01 5f 02 03 5f 60 42 03 03 00 00 01 04 02 14 0a 95 d0   overall 95%, left 95% right 96% case 66%, charging 00 00 01, tag 4=14 0a
+140.18s -> battery       5a 00 09 00 01 08 01 00 02 00 03 00 fb b9   tag 1=, tag 2=, charging 
+140.21s <- battery       5a 00 14 00 01 08 01 01 5f 02 03 5f 60 42 03 03 00 00 01 04 02 14 0a 61 b5   overall 95%, left 95% right 96% case 66%, charging 00 00 01, tag 4=14 0a
+145.19s -> battery       5a 00 09 00 01 08 01 00 02 00 03 00 fb b9   tag 1=, tag 2=, charging 
+145.26s <- battery       5a 00 14 00 01 08 01 01 5f 02 03 5f 60 42 03 03 00 00 01 04 02 14 0a 61 b5   overall 95%, left 95% right 96% case 66%, charging 00 00 01, tag 4=14 0a
+150.19s -> battery       5a 00 09 00 01 08 01 00 02 00 03 00 fb b9   tag 1=, tag 2=, charging 
+150.26s <- battery       5a 00 14 00 01 08 01 01 5f 02 03 5f 60 42 03 03 00 00 01 04 02 14 0a 61 b5   overall 95%, left 95% right 96% case 66%, charging 00 00 01, tag 4=14 0a
+155.20s -> battery       5a 00 09 00 01 08 01 00 02 00 03 00 fb b9   tag 1=, tag 2=, charging 
+155.27s <- battery       5a 00 14 00 01 08 01 01 5f 02 03 5f 60 42 03 03 00 00 01 04 02 14 0a 61 b5   overall 95%, left 95% right 96% case 66%, charging 00 00 01, tag 4=14 0a
+160.20s -> battery       5a 00 09 00 01 08 01 00 02 00 03 00 fb b9   tag 1=, tag 2=, charging 
+160.26s <- battery       5a 00 14 00 01 08 01 01 5f 02 03 5f 60 42 03 03 00 00 01 04 02 14 0a 61 b5   overall 95%, left 95% right 96% case 66%, charging 00 00 01, tag 4=14 0a
+165.03s ### STEP: 9. Take LEFT bud out of the case, put it in your ear
+165.21s -> battery       5a 00 09 00 01 08 01 00 02 00 03 00 fb b9   tag 1=, tag 2=, charging 
+165.28s <- battery       5a 00 14 00 01 08 01 01 5f 02 03 5f 60 42 03 03 00 00 01 04 02 14 0a 61 b5   overall 95%, left 95% right 96% case 66%, charging 00 00 01, tag 4=14 0a
+170.21s -> battery       5a 00 09 00 01 08 01 00 02 00 03 00 fb b9   tag 1=, tag 2=, charging 
+170.27s <- battery       5a 00 14 00 01 08 01 01 5f 02 03 5f 60 44 03 03 00 00 01 04 02 14 0a 12 0a   overall 95%, left 95% right 96% case 68%, charging 00 00 01, tag 4=14 0a
+175.21s -> battery       5a 00 09 00 01 08 01 00 02 00 03 00 fb b9   tag 1=, tag 2=, charging 
+175.28s <- battery       5a 00 14 00 01 08 01 01 5f 02 03 5f 60 44 03 03 00 00 01 04 02 14 0a 12 0a   overall 95%, left 95% right 96% case 68%, charging 00 00 01, tag 4=14 0a
+180.22s -> battery       5a 00 09 00 01 08 01 00 02 00 03 00 fb b9   tag 1=, tag 2=, charging 
+180.27s <- battery       5a 00 14 00 01 08 01 01 5f 02 03 5f 60 44 03 03 00 00 01 04 02 14 0a 12 0a   overall 95%, left 95% right 96% case 68%, charging 00 00 01, tag 4=14 0a
+185.22s -> battery       5a 00 09 00 01 08 01 00 02 00 03 00 fb b9   tag 1=, tag 2=, charging 
+185.29s <- battery       5a 00 14 00 01 08 01 01 5f 02 03 5f 60 44 03 03 00 00 01 04 02 14 0a 12 0a   overall 95%, left 95% right 96% case 68%, charging 00 00 01, tag 4=14 0a
+190.23s -> battery       5a 00 09 00 01 08 01 00 02 00 03 00 fb b9   tag 1=, tag 2=, charging 
+190.30s <- battery       5a 00 14 00 01 08 01 01 5f 02 03 5f 60 44 03 03 00 00 01 04 02 14 0a 12 0a   overall 95%, left 95% right 96% case 68%, charging 00 00 01, tag 4=14 0a
+195.03s ### STEP: Done — you can unplug the case
+195.23s -> battery       5a 00 09 00 01 08 01 00 02 00 03 00 fb b9   tag 1=, tag 2=, charging 
+195.29s <- battery       5a 00 14 00 01 08 01 01 5f 02 03 5f 60 44 03 03 00 00 01 04 02 14 0a 12 0a   overall 95%, left 95% right 96% case 68%, charging 00 00 01, tag 4=14 0a
+200.24s -> battery       5a 00 09 00 01 08 01 00 02 00 03 00 fb b9   tag 1=, tag 2=, charging 
+200.31s <- battery       5a 00 14 00 01 08 01 01 5f 02 03 5f 60 44 03 03 00 00 01 04 02 14 0a 12 0a   overall 95%, left 95% right 96% case 68%, charging 00 00 01, tag 4=14 0a
+205.24s -> battery       5a 00 09 00 01 08 01 00 02 00 03 00 fb b9   tag 1=, tag 2=, charging 
+205.32s <- battery       5a 00 14 00 01 08 01 01 5f 02 03 5f 60 44 03 03 00 00 01 04 02 14 0a 12 0a   overall 95%, left 95% right 96% case 68%, charging 00 00 01, tag 4=14 0a

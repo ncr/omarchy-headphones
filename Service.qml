@@ -694,6 +694,9 @@ Item {
   function modeOf(follower) {
     if (!follower) return "unsupported"
     if (follower.ancLive && follower.ancMode !== "") return follower.ancMode
+    // A live bridge that lists no modes (huawei-bridge, battery only) will
+    // never report one: that is settled, not pending.
+    if (follower.ancLive && follower.modesAvailable.length === 0) return "unsupported"
     if (follower.bridgeRunning) return "pending"
     return "unsupported"
   }

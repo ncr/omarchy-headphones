@@ -2046,3 +2046,84 @@ checkout after releasing the widget's mode bridge. It reads the initial mode,
 cycles the six known modes, verifies each query reply and restores the
 observed initial mode in a `finally` block. A failed restoration is a failure,
 not a successful test. See `docs/TOZO-NC9-PRO-TESTS.md` for the final live report.
+
+## HUAWEI FreeBuds SE 2 — battery over SPP
+
+Owner: [@defkode](https://github.com/defkode). Evidence is
+`docs/captures/huawei-freebuds-se-2.txt` (three `tools/huawei_probe.py`
+sessions, the third guided step by step; serial numbers masked) and `huawei-freebuds-se-2-bluetoothctl.txt`
+(the complete SDP list). Model BTFT0016, firmware 1.0.1.129. No other Huawei
+model is claimed.
+
+The earbuds have no Fast Pair stream, and BlueZ alone sees one figure for the
+pair. They have no noise control. What they do have is a vendor channel on
+plain RFCOMM channel 1 (16 refused the connection), behind the Serial Port
+UUID; the record carries nothing Huawei-specific. Routing therefore requires
+the exact reported name `HUAWEI FreeBuds SE 2` and the Serial Port UUID, like
+the TOZO row, and cannot claim arbitrary Serial Port headphones.
+
+### Frames
+
+    5A <len u16 BE> 00 <service> <command> <tlv...> <crc u16 BE>
+
+`len` counts from the `00` to the last TLV byte. The CRC is CRC-16/XMODEM
+(init 0, poly 1021, no reflection) over everything before it; every captured
+frame checks. Each TLV is `<tag> <length> <value>`, and a query is the tags
+it wants with zero length.
+
+| Operation | TX | Observed RX |
+|:--|:--|:--|
+| (channel opens) | — | `5a 00 03 00 01 06 3e bd`, empty, once |
+| Battery | `5a 00 09 00 01 08 01 00 02 00 03 00 fb b9` | `5a 00 14 00 01 08 01 01 61 02 03 61 61 17 03 03 00 00 00 04 02 14 0a 5c 87` |
+| Battery, unasked | — | the same tags as `01 27`, on connect and on every change |
+| Device info | `01 07` with empty tags 0–24 | firmware (tag 07), model (0F), build (0A), serials (09, 18) |
+| Lid closes on / opens off a bud | — | `5a 00 06 00 2b 5f 01 01 01 13 24` / `… 01 01 00 03 05` |
+
+In the battery answer, tag 1 is an overall level, tag 2 three bytes — left,
+right, case — and tag 3 three more in the same order, which look like
+charging bytes but are not read (below). Tag 4 (`14 0a`) never changed.
+
+### What was verified on the hardware
+
+- Both buds and the case reported from the first frame.
+- A bud taken out of the ear and held sends nothing: no `2b 5f`, no
+  battery change. `2b 5f` is not a wear sensor.
+- A bud put in the case with the lid open keeps reporting its own level.
+  When the lid **closes** on it, `2b 5f 01` arrives and the bud reads **0**;
+  when the lid opens, `2b 5f 00` and its level again. The overall level did
+  not follow it to 0. Seen for each bud.
+- **The case is reported second-hand, through a docked bud.** In session 3
+  the case byte in tag 3 went `01` → `00` → `01` in step with the cable,
+  but the left bud was docked throughout. Afterwards, with the bridge
+  running, the owner unplugged the case and the byte stayed `01`, and the
+  case level rose 68 → 72 *after* the unplug. The owner saw the case figures
+  refresh when the left bud docked, and later when the right one did
+  (72 → 84). So the case byte is not a live charging state, and the case
+  level lags in the same way: both are as fresh as the last docking.
+- The buds' bytes in tag 3 stayed `00` throughout, including the left bud
+  sitting in the case, on battery and on the cable, at 95%.
+- The battery query was answered every time it was asked, 3–5 s apart.
+- **One client at a time.** With the owner's phone also connected, the
+  earbuds refused channel 1 (`ECONNREFUSED`) on every attempt, though their
+  SDP record still served it there; with the phone switched off, the same
+  connect was answered at once. The record lists a second serial service,
+  `COM6` on channel 4 under UUID `7033`; it is not used, and was not probed
+  past a connect.
+
+### In the widget
+
+`huawei-bridge` asks for the battery on connect, then takes the earbuds'
+own `01 27` announcements, with a query every 60 s as a backstop. A 0 is a
+bud that is not reporting — it is left out of the line rather than drawn
+empty. Tag 3 is not read, so no part is ever reported charging: the Case
+row's no-bolt rule in `Panel.qml` holds here for the reason it was written,
+a case reported second-hand says "charging" late. A refused channel is
+exit 1 with a line naming the likely holder, so the panel says why and the
+shell keeps retrying until the phone lets go. The line is
+`"modes": true, "available": []`, which hides the mode row.
+
+### Not established
+
+Whether a bud's charging byte ever changes — at a lower level than 95%,
+perhaps. What tag 4 means. No write
+was ever sent.

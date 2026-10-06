@@ -1118,6 +1118,32 @@ Deno.test("NC9 Pro routing requires its reported name and observed service", asy
     ["94:4B:F8:C1:5F:98", "TOZO NC9 Pro"]);
 });
 
+Deno.test("FreeBuds SE 2 routing requires its reported name and its SPP service", async () => {
+  const record = await Deno.readTextFile(
+    new URL("../docs/captures/huawei-freebuds-se-2-bluetoothctl.txt", import.meta.url));
+  const ids = Model.uuidsFromBluetoothctl(record);
+  assertEquals(ids.length, 12, "complete captured UUID list");
+  const name = "HUAWEI FreeBuds SE 2";
+  for (const uuids of [ids, [...ids].reverse(), ids.map(id => id.toUpperCase())]) {
+    assertEquals(Model.controlBackend(uuids, "", name), "huawei");
+  }
+  // The record alone claims nothing: plain SPP is on half the headsets here.
+  assertEquals(Model.controlBackend(ids, ""), "");
+  assertEquals(Model.controlBackend(ids, "", "HUAWEI FreeBuds SE"), "");
+  assertEquals(Model.controlBackend([], "", name), "");
+  // Every brand with a claim of its own still wins.
+  assertEquals(Model.controlBackend([Model.SONY_MDR_V2_UUID, ...ids], "", name), "sony");
+  // The TOZO row is untouched by the shared SPP UUID.
+  assertEquals(Model.controlBackend(ids, "", "TOZO NC9 Pro"), "tozo");
+  assertEquals(Model.isClassicBackend("huawei"), true);
+  assertEquals(Model.bridgeFor("huawei"), "huawei-bridge");
+  assertEquals(Model.bridgeArgs("huawei", { address: "AC:33:28:8C:A2:CD", name }),
+    ["AC:33:28:8C:A2:CD", name]);
+  // Battery only: the empty list hides the mode row.
+  assertEquals(Model.modesAvailable({ available: [] }, "huawei"), []);
+  assertEquals(Model.modeOptions([], "huawei"), []);
+});
+
 Deno.test("TOZO six modes are explicit and keep the existing default four", () => {
   const modes = ["off", "anc", "ambient", "wind", "leisure", "adaptive"];
   assertEquals(Model.modesAvailable({available:modes}, "tozo"), modes);

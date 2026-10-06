@@ -5,7 +5,7 @@
   "version": "1.3.12",
   "author": "Jacek Becela",
   "license": "MIT",
-  "description": "Battery levels and noise-cancellation control for Bluetooth headphones, in the Omarchy bar. JBL, Sony, Samsung, Nothing / CMF, Soundcore, Xiaomi, OPPO, Bose, TOZO; battery on anything with Google Fast Pair or BlueZ.",
+  "description": "Battery levels and noise-cancellation control for Bluetooth headphones, in the Omarchy bar. JBL, Sony, Samsung, Nothing / CMF, Soundcore, Xiaomi, OPPO, Bose, TOZO, Huawei; battery on anything with Google Fast Pair or BlueZ.",
   "kinds": [
     "service",
     "bar-widget"
@@ -17,7 +17,7 @@
   },
   "barWidget": {
     "displayName": "Omaphones",
-    "description": "One icon per connected set, filling with its battery; the panel shows left, right and case, and switches Off / ANC / Ambient — with the ambient level on Sony and Soundcore, ANC strength and low latency on Nothing / CMF. Six listening modes and left, right, case battery on TOZO NC9 Pro.",
+    "description": "One icon per connected set, filling with its battery; the panel shows left, right and case, and switches Off / ANC / Ambient — with the ambient level on Sony and Soundcore, ANC strength and low latency on Nothing / CMF. Six listening modes and left, right, case battery on TOZO NC9 Pro. Left, right, case battery on HUAWEI FreeBuds SE 2.",
     "category": "Audio",
     "aliases": [
       "jbl",
@@ -39,7 +39,9 @@
       "fastpair",
       "battery",
       "tozo",
-      "nc9"
+      "nc9",
+      "huawei",
+      "freebuds"
     ],
     "allowMultiple": false,
     "defaultSection": "right",
