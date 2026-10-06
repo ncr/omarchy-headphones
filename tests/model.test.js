@@ -1144,6 +1144,15 @@ Deno.test("FreeBuds SE 2 routing requires its reported name and its SPP service"
   assertEquals(Model.modeOptions([], "huawei"), []);
 });
 
+Deno.test("a device with no mode row is not told it cancels noise", () => {
+  const all = ["Counting electrons per ear", "Cancelling noise, politely", "Reading the room, ambiently"];
+  const modes = ["Cancelling noise, politely", "Reading the room, ambiently"];
+  assertEquals(Model.heroPhrases(all, modes, true), all);
+  assertEquals(Model.heroPhrases(all, modes, false), ["Counting electrons per ear"]);
+  // Never an empty list to index into.
+  assertEquals(Model.heroPhrases(modes, modes, false), modes);
+});
+
 Deno.test("TOZO six modes are explicit and keep the existing default four", () => {
   const modes = ["off", "anc", "ambient", "wind", "leisure", "adaptive"];
   assertEquals(Model.modesAvailable({available:modes}, "tozo"), modes);

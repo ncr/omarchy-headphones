@@ -598,6 +598,16 @@ function bridgeArgs(backend, values) {
   return out
 }
 
+// The hero's rotating lines for this device: all of them where the panel
+// shows a mode row, and without the ones about the modes where it does not.
+function heroPhrases(all, aboutModes, hasModes) {
+  if (hasModes) return all
+  var out = []
+  for (var i = 0; i < all.length; i++)
+    if (aboutModes.indexOf(all[i]) === -1) out.push(all[i])
+  return out.length > 0 ? out : all
+}
+
 // The Ambient dial's range and the switch's name on this backend.
 function ambientRange(backend) {
   var row = backendRow(backend)
