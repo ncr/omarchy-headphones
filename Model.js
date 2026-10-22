@@ -545,6 +545,15 @@ var BACKENDS = [
     fastPairWithoutBattery: true,
     // What the Xiaomi Earbuds app calls the second mode.
     modeLabels: { ambient: "Transparency" } },
+  { name: "earfun", bridge: "earfun-bridge",
+    // Noise control (Off / ANC / Transparency) on plain SPP; the battery is
+    // on the Fast Pair stream. The record's own vendor UUIDs (0000eb04-… to
+    // 0000eb07-…) are not the channel, so the claim is the reported name and
+    // SPP, like the rows above. Before the JBL row: these earbuds announce a
+    // BLE address on Fast Pair, which alone would hand them to the JBL bridge.
+    modelNames: ["EarFun Air Pro 4"],
+    modelUuids: ["00001101-0000-1000-8000-00805f9b34fb"],
+    args: ["address", "name"] },
   { name: "jbl", bridge: "jbl-bridge",
     ble: true, args: ["bleAddress", "modelId"] }
 ]

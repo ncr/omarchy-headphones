@@ -5,7 +5,7 @@
   "version": "1.3.14",
   "author": "Jacek Becela",
   "license": "MIT",
-  "description": "Battery levels and noise-cancellation control for Bluetooth headphones, in the Omarchy bar. JBL, Sony, Samsung, Nothing / CMF, Soundcore, Xiaomi, Redmi, OPPO, Bose, TOZO, Huawei; battery on anything with Google Fast Pair or BlueZ.",
+  "description": "Battery levels and noise-cancellation control for Bluetooth headphones, in the Omarchy bar. JBL, Sony, Samsung, Nothing / CMF, Soundcore, Xiaomi, Redmi, OPPO, Bose, TOZO, Huawei, EarFun; battery on anything with Google Fast Pair or BlueZ.",
   "kinds": [
     "service",
     "bar-widget"
@@ -28,6 +28,7 @@
       "soundcore",
       "xiaomi",
       "redmi",
+      "earfun",
       "oppo",
       "bose",
       "qc45",

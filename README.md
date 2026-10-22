@@ -1,6 +1,6 @@
 # Omaphones for Omarchy
 
-<p align="center"><b>JBL</b> &nbsp;·&nbsp; <b>Sony</b> &nbsp;·&nbsp; <b>Samsung</b> &nbsp;·&nbsp; <b>Nothing / CMF</b> &nbsp;·&nbsp; <b>Soundcore</b> &nbsp;·&nbsp; <b>Xiaomi</b> &nbsp;·&nbsp; <b>OPPO</b> &nbsp;·&nbsp; <b>Bose</b> &nbsp;·&nbsp; <b>TOZO</b> &nbsp;·&nbsp; <b>Huawei</b> &nbsp;·&nbsp; <b>Redmi</b></p>
+<p align="center"><b>JBL</b> &nbsp;·&nbsp; <b>Sony</b> &nbsp;·&nbsp; <b>Samsung</b> &nbsp;·&nbsp; <b>Nothing / CMF</b> &nbsp;·&nbsp; <b>Soundcore</b> &nbsp;·&nbsp; <b>Xiaomi</b> &nbsp;·&nbsp; <b>OPPO</b> &nbsp;·&nbsp; <b>Bose</b> &nbsp;·&nbsp; <b>TOZO</b> &nbsp;·&nbsp; <b>Huawei</b> &nbsp;·&nbsp; <b>Redmi</b> &nbsp;·&nbsp; <b>EarFun</b></p>
 
 <p align="center"><b>Battery levels and noise-cancellation control for Bluetooth headphones, in the Omarchy bar.</b></p>
 
@@ -126,9 +126,11 @@ Headphones not on the list? [Add yours](#add-your-own-headphones).
 <table>
 <tr>
 <td width="50%"><img src="docs/gallery/redmi-buds-5.png" alt="Redmi Buds 5: left, right and case, Off / ANC / Transparency" width="100%"></td>
+<td width="50%"><img src="docs/gallery/earfun-air-pro-4.png" alt="EarFun Air Pro 4: left, right and case, Off / ANC / Ambient" width="100%"></td>
 </tr>
 <tr>
 <td align="center">Redmi Buds 5 — <a href="https://github.com/quocldce-sys">@quocldce-sys</a></td>
+<td align="center">EarFun Air Pro 4 — <a href="https://github.com/UnFik">@UnFik</a></td>
 </tr>
 </table>
 
@@ -152,7 +154,7 @@ Headphones not on the list? [Add yours](#add-your-own-headphones).
   anything.
 - **Noise control** — Off / ANC / Ambient / TalkThru, from the panel or a key.
   JBL, Sony, Samsung, Nothing / CMF, Soundcore, Xiaomi Buds 5 Pro, Redmi Buds 5, OPPO Enco Air3 Pro,
-  Bose QC45 and Bose QC35 today; built to learn
+  EarFun Air Pro 4, Bose QC45 and Bose QC35 today; built to learn
   your brand. Sony and Soundcore add the ambient level with Focus on Voice or
   wind noise reduction; Nothing / CMF the ANC strength (Low / Mid / High / Adaptive)
   and a low-latency switch, and the Bose QC35 grades its ANC Low or High.
@@ -188,6 +190,7 @@ same idea, built for Apple's own protocol, and the plugin this one is modelled o
 | Soundcore Space 2 (over-ear)| <img src="docs/icons/yes.svg" width="14" alt="yes"> one figure        | <img src="docs/icons/yes.svg" width="14" alt="yes"> Off · ANC · Ambient (level, wind noise reduction) | [@Sovego](https://github.com/Sovego) |
 | Xiaomi Buds 5 Pro (earbuds) | <img src="docs/icons/yes.svg" width="14" alt="yes"> one figure        | <img src="docs/icons/yes.svg" width="14" alt="yes"> Off · ANC · Ambient                          | [@KentoNion](https://github.com/KentoNion)|
 | Redmi Buds 5 (earbuds)      | <img src="docs/icons/yes.svg" width="14" alt="yes"> left, right, case | <img src="docs/icons/yes.svg" width="14" alt="yes"> Off · ANC · Transparency                    | [@quocldce-sys](https://github.com/quocldce-sys) |
+| EarFun Air Pro 4 (earbuds)  | <img src="docs/icons/yes.svg" width="14" alt="yes"> left, right, case (Fast Pair) | <img src="docs/icons/yes.svg" width="14" alt="yes"> Off · ANC · Ambient                          | [@UnFik](https://github.com/UnFik) |
 | OPPO Enco Air3 Pro (earbuds) | <img src="docs/icons/yes.svg" width="14" alt="yes"> left, right, case | <img src="docs/icons/yes.svg" width="14" alt="yes"> Off · ANC · Ambient | [@Aryan447](https://github.com/Aryan447) |
 | Bose QC45 (over-ear)         | <img src="docs/icons/yes.svg" width="14" alt="yes"> one figure        | <img src="docs/icons/yes.svg" width="14" alt="yes"> ANC · Ambient (no Off) | [@Driskol](https://github.com/Driskol) |
 | Bose QC35 (over-ear)         | <img src="docs/icons/yes.svg" width="14" alt="yes"> one figure        | <img src="docs/icons/yes.svg" width="14" alt="yes"> Off · ANC (Low / High) — no Ambient | [@pedrohfp](https://github.com/pedrohfp) |

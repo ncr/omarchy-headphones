@@ -1264,3 +1264,53 @@ Deno.test("the Redmi row takes no other device's claim, and every other claim st
   // A Fast Pair address alone, as for any other headset, is still the JBL row.
   assertEquals(Model.controlBackend([], BLE_ADDRESS, "Redmi Buds 5"), "jbl");
 });
+
+// ---- EarFun Air Pro 4: its SDP record, docs/captures/earfun-air-pro-4-bluetoothctl.txt.
+
+const EARFUN_NAME = "EarFun Air Pro 4";
+
+async function earfunUuids() {
+  const record = await Deno.readTextFile(
+    new URL("../docs/captures/earfun-air-pro-4-bluetoothctl.txt", import.meta.url));
+  return Model.uuidsFromBluetoothctl(record);
+}
+
+Deno.test("EarFun Air Pro 4 is picked by its name and SPP, with or without its Fast Pair address", async () => {
+  const ids = await earfunUuids();
+  assertEquals(ids.length, 12, "complete captured UUID list");
+  for (const uuids of [ids, [...ids].reverse(), ids.map(id => id.toUpperCase())]) {
+    assertEquals(Model.controlBackend(uuids, "", EARFUN_NAME), "earfun");
+    // The address its Fast Pair stream announced: the JBL row would take it.
+    assertEquals(Model.controlBackend(uuids, "50:07:3D:6E:6E:42", EARFUN_NAME), "earfun");
+  }
+  assertEquals(Model.bridgeFor("earfun"), "earfun-bridge");
+  assertEquals(Model.isClassicBackend("earfun"), true);
+  assertEquals(Model.bridgeArgs("earfun", { address: "AA:BB:CC:00:00:02", name: EARFUN_NAME }),
+    ["AA:BB:CC:00:00:02", EARFUN_NAME]);
+  assertEquals(Model.fastPairWithoutBattery("earfun"), false);
+  assertEquals(Model.hasAmbientDial("earfun"), false);
+  assertEquals(Model.modeOptions(["off", "anc", "ambient"], "earfun").map(o => o.label),
+    ["Off", "ANC", "Ambient"]);
+});
+
+Deno.test("neither the EarFun name nor its record alone is the claim", async () => {
+  const ids = await earfunUuids();
+  const withoutSpp = ids.filter(id => id !== "00001101-0000-1000-8000-00805f9b34fb");
+  assertEquals(Model.controlBackend(withoutSpp, "", EARFUN_NAME), "");
+  assertEquals(Model.controlBackend(ids, "", ""), "");
+  assertEquals(Model.controlBackend(ids, "", "EarFun Air Pro 3"), "");
+  assertEquals(Model.controlBackend(ids, "", "EarFun Free Pro 3"), "");
+  // Without the name, the record goes where it went before this row.
+  assertEquals(Model.controlBackend(ids, "50:07:3D:6E:6E:42"), "jbl");
+  assertEquals(Model.controlBackend(withoutSpp, "50:07:3D:6E:6E:42", EARFUN_NAME), "jbl");
+});
+
+Deno.test("the EarFun row takes no other device's claim", () => {
+  for (const device of DEVICES) {
+    assertEquals(Model.controlBackend(device.uuids, device.bleAddress, EARFUN_NAME),
+      device.backend, device.model);
+  }
+  assertEquals(Model.controlBackend(["00001101-0000-1000-8000-00805f9b34fb"], "", "HUAWEI FreeBuds SE 2"), "huawei");
+  assertEquals(Model.controlBackend(["00001101-0000-1000-8000-00805f9b34fb"], "", "TOZO NC9 Pro"), "tozo");
+  assertEquals(Model.controlBackend(REDMI_BUDS_5_UUIDS, BLE_ADDRESS, "Redmi Buds 5"), "redmi");
+});

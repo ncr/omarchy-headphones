@@ -1,0 +1,163 @@
+EarFun Air Pro 4, firmware TW600-3091_20250919_v0.4.1, connected to a laptop
+(Arch, kernel 7.2.5, BlueZ 5.87) on 2026-10-22. Owner: @UnFik. The Classic
+address is masked as AA:BB:CC:00:00:02; nothing else is.
+
+Channel: standard SPP, UUID 00001101-0000-1000-8000-00805f9b34fb, opened by an
+org.bluez.Profile1 registration and ConnectProfile. Frames are GAIA-shaped, no
+checksum: FF <version> <flags> <len> <vendor u16> <command u16> <payload>. Sent
+with version 04, answered with version 03; vendor 000A both ways. An answer
+carries the command with bit 0x8000 set and the payload <status> <value>.
+The command numbers are the ones Gadgetbridge's EarFun support uses. Only the
+ones below were sent; every one of them was answered.
+
+Every time is the time the read returned, from the start of that run. A line
+holding several frames is one read.
+
+== 1. Read-only: one get per command (scratch script, 0.6 s apart)
+
+ 1.001s TX  ff 04 00 00 00 0a 03 15            get ambient sound
+ 1.020s RX  ff 03 00 02 00 0a 83 15 00 00      status 00, value 00 = off
+ 1.601s TX  ff 04 00 00 00 0a 03 3b            get ANC style
+ 1.621s RX  ff 03 00 02 00 0a 83 3b 00 02      status 00, value 02
+ 2.202s TX  ff 04 00 00 00 0a 03 3d            get transparency style
+ 2.222s RX  ff 03 00 02 00 0a 83 3d 00 00      status 00, value 00
+ 2.803s TX  ff 04 00 00 00 0a 03 06            get battery left
+ 2.849s RX  ff 03 00 02 00 0a 83 06 00 64      100
+ 3.403s TX  ff 04 00 00 00 0a 03 07            get battery right
+ 3.434s RX  ff 03 00 02 00 0a 83 07 00 64      100
+ 4.004s TX  ff 04 00 00 00 0a 03 17            get battery case
+ 4.038s RX  ff 03 00 02 00 0a 83 17 00 5a      90
+ 4.604s TX  ff 04 00 00 00 0a 03 09            get firmware
+ 4.630s RX  ff 03 00 1b 00 0a 83 09 00 54 57 36 30 30 2d 33 30 39 31 5f 32 30 32 35 30 39 31 39 5f 76 30 2e 34 2e 31
+                                               "TW600-3091_20250919_v0.4.1"
+ 5.205s TX  ff 04 00 00 00 0a 03 00            get GAIA API version
+ 5.217s RX  ff 03 00 04 00 0a 83 00 00 03 03 01
+ 5.616s RX  ff 03 00 05 00 0a 03 58 00 5c 3b 4d 01 ff 03 00 05 00 0a 03 58 00 33 4e e5 00
+ 5.891s RX  ff 03 00 05 00 0a 03 58 00 5c 3b 4d 01 ff 03 00 05 00 0a 03 58 00 33 4e e5 00 ff 03 00 05 00 0a 03 58 00 5c 3b 4d 01 ff 03 00 05 00 0a 03 58 00 33 4e e5 00
+ 5.981s RX  ff 03 00 02 00 0a 03 50 00 01
+                                               the last three reads: the earbuds' own
+                                               frames (0358, 0350, no ack bit), unasked
+
+== 2. Sets, 1.5 s apart, each read back (scratch script)
+
+ 1.001s TX  ff 04 00 00 00 0a 03 15
+ 1.046s RX  ff 03 00 02 00 0a 83 15 00 00      off
+ 2.502s TX  ff 04 00 01 00 0a 03 14 01         set ANC: no reply of any kind
+ 4.004s TX  ff 04 00 00 00 0a 03 15
+ 4.681s RX  ff 03 00 02 00 0a 83 15 00 01      anc
+ 5.505s TX  ff 04 00 01 00 0a 03 14 02         set transparency: no reply
+ 7.007s TX  ff 04 00 00 00 0a 03 15
+ 7.140s RX  ff 03 00 02 00 0a 83 15 00 02      ambient
+ 8.508s TX  ff 04 00 01 00 0a 03 14 00         set off: no reply
+10.009s TX  ff 04 00 00 00 0a 03 15
+10.144s RX  ff 03 00 02 00 0a 83 15 00 00      off
+
+== 3. Touch on the earbuds (scratch script)
+
+Channel held 60 s while the owner touched and held a stem two or three
+times. Nothing about the mode was sent unasked:
+
+ 0.952s RX  ff 03 00 05 00 0a 03 58 00 5c 3b 4d 01 ff 03 00 05 00 0a 03 58 00 33 4e e5 00
+ 1.000s TX  ff 04 00 00 00 0a 03 15
+ 1.069s RX  ff 03 00 02 00 0a 03 4d 00 03
+ 1.182s RX  ff 03 00 02 00 0a 83 15 00 00
+ 7.491s RX  ff 03 00 02 00 0a 03 4d 00 03 ff 03 00 05 00 0a 03 58 00 5c 3b 4d 01 ff 03 00 05 00 0a 03 58 00 33 4e e5 00
+
+Then 30 gets, 1.5 s apart, while the owner touched and held a stem three
+times with pauses: every answer was ff 03 00 02 00 0a 83 15 00 00 (off). The
+touch did not change the noise control on this pair. Touch is enabled
+(get 0335 answered ff 03 00 02 00 0a 83 35 00 00); what the hold is assigned
+to was not decoded. An unasked change of mode was therefore never seen, in
+either direction.
+
+== 4. How long a set takes (scratch script, gets 0.4 s apart)
+
+ 1.001s TX  ff 04 00 00 00 0a 03 15
+ 1.037s RX  ff 03 00 02 00 0a 83 15 00 00
+ 1.402s TX  ff 04 00 01 00 0a 03 14 01         set ANC
+ 1.803s TX  ff 04 00 00 00 0a 03 15
+ 1.840s RX  ff 03 00 02 00 0a 83 15 00 00      still off
+ 2.203s TX  ff 04 00 00 00 0a 03 15
+ 2.223s RX  ff 03 00 02 00 0a 83 15 00 00
+ 2.604s TX  ff 04 00 00 00 0a 03 15
+ 2.640s RX  ff 03 00 02 00 0a 83 15 00 00
+ 3.004s TX  ff 04 00 00 00 0a 03 15
+ 3.405s TX  ff 04 00 01 00 0a 03 14 00         set off
+ 3.533s RX  ff 03 00 02 00 0a 83 15 00 01      anc (the 3.004 get, answered late)
+ 3.805s TX  ff 04 00 00 00 0a 03 15
+ 4.130s RX  ff 03 00 02 00 0a 83 15 00 01
+ 4.205s TX  ff 04 00 00 00 0a 03 15
+ 4.238s RX  ff 03 00 02 00 0a 83 15 00 01
+ 4.606s TX  ff 04 00 00 00 0a 03 15
+ 4.647s RX  ff 03 00 02 00 0a 83 15 00 01
+ 5.007s TX  ff 04 00 00 00 0a 03 15
+ 5.039s RX  ff 03 00 02 00 0a 83 15 00 01
+ 5.407s TX  ff 04 00 00 00 0a 03 15
+ 5.433s RX  ff 03 00 02 00 0a 83 15 00 00      off
+ ... seven more gets, all off.
+
+A set is not refused or dropped: the get keeps answering the old value until
+the change is done, about 2 s after the set, and the get sent during the
+change is answered late. A first run of tools/earfun_probe.py read back once,
+1.5 s after each set, and read "ambient" after a set to off for that reason;
+the probe and the bridge now ask every second, five times at most.
+
+== 5. tools/earfun_probe.py --cycle anc,ambient,off --listen 5 (2026-10-22T09:10:14+07:00)
+
+  0.000s TX  ff 04 00 00 00 0a 03 09  # get the firmware
+  0.065s RX  ff 03 00 1b 00 0a 83 09 00 54 57 36 30 30 2d 33 30 39 31 5f 32 30 32 35 30 39 31 39 5f 76 30 2e 34 2e 31
+  0.065s     frame ff 03 00 1b 00 0a 83 09 00 54 57 36 30 30 2d 33 30 39 31 5f 32 30 32 35 30 39 31 39 5f 76 30 2e 34 2e 31  # firmware TW600-3091_20250919_v0.4.1
+  1.001s TX  ff 04 00 00 00 0a 03 15  # get the noise control
+  1.020s RX  ff 03 00 02 00 0a 83 15 00 00
+  1.020s     frame ff 03 00 02 00 0a 83 15 00 00  # noise control off
+  1.020s initial mode: off
+  1.020s TX  ff 04 00 01 00 0a 03 14 01  # set anc
+  2.021s TX  ff 04 00 00 00 0a 03 15  # read it back
+  2.058s RX  ff 03 00 02 00 0a 83 15 00 00
+  2.058s     frame ff 03 00 02 00 0a 83 15 00 00  # noise control off
+  3.059s TX  ff 04 00 00 00 0a 03 15  # read it back
+  3.458s RX  ff 03 00 02 00 0a 83 15 00 01
+  3.458s     frame ff 03 00 02 00 0a 83 15 00 01  # noise control anc
+  3.458s anc: the earbuds agree
+  3.759s TX  ff 04 00 01 00 0a 03 14 02  # set ambient
+  4.760s TX  ff 04 00 00 00 0a 03 15  # read it back
+  4.815s RX  ff 03 00 02 00 0a 83 15 00 01
+  4.815s     frame ff 03 00 02 00 0a 83 15 00 01  # noise control anc
+  5.816s TX  ff 04 00 00 00 0a 03 15  # read it back
+  5.864s RX  ff 03 00 02 00 0a 83 15 00 02
+  5.864s     frame ff 03 00 02 00 0a 83 15 00 02  # noise control ambient
+  5.864s ambient: the earbuds agree
+  6.164s TX  ff 04 00 01 00 0a 03 14 00  # set off
+  7.166s TX  ff 04 00 00 00 0a 03 15  # read it back
+  7.202s RX  ff 03 00 02 00 0a 83 15 00 02
+  7.202s     frame ff 03 00 02 00 0a 83 15 00 02  # noise control ambient
+  8.203s TX  ff 04 00 00 00 0a 03 15  # read it back
+  8.246s RX  ff 03 00 02 00 0a 83 15 00 00
+  8.246s     frame ff 03 00 02 00 0a 83 15 00 00  # noise control off
+  8.246s off: the earbuds agree
+  8.547s TX  ff 04 00 01 00 0a 03 14 00  # set off
+  9.548s TX  ff 04 00 00 00 0a 03 15  # read it back
+  9.570s RX  ff 03 00 02 00 0a 83 15 00 00
+  9.570s     frame ff 03 00 02 00 0a 83 15 00 00  # noise control off
+  9.570s off: the earbuds agree
+  9.870s restored: off
+exit 0
+
+The earbuds were in off before and after. The earbuds sent nothing of their
+own in the 5 s listen at the end of this run; in an earlier run of the same
+command they sent, 2.4 s after the restore:
+
+ 11.566s RX  ff 03 00 05 00 0a 03 58 00 5c 3b 4d 01 ff 03 00 05 00 0a 03 58 00 33 4e e5 00 ff 03 00 02 00 0a 03 4d 00 03
+
+== 6. Fast Pair Message Stream (tools/gfps_probe.py), same earbuds
+
+  <<< 03010003f3d9b4                                   model id f3d9b4
+  <<< 0303000364645a030a0008126dfca5498fd15f            battery 64 64 5a, then code 0a
+  <<< 0302000650073d6e6e42                             BLE address
+  BATTERY: left=100%, right=100%, case=90%
+
+One battery byte per part, left, right, case: 100, 100, 90, nothing charging.
+A second connection, through the second adapter, sent the same three frames in
+one read:
+  <<< 03010003f3d9b40302000650073d6e6e420303000364645a030a0008aee546c9b88c978f
+No charging byte and no "no reading" byte (7F) was captured.
