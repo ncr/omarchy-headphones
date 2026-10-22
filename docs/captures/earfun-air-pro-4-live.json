@@ -1,0 +1,110 @@
+{
+  "time": "2026-10-22T02:20:19.097810+00:00",
+  "plugin": "cc0c10e857d9160941166d019797d643df057340",
+  "device": "EarFun Air Pro 4",
+  "address": "AA:BB:CC:00:00:02 (masked)",
+  "status": "EarFun Air Pro 4 \u00b7 L 90% \u00b7 R 100% \u00b7 case 90%",
+  "initial": "off",
+  "bridge_pids": [
+    765008
+  ],
+  "checks": [
+    {
+      "action": "setModeFor",
+      "value": "anc",
+      "response": "ok",
+      "reported": "anc",
+      "seconds": 2.68
+    },
+    {
+      "action": "setModeFor",
+      "value": "ambient",
+      "response": "ok",
+      "reported": "ambient",
+      "seconds": 2.39
+    },
+    {
+      "action": "setModeFor",
+      "value": "off",
+      "response": "ok",
+      "reported": "off",
+      "seconds": 1.94
+    },
+    {
+      "action": "setModeFor",
+      "value": "anc",
+      "response": "ok",
+      "reported": "anc",
+      "seconds": 2.4
+    },
+    {
+      "action": "setModeFor",
+      "value": "talkthru",
+      "response": "unavailable",
+      "reported_after": "anc",
+      "note": "not a mode these earbuds have"
+    },
+    {
+      "action": "leftFor",
+      "reported": "90"
+    },
+    {
+      "action": "rightFor",
+      "reported": "100"
+    },
+    {
+      "action": "batteryCaseFor",
+      "reported": "90"
+    },
+    {
+      "action": "batteryFor",
+      "reported": "90"
+    },
+    {
+      "action": "chargingFor",
+      "reported": ""
+    },
+    {
+      "action": "refresh",
+      "reported": "anc",
+      "verified": "mode persistence",
+      "left": "90",
+      "right": "100",
+      "case": "90"
+    },
+    {
+      "action": "reconnect",
+      "reported": "anc",
+      "seconds": 6.85,
+      "verified": "mode recovery",
+      "bridge_before": [
+        765008
+      ],
+      "bridge_while_disconnected": [],
+      "status_while_disconnected": "EarFun Air Pro 4 \u00b7 not connected",
+      "bridge_after": [
+        783665
+      ],
+      "left": "90",
+      "right": "100",
+      "case": "90"
+    },
+    {
+      "action": "setModeFor after reconnect",
+      "value": "ambient",
+      "response": "ok",
+      "reported": "ambient",
+      "seconds": 2.12
+    }
+  ],
+  "restoration": [
+    {
+      "action": "setModeFor",
+      "value": "off",
+      "reported": "off",
+      "ok": true
+    }
+  ],
+  "passed": true,
+  "status_end": "EarFun Air Pro 4 \u00b7 L 90% \u00b7 R 100% \u00b7 case 90%"
+}

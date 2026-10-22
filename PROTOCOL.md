@@ -1257,6 +1257,17 @@ stdin `set <mode>`, the four exit codes. A name with no row is exit 4.
 After a set it asks every second, five times at most, until the earbuds report
 the mode that was set; the line changes only when they do.
 
+Owner live check, through the running plugin's IPC on commit `cc0c10e`
+([`docs/captures/earfun-air-pro-4-live.json`](docs/captures/earfun-air-pro-4-live.json)):
+from off, ANC, Ambient, Off and ANC were each set and reported back by the
+earbuds in 1.9 to 2.7 s; `talkthru` was refused as unavailable; Fast Pair gave
+left 90, right 100, case 90; the mode held across a Fast Pair refresh; after a
+Bluetooth disconnect the bridge exited and the panel said not connected, and
+after the reconnect a new bridge reported ANC again in 6.9 s and took a set to
+Ambient; off was restored and read back. Not checked live: charging, a bud in
+the case, the earbuds' own touch control (it did not change the mode, above),
+another pair connected at the same time, and how the modes sound.
+
 ### The probe
 
 [`tools/earfun_probe.py`](tools/earfun_probe.py):
