@@ -1148,7 +1148,9 @@ Panel {
     }
 
     Component.onCompleted: claimAnchor()
-    Component.onDestruction: if (root.currentAnchor === slot) root.currentAnchor = null
+    // When the whole widget goes (plugin disabled or reloaded), root is torn
+    // down first and is already null here; there is no anchor left to release.
+    Component.onDestruction: if (root && root.currentAnchor === slot) root.currentAnchor = null
 
     Connections {
       target: root
