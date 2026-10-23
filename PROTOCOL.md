@@ -1170,6 +1170,122 @@ on every way out, saying `RESTORE FAILED` and exiting 2 if it cannot. Mode
 changes are audible. Turn `useModeControl` off first: the bridge holds the
 channel.
 
+## EarFun Air Pro 4 — GAIA-shaped frames on SPP
+
+Confirmed on an **EarFun Air Pro 4** (firmware `TW600-3091_20250919_v0.4.1`, as
+the earbuds report it) on BlueZ 5.87. The
+command numbers are the ones Gadgetbridge's EarFun support uses; only the ones
+below were sent, and every one of them was answered. The capture is
+[`docs/captures/earfun-air-pro-4.txt`](docs/captures/earfun-air-pro-4.txt), the
+SDP record
+[`docs/captures/earfun-air-pro-4-bluetoothctl.txt`](docs/captures/earfun-air-pro-4-bluetoothctl.txt).
+
+`bluetoothctl info` lists, among the standard audio profiles:
+
+| UUID | What it is | Answers? |
+|---|---|---|
+| `df21fe2c-2515-4fdb-8886-f12c4d67927c` | Fast Pair Message Stream | **Yes — battery: left, right, case**, model id `f3d9b4`, and a BLE address |
+| `00001101-0000-1000-8000-00805f9b34fb` | standard SPP | **Yes: the frames below** |
+| `0000eb04-d102-11e1-9b23-00025b00a5a5` … `0000eb07-…` | vendor | not tried |
+| `00001100-d102-11e1-9b23-00025b00a5a5` | CSR GAIA | **absent**: the `xiaomi` row does not claim these earbuds |
+
+The widget picks the backend from the reported name (`EarFun Air Pro 4`) and
+SPP together, like TOZO, Huawei and Redmi: plain SPP is on most headsets here,
+and the `eb04`–`eb07` vendor UUIDs were not the channel. The row sits before
+JBL's because the Fast Pair stream announces a BLE address, which alone hands a
+device to the JBL bridge. The channel is opened with a Profile1 for SPP,
+`Role` `client`, asynchronous `ConnectProfile`.
+
+### Frames
+
+```
+FF <version> <flags> <len u8> <vendor u16be> <command u16be> <payload>
+```
+
+No checksum. Sent with version `04`, answered with version `03`, flags `00`
+and vendor `000A` both ways. An answer carries the command with bit `0x8000`
+set, and the payload `<status> <value>`; status `00` was the only one seen.
+The earbuds also send frames unasked (commands `034D`, `0350`, `0358`, without
+the ack bit), often several in one read. They are not read.
+
+### The noise control
+
+```
+->  ff 04 00 00 00 0a 03 15              get
+<-  ff 03 00 02 00 0a 83 15 00 00        off           (01 cancelling, 02 transparency)
+->  ff 04 00 01 00 0a 03 14 01           set: cancelling
+                                         (nothing comes back)
+```
+
+A set is answered by nothing: no acknowledgement and no announcement. The get
+keeps answering the old value until the change is done, 0.7 to 2.1 s after the
+set in the capture, and a get sent during the change is answered late. A set
+sent right after another change is not lost, only slow. All three values were
+set and read back; the earbuds were put back in off.
+
+The strength inside a state is a separate setting (get `033B`, the ANC style,
+answered `02`; get `033D`, the transparency style, answered `00`). A set of
+`0314` leaves it where it was. The bridge reads and writes neither.
+
+Touch and hold on a stem did not change the noise control on this pair (touch is
+enabled: get `0335` answered `00`), and nothing about the mode was sent unasked
+in a minute of listening. So a change made outside the bridge was never seen
+announced, and the bridge asks for the mode again every 10 s.
+
+### The battery
+
+Fast Pair, as for JBL:
+
+```
+<-  03 03 00 03 64 64 5a                 left 100, right 100, case 90
+```
+
+The same numbers came back on SPP (gets `0306`, `0307`, `0317`), which the
+bridge does not use. No charging byte and no "no reading" byte was captured.
+
+Not tried: the eb04–eb07 channels, the ANC and transparency styles as
+settings, the equaliser, the touch assignments, wear detection, and what the
+earbuds say while charging.
+
+### In the widget
+
+[`earfun-bridge`](earfun-bridge) follows [`BRIDGE.md`](BRIDGE.md): the Classic
+address and the reported name (which picks its row in `MODELS`), the JSON line,
+stdin `set <mode>`, the four exit codes. A name with no row is exit 4.
+
+```json
+{"modes": true, "mode": "anc", "available": ["off","anc","ambient"]}
+```
+
+After a set it asks every second, five times at most, until the earbuds report
+the mode that was set; the line changes only when they do.
+
+Owner live check, through the running plugin's IPC on commit `cc0c10e`
+([`docs/captures/earfun-air-pro-4-live.json`](docs/captures/earfun-air-pro-4-live.json)):
+from off, ANC, Ambient, Off and ANC were each set and reported back by the
+earbuds in 1.9 to 2.7 s; `talkthru` was refused as unavailable; Fast Pair gave
+left 90, right 100, case 90; the mode held across a Fast Pair refresh; after a
+Bluetooth disconnect the bridge exited and the panel said not connected, and
+after the reconnect a new bridge reported ANC again in 6.9 s and took a set to
+Ambient; off was restored and read back. Not checked live: charging, a bud in
+the case, the earbuds' own touch control (it did not change the mode, above),
+another pair connected at the same time, and how the modes sound.
+
+### The probe
+
+[`tools/earfun_probe.py`](tools/earfun_probe.py):
+
+```bash
+tools/earfun_probe.py AA:BB:CC:00:00:02                       # read the firmware and the mode
+tools/earfun_probe.py AA:BB:CC:00:00:02 --cycle anc,ambient,off
+```
+
+It reads by default. `--cycle` writes only when the initial mode is known,
+checks each set by asking until the earbuds agree, and puts the initial mode
+back on every way out, saying `RESTORE FAILED` and exiting 2 if it cannot.
+Mode changes are audible. Turn `useModeControl` off first: the bridge holds
+the channel.
+
 ## Nothing NT Link — the Nothing X protocol on RFCOMM (channel 15, or 28)
 
 A fourth channel, and the first one read from other people's work rather than

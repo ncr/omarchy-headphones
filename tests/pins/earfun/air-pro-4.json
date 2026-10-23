@@ -1,0 +1,184 @@
+{
+  "model": "EarFun Air Pro 4",
+  "owner": "UnFik",
+  "bridge": "earfun-bridge",
+  "capture": "docs/captures/earfun-air-pro-4.txt",
+  "notes": "Noise control on standard SPP, GAIA-shaped frames with vendor 000A and no checksum; firmware TW600-3091_20250919_v0.4.1. Get 0315 is answered by 8315 <status 00> <value>: 00 off, 01 noise cancelling, 02 transparency. Set 0314 <value> is not acknowledged and the get answers the old value until the change is done (0.7-2.1 s), so the bridge asks again every second until the earbuds agree. The frames fed here are section 5 of the capture, tools/earfun_probe.py --cycle anc,ambient,off. The battery is on the Fast Pair stream, not here.",
+  "session": {},
+  "steps": [
+    {
+      "call": "open",
+      "note": "the channel is up: ask for the mode"
+    },
+    {
+      "sent": [
+        "ff 04 00 00 00 0a 03 15"
+      ]
+    },
+    {
+      "device": "ff 03 00 02 00 0a 83 15 00 00",
+      "note": "off, as the earbuds were"
+    },
+    {
+      "lines": [
+        {
+          "modes": true,
+          "mode": "off",
+          "available": [
+            "off",
+            "anc",
+            "ambient"
+          ]
+        }
+      ]
+    },
+    {
+      "command": "set anc"
+    },
+    {
+      "sent_last": "ff 04 00 01 00 0a 03 14 01"
+    },
+    {
+      "line_count": 1,
+      "note": "no acknowledgement comes, and the bridge does not print the mode on the strength of having sent it"
+    },
+    {
+      "call": "recheck",
+      "note": "the readback, RECHECK_MS after the set"
+    },
+    {
+      "sent_last": "ff 04 00 00 00 0a 03 15"
+    },
+    {
+      "device": "ff 03 00 02 00 0a 83 15 00 00",
+      "note": "the change is not done yet: the get still answers off"
+    },
+    {
+      "line_count": 1
+    },
+    {
+      "call": "recheck"
+    },
+    {
+      "device": "ff 03 00 02 00 0a 83 15 00 01"
+    },
+    {
+      "line": {
+        "modes": true,
+        "mode": "anc",
+        "available": [
+          "off",
+          "anc",
+          "ambient"
+        ]
+      }
+    },
+    {
+      "call": "recheck",
+      "note": "the earbuds agree: no further ask"
+    },
+    {
+      "sent_last": "ff 04 00 00 00 0a 03 15"
+    },
+    {
+      "state": {
+        "rechecks": 0
+      }
+    },
+    {
+      "command": "set ambient"
+    },
+    {
+      "sent_last": "ff 04 00 01 00 0a 03 14 02"
+    },
+    {
+      "call": "recheck"
+    },
+    {
+      "device": "ff 03 00 02 00 0a 83 15 00 01"
+    },
+    {
+      "call": "recheck"
+    },
+    {
+      "device": "ff 03 00 02 00 0a 83 15 00 02"
+    },
+    {
+      "line": {
+        "modes": true,
+        "mode": "ambient",
+        "available": [
+          "off",
+          "anc",
+          "ambient"
+        ]
+      }
+    },
+    {
+      "command": "set off"
+    },
+    {
+      "sent_last": "ff 04 00 01 00 0a 03 14 00"
+    },
+    {
+      "call": "recheck"
+    },
+    {
+      "device": "ff 03 00 02 00 0a 83 15 00 02"
+    },
+    {
+      "line_count": 3
+    },
+    {
+      "call": "recheck"
+    },
+    {
+      "device": "ff 03 00 02 00 0a 83 15 00 00"
+    },
+    {
+      "line": {
+        "modes": true,
+        "mode": "off",
+        "available": [
+          "off",
+          "anc",
+          "ambient"
+        ]
+      }
+    },
+    {
+      "device": "ff 03 00 05 00 0a 03 58 00 5c 3b 4d 01 ff 03 00 05 00 0a 03 58 00 33 4e e5 00 ff 03 00 02 00 0a 03 4d 00 03",
+      "note": "what the earbuds send on their own, in one read: framed, not read"
+    },
+    {
+      "line_count": 4
+    },
+    {
+      "command": "set talkthru",
+      "note": "not a mode these earbuds have: nothing goes out"
+    },
+    {
+      "command": "level 3"
+    },
+    {
+      "command": "voice on"
+    },
+    {
+      "sent": [
+        "ff 04 00 00 00 0a 03 15",
+        "ff 04 00 01 00 0a 03 14 01",
+        "ff 04 00 00 00 0a 03 15",
+        "ff 04 00 00 00 0a 03 15",
+        "ff 04 00 01 00 0a 03 14 02",
+        "ff 04 00 00 00 0a 03 15",
+        "ff 04 00 00 00 0a 03 15",
+        "ff 04 00 01 00 0a 03 14 00",
+        "ff 04 00 00 00 0a 03 15",
+        "ff 04 00 00 00 0a 03 15"
+      ]
+    },
+    {
+      "exit": null
+    }
+  ]
+}

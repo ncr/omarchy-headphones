@@ -1,8 +1,8 @@
 # The bridge contract
 
 A bridge is one process that holds one link to one device and mirrors its
-listening mode — or, where the device has none, its battery. Eleven exist — `jbl-bridge`, `sony-bridge`, `samsung-bridge`,
-`nothing-bridge`, `xiaomi-bridge`, `soundcore-bridge`, `oppo-bridge`, `bose-bridge`, `tozo-bridge`, `huawei-bridge`, `redmi-bridge` — and the shell does not
+listening mode — or, where the device has none, its battery. Twelve exist — `jbl-bridge`, `sony-bridge`, `samsung-bridge`,
+`nothing-bridge`, `xiaomi-bridge`, `soundcore-bridge`, `oppo-bridge`, `bose-bridge`, `tozo-bridge`, `huawei-bridge`, `redmi-bridge`, `earfun-bridge` — and the shell does not
 care which is running: they all print the same lines, read the same commands
 and end the same four ways. This file is that contract, written once. A
 bridge's docstring says what is particular to its protocol and points here
@@ -150,3 +150,14 @@ object, so the panel draws no mode row and every stdin command is ignored
 without a frame. Exit 3 means the battery query went unanswered. The
 earbuds serve the channel to one client: while a phone's AI Life app holds
 it, they refuse the connection, which is exit 1 with an error line saying so.
+
+
+### EarFun Air Pro 4 extension
+
+`earfun-bridge <classic-address> <reported-name>` opens standard SPP through a
+Profile1 and accepts only its owner's model row; a name with no row is exit 4.
+It reports the mode only, `available` `off`, `anc`, `ambient`: the battery is
+the Fast Pair stream's. The earbuds neither acknowledge a set nor announce a
+change, so after a set the bridge asks every second, at most five times, until
+they report the mode that was set, and asks again every 10 s besides. Exit 3
+means the mode get went unanswered twice.
