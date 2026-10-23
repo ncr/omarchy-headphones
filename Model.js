@@ -160,13 +160,22 @@ function followedAddresses(devices, filter, preferAddress) {
 // set it was made for: it never re-picks, it looks its own address up again.
 // Case-insensitively, because an address that came back from a helper is not
 // guaranteed to be cased the way BlueZ writes it.
+//
+// A machine with two Bluetooth adapters lists the same earbuds once per adapter,
+// the one it is connected through and the one it is merely paired with. The
+// connected one is the device: asking for the first would, in whichever order
+// BlueZ happened to list them, read "not connected" off a pair that is playing.
 function deviceByAddress(devices, address) {
   var wanted = str(address).trim().toUpperCase()
   if (wanted === "") return null
   var list = devices || []
-  for (var i = 0; i < list.length; i++)
-    if (list[i] && str(list[i].address).toUpperCase() === wanted) return list[i]
-  return null
+  var found = null
+  for (var i = 0; i < list.length; i++) {
+    if (!list[i] || str(list[i].address).toUpperCase() !== wanted) continue
+    if (list[i].connected === true) return list[i]
+    if (found === null) found = list[i]
+  }
+  return found
 }
 
 // The followers in the order the bar draws them: connected first, then the set
