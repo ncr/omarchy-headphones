@@ -145,6 +145,17 @@ Headphones not on the list? [Add yours](#add-your-own-headphones).
 </tr>
 </table>
 
+<table>
+<tr>
+<td width="50%"><img src="docs/gallery/redmi-buds-3-pro.png" alt="Redmi Buds 3 Pro: left, right and case, Off / ANC / Transparency" width="100%"></td>
+<td width="50%"></td>
+</tr>
+<tr>
+<td align="center">Redmi Buds 3 Pro — <a href="https://github.com/osteotek">@osteotek</a></td>
+<td align="center"></td>
+</tr>
+</table>
+
 ## What it does
 
 - **Battery level** — per earbud and the case, or the single battery of
