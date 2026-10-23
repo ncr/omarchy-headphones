@@ -2253,3 +2253,67 @@ shell keeps retrying until the phone lets go. The line is
 Whether a bud's charging byte ever changes — at a lower level than 95%,
 perhaps. What tag 4 means. No write
 was ever sent.
+
+## QCY H3: battery only, no reachable control channel
+
+Owner: [@carraly](https://github.com/carraly). The evidence is
+[`docs/captures/qcy-h3-bluetoothctl.txt`](docs/captures/qcy-h3-bluetoothctl.txt)
+(the BlueZ device view) and
+[`docs/captures/qcy-h3-live.txt`](docs/captures/qcy-h3-live.txt) (the live
+probe, complete and unedited). This model is a battery-only finding because
+that is the whole of what the headset answered on this host: the battery
+figure through BlueZ's own battery service, and nothing on any control
+channel.
+
+A **QCY H3** (`84:AC:60:4A:43:F0`, public). Its Classic SDP carries only the
+standard set the BlueZ view lists — Serial Port `00001101`, Audio Sink
+`0000110b`, A/V Remote Control Target `0000110c`, Advanced Audio
+Distribution `0000110d`, A/V Remote Control `0000110e`, Handsfree `0000111e`,
+PnP Information `00001200` — and no GATT UUID.
+
+What one `--spp` run shows, with the H3 connected, is these three things:
+
+- **GATT: no tree at all.** The probe waits the 45 seconds it allows for the
+  device's managed-objects tree to fill, and then logs
+  `GATT TREE 0 services 0 characteristics under /org/bluez/hci0/dev_84_AC_60_4A_43_F0`:
+  no `GattService1` and no `GattCharacteristic1` object appears.
+- **The SDP server names the Serial Port channel.** SDP is not an RFCOMM
+  service: it is an L2CAP service on PSM 1, so the probe opens
+  `SDP CONNECTED psm 1` there and sends a well-formed
+  `SDP_SERVICE_SEARCH_ATTR_REQ` (PDU `0x06`) for the `00001101` record:
+  `06 00 01 00 16 35 03 19 11 01 02 00 35 0c 09 00 00 09 00 01 09 00 04 09 00 05 00`.
+  That is a search pattern holding the 16-bit UUID `0x1101`, then the maximum
+  answer size `0x0200`, then the attribute IDs `0x0000`, `0x0001`, `0x0004`
+  and `0x0005`, then a continuation byte of 0. It is answered 14 ms later with
+  `SDP RX 07 00 01 00 56 …` — an `SDP_SERVICE_SEARCH_ATTR_RSP` (PDU `0x07`)
+  whose AttributeLists hold **two identical Serial Port records**, both with
+  record handle `0x00010004`. Each carries a `ServiceClassIDList` of `0x1101`
+  and a `ProtocolDescriptorList` (attribute `0x0004`) whose RFCOMM entry is
+  `19 00 03 08 01`, i.e. UUID `0x0003` with server channel **1**. The probe
+  logs `SPP SDP CHANNEL 1` and opens that channel.
+- **Frames sent on that channel, nothing back.** On the channel the record
+  names, the four read requests go out one at a time, each followed by a
+  500 ms read: `TX fe 01 02`, `TX fe 01 0c`, `TX fe 01 17`, `TX fe 01 30`,
+  and `RX none` after every one of them. Not one byte comes back, and no
+  `RX closed by peer` line appears: the headset holds the channel open and
+  says nothing to it.
+
+So the mode row is correct as `unsupported`: there is a battery (one figure,
+70 % in the bluetoothctl capture) and no control channel the plugin could
+hold. The Serial Port record does name channel 1, but the four frames the QCY
+standard table lists are answered there by nothing, so no `qcy-bridge` exists
+or is intended from this finding. The plugin does not invent bytes for a
+headset that answered none.
+
+### Where those four frames come from
+
+`fe 01 02`, `fe 01 0c`, `fe 01 17` and `fe 01 30` are the read requests of the
+QCY standard protocol table — battery, listening mode, anc setting, version —
+`SPP_FRAMES` in `tools/qcy_probe.py`. They come from
+public reverse-engineering of the QCY/Quicky protocol, not from anything this
+headset ever answered; the capture above is what the headset does with them,
+which is nothing. The `01 00` tails of `fe 01 0c 01 00` and `fe 01 17 01 00`
+that an earlier revision of the probe listed are the length and the value of a
+*setting* (mode 0, anc 0), so the probe sends the bare queries `fe 01 0c` and
+`fe 01 17` instead. Nothing in `SPP_FRAMES` carries a parameter at all, so no
+run of this probe can set a mode on anybody's headphones.
