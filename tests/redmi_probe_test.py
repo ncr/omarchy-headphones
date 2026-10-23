@@ -259,5 +259,132 @@ class Arguments(unittest.TestCase):
             self.assertEqual(raised.exception.code, 2)
 
 
+
+# ---- Redmi Buds 3 Pro: the handshake first, and announcements that come back
+#      until they are answered (docs/captures/redmi-buds-3-pro.txt, runs 2 and 3).
+
+THEIR_CHALLENGE = bytes.fromhex("785af7fbb2609cc774c27d69d13621b9")
+B3P = bridge.MODELS["Redmi Buds 3 Pro"]
+REPEAT = 2.0   # seconds before an unanswered announcement came again
+
+
+class AuthEarbuds(Earbuds):
+    """Earbuds that answer nothing until authenticated, and repeat every
+    unanswered announcement two seconds later, as the captured ones did. Synthetic where told to answer wrongly or not at all."""
+
+    def __init__(self, clock, wrong_answer=False, mute_auth=False, **kwargs):
+        super().__init__(clock, **kwargs)
+        self.wrong_answer = wrong_answer
+        self.mute_auth = mute_auth
+        self.authenticated = False
+        self.unanswered = []
+        self.acked = []
+
+    def write(self, data):
+        frame, _ = bridge.split_frame(bytearray(data))
+        opcode, flags = frame[4], frame[3]
+        if not self.authenticated:
+            self.writes.append(bytes(data))
+            if self.mute_auth:
+                return
+            if opcode == bridge.OP_AUTH_CHALLENGE and flags & 0x80:
+                answer = bridge.auth_response(frame[9:25])
+                if self.wrong_answer:
+                    answer = bytes([answer[0] ^ 1]) + answer[1:]
+                self.queue.append(bridge.encode_response(opcode, frame[7], b"\x01" + answer))
+            elif opcode == bridge.OP_AUTH_CONFIRM and flags & 0x80:
+                self.queue.append(bridge.encode_response(opcode, frame[7], b"\x01"))
+                self.queue.append(bridge.encode(bridge.OP_AUTH_CHALLENGE, 0, b"\x01" + THEIR_CHALLENGE))
+            elif opcode == bridge.OP_AUTH_CHALLENGE and frame[10:26] == bridge.auth_response(THEIR_CHALLENGE):
+                self.queue.append(bridge.encode(bridge.OP_AUTH_CONFIRM, 1, b"\x01\x00"))
+            elif opcode == bridge.OP_AUTH_CONFIRM and not flags & 0x80:
+                self.authenticated = True
+            return
+        if not flags & 0x80:
+            self.writes.append(bytes(data))
+            self.acked.append((opcode, frame[8]))
+            self.unanswered = [(at, f) for at, f in self.unanswered
+                               if (f[4], f[7]) != (opcode, frame[8])]
+            return
+        before, state = len(self.queue), self.state
+        super().write(data)
+        if opcode == bridge.OP_SET_CONFIG and frame[11] == state:
+            # A set to the mode they are in was acknowledged and not announced.
+            self.queue[before:] = [item for item in self.queue[before:]
+                                   if item is None or item[4] != bridge.OP_NOTIFY_CONFIG]
+        for item in self.queue[before:]:
+            if item and item[3] & 0x80:
+                self.unanswered.append((self.clock.now, item))
+
+    def read(self, timeout):
+        due = [f for at, f in self.unanswered if self.clock.now - at >= REPEAT]
+        if not self.queue and due and not self.dead:
+            self.unanswered = [(self.clock.now, f) for _at, f in self.unanswered]
+            self.queue.extend(due)
+            return self.queue.pop(0)
+        if not self.queue and self.unanswered and not self.dead:
+            first = min(at for at, _f in self.unanswered) + REPEAT
+            wait = min(timeout, max(0.0, first - self.clock.now))
+            if wait < timeout:
+                self.clock.now += wait
+                return b""
+        return super().read(timeout)
+
+
+def run_b3p(modes, model=B3P, **earbuds):
+    clock = Clock()
+    io = AuthEarbuds(clock, **earbuds)
+    lines = []
+    code = probe.run(bridge, io, modes, 1.0, lines.append, clock, model=model,
+                     challenge=lambda n: bytes.fromhex("dd3b5c5dfbe669841c2e8184758e6600"))
+    return code, io, lines
+
+
+class Buds3Pro(unittest.TestCase):
+    def test_it_authenticates_then_reads(self):
+        code, io, lines = run_b3p([])
+        self.assertEqual(code, probe.EXIT_OK)
+        text = "\n".join(lines)
+        self.assertIn("their answer to our challenge: matches", text)
+        self.assertIn("authenticated", text)
+        self.assertIn("noise control ambient", text)
+
+    def test_the_cycle_restores_and_every_announcement_is_answered(self):
+        code, io, lines = run_b3p(["off", "anc", "ambient"])
+        self.assertEqual(code, probe.EXIT_OK)
+        self.assertEqual(sent_states(io), [0, 1, 2, 2])
+        self.assertIn("restored: ambient", "\n".join(lines))
+        self.assertEqual(io.unanswered, [])
+        self.assertEqual([sn for op, sn in io.acked if op == 0xF4], [5, 6, 7])
+
+    def test_without_answering_a_stale_announcement_is_taken_for_the_mode(self):
+        # The capture's second run, which is why the row answers them.
+        code, io, lines = run_b3p(["off", "anc", "ambient"],
+                                  model={"authenticate": True, "acknowledge": False,
+                                         "status_battery": False})
+        self.assertEqual(code, probe.EXIT_NOT_RESTORED)
+        self.assertIn("ambient: NOT CONFIRMED", "\n".join(lines))
+        self.assertEqual(io.state, 2)
+
+    def test_a_wrong_answer_stops_it_before_anything_else_is_sent(self):
+        code, io, lines = run_b3p(["off"], wrong_answer=True)
+        self.assertEqual(code, probe.EXIT_NO_AUTH)
+        self.assertEqual([w[4] for w in io.writes], [bridge.OP_AUTH_CHALLENGE])
+        self.assertIn("their answer to our challenge: WRONG", "\n".join(lines))
+        self.assertEqual(io.sets, [])
+
+    def test_silence_during_the_handshake_is_reported_and_nothing_is_written(self):
+        code, io, lines = run_b3p(["off"], mute_auth=True)
+        self.assertEqual(code, probe.EXIT_NO_AUTH)
+        self.assertIn("NOT AUTHENTICATED", "\n".join(lines))
+        self.assertEqual(io.sets, [])
+
+    def test_an_unknown_name_is_refused_before_any_connection(self):
+        with contextlib.redirect_stderr(stdio.StringIO()), \
+                self.assertRaises(SystemExit) as raised:
+            probe.main(["--name", "Redmi Buds 9", "AA:BB:CC:00:00:01"])
+        self.assertEqual(raised.exception.code, 2)
+
+
 if __name__ == "__main__":
     unittest.main()

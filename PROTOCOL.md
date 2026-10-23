@@ -1170,6 +1170,89 @@ on every way out, saying `RESTORE FAILED` and exiting 2 if it cannot. Mode
 changes are audible. Turn `useModeControl` off first: the bridge holds the
 channel.
 
+### Redmi Buds 3 Pro — the same frames, behind an authentication
+
+Confirmed on **Redmi Buds 3 Pro** (firmware `1.1.1.1` as GetTargetInfo's
+attribute 1 reads; Airoha, Modalias vendor `0x0094`) by
+[@osteotek](https://github.com/osteotek). The capture is
+[`docs/captures/redmi-buds-3-pro.txt`](docs/captures/redmi-buds-3-pro.txt),
+the SDP record
+[`docs/captures/redmi-buds-3-pro-bluetoothctl.txt`](docs/captures/redmi-buds-3-pro-bluetoothctl.txt).
+Their record has `0000fd2d` and no Fast Pair Message Stream, no SPP; BlueZ
+gives one figure for the pair.
+
+The channel opens the same way as the Buds 5's, and the Buds 5's two reads go
+unanswered: the earbuds say nothing at all until a mutual authentication is
+done. The handshake was first described by Gadgetbridge's Redmi Buds support,
+which lists this model; every frame below is one these earbuds sent or
+accepted.
+
+```
+->  fe dc ba c4 50 00 12 01 01 <16-byte challenge> ef            ours
+<-  fe dc ba 04 50 00 13 00 01 01 <16-byte response> ef           checked
+->  fe dc ba c4 51 00 03 02 01 00 ef                              our confirmation
+<-  fe dc ba 04 51 00 03 00 02 01 ef
+<-  fe dc ba c0 50 00 12 00 01 <16-byte challenge> ef            theirs
+->  fe dc ba 04 50 00 13 00 00 01 <16-byte response> ef
+<-  fe dc ba c0 51 00 03 01 01 00 ef                              their confirmation
+->  fe dc ba 04 51 00 03 00 01 01 ef
+```
+
+A response is SAFER+ in Bluetooth's `Ar'` form (the E1 block cipher, eight
+rounds, the input added again before the third) keyed by the challenge with
+its last byte XOR `06`, over the fixed block `11 22 33 33 22 11 11 22 33 33 22
+11 11 22 33 33`. Computed that way, the response to our challenge matched the
+earbuds' own in every session captured, and the earbuds went on after ours.
+A flags byte with `0x04` set (`c4`, `04`) is what was sent for the handshake;
+whether `c0` / `00` would also do was not tried.
+
+After it the conversation is the Buds 5's, byte for byte: GetDeviceConfig 11
+is answered `04 00 0b <state> <level>`, SetDeviceConfig 11 is acknowledged and
+announced as `F4`, and GetTargetInfo carries the batteries as attribute 7:
+
+```
+<-  fe dc ba 00 02 00 38 00 04 11 00 52 65 64 6d 69 20 42 75 64 73 20 33 20 50 72 6f
+    05 01 11 11 11 11 02 02 5e 05 03 5a 4d ea 0b 02 04 01 02 05 00 03 06 11 11 02 08 01
+    04 07 5e 5e 2c 02 0d 02 ef                      "Redmi Buds 3 Pro", 94, 94, 44
+```
+
+Off, cancelling and transparency were each set, announced and read back; a
+long press on a stem was announced the same way (cancelling, then
+transparency).
+
+**Announcements are repeated until answered.** The earbuds' own frames, the
+status report `0E` and the config announcement `F4`, came back every two
+seconds while nothing answered them, so a mode announced earlier arrived after
+a later one (the capture's second run, where it was taken for the mode the
+earbuds were in). Each is answered with an empty response carrying its sn,
+`fe dc ba 04 <opcode> 00 02 00 <sn> ef`, as Gadgetbridge does; after that
+none was heard twice.
+
+**The status report carries the batteries.** Its body is `<length> <type>
+<value>` attributes, and type `0` is the three battery bytes in GetTargetInfo's
+layout. The earbuds sent one on their own as a level fell, and as the left bud
+went into the case with the lid open: `ff ff ff` (no reading), then
+`dc 5c 2c`, left 92 and charging, which confirms bit 7 as charging on this
+model. Type `4` is the noise state, which the `F4` announcement also carries.
+Config `12`, announced with each move into or out of the case (`0c`, `04`,
+`06`), is not read.
+
+[`redmi-bridge`](redmi-bridge) is started with the reported name for this
+model (its own `BACKENDS` row, `redmi-buds-3-pro`; the Buds 5's row passes no
+name and is unchanged). The `MODELS` row turns on the handshake, the answers
+to announcements and the battery from status reports; the rest is the Buds 5's
+code. The probe takes the name the same way:
+
+```bash
+tools/redmi_probe.py --name "Redmi Buds 3 Pro" AA:BB:CC:00:00:03
+tools/redmi_probe.py --name "Redmi Buds 3 Pro" AA:BB:CC:00:00:03 --cycle off,anc,ambient
+```
+
+Not tried on these earbuds: the strengths inside cancelling and transparency,
+adaptive cancelling, wear detection, the touch-control and equaliser configs,
+the case's own charging, and the phone's Xiaomi Earbuds app holding the channel
+at the same time.
+
 ## EarFun Air Pro 4 — GAIA-shaped frames on SPP
 
 Confirmed on an **EarFun Air Pro 4** (firmware `TW600-3091_20250919_v0.4.1`, as

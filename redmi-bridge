@@ -1,7 +1,11 @@
 #!/usr/bin/env python3
-"""Hold one 0xFD2D RFCOMM link to Redmi Buds 5: battery and noise control.
+"""Hold one 0xFD2D RFCOMM link to Redmi Buds: battery and noise control.
 
-    redmi-bridge <classic-address>
+    redmi-bridge <classic-address> [<reported-name>]
+
+Without a name the bridge is what the Redmi Buds 5 have always been started
+with, and does what it always did. A name picks a row in MODELS; a name with
+no row is exit 4.
 
 Prints one JSON object per line, and reads one command per line:
 
@@ -44,10 +48,43 @@ Protocol, as the Redmi Buds 5 answered it, and as the Xiaomi Earbuds app
              (balanced, comfortable, deep, ... for cancelling). Every set
              sends the level this state was last seen at, or 0
 
-What is sent: the battery ask, the config 11 get, and, on `set`, one config 11
-set. Nothing else, and no answer to the earbuds' own announcements: none has
-been seen to be needed. The status report (opcode 0x0E) the earbuds send with
-each announcement is not read: it carried no battery in the capture.
+Authentication, for a model whose row asks for it (the Redmi Buds 3 Pro, which
+answer nothing on the channel until it is done), as the earbuds answered it and
+as Gadgetbridge's Redmi Buds support first described it:
+
+    ours     -> C4 50 <sn> 01 <16-byte random challenge>
+             <- 04 50 <status> <sn> 01 <their response>, checked against
+                our own computation before anything else is sent
+             -> C4 51 <sn> 01 00
+             <- 04 51 <status> <sn> 01
+    theirs   <- C0 50 <sn> 01 <16-byte challenge>
+             -> 04 50 00 <sn> 01 <our response>
+             <- C0 51 <sn> 01 00
+             -> 04 51 00 <sn> 01
+    response SAFER+ Ar' (the Bluetooth E1 block cipher) keyed by the
+             challenge, with its last byte XOR 6, over a fixed 16-byte
+             block, 11 22 33 33 22 11 repeated
+
+Once both sides have confirmed, the reads and sets below are the Buds 5's,
+byte for byte, and are answered the same way.
+
+Acknowledgement, for a model whose row asks for it (the Buds 3 Pro again): the
+earbuds repeat each of their own announcements (opcodes 0E and F4) every two
+seconds until it is answered, so a mode they announced earlier comes back after
+a later one. Each is answered with an empty response carrying its sn,
+`04 <opcode> 00 02 00 <sn>`, after which it was not heard again.
+
+Battery in the status report, for a model whose row asks for it (the Buds 3
+Pro): their 0E reports are `<length> <type> <value>` attributes like
+GetTargetInfo's, and type 0 is the same three battery bytes, sent on their own
+whenever a level changes or a bud goes into the case (where it read
+`ff ff ff`, then `dc 5c 2c`: left 92 and charging).
+
+What is sent: the authentication and the acknowledgements above where the row
+asks for them, the battery ask, the config 11 get, and, on `set`, one config 11
+set. Nothing else; without a row, no answer to the earbuds' own announcements:
+the Buds 5 were not seen to need one. Without a row the status report (opcode
+0x0E) is not read: it carried no battery in the Buds 5's capture.
 """
 import ctypes
 import json
@@ -84,10 +121,13 @@ HEADER = b"\xFE\xDC\xBA"
 TAIL = 0xEF
 FLAG_COMMAND = 0x80
 FLAG_WANTS_RESPONSE = 0x40
+FLAG_APP = 0x04
 OP_GET_TARGET_INFO = 0x02
 OP_SET_CONFIG = 0xF2
 OP_GET_CONFIG = 0xF3
 OP_NOTIFY_CONFIG = 0xF4
+OP_AUTH_CHALLENGE = 0x50
+OP_AUTH_CONFIRM = 0x51
 ATTR_BATTERY_INFO = 7
 NO_READING = 0xFF
 PARTS = ("left", "right", "case")
@@ -96,6 +136,18 @@ CONFIG_NOISE = 11
 MODE_FROM_STATE = {0: "off", 1: "anc", 2: "ambient"}
 STATE_FROM_MODE = {mode: state for state, mode in MODE_FROM_STATE.items()}
 AVAILABLE = ["off", "anc", "ambient"]
+
+# A row per model that needs something the Buds 5 do not, keyed by the name the
+# earbuds report. The Buds 5 have no row: they are started without a name.
+NAMELESS = {"authenticate": False, "acknowledge": False, "status_battery": False}
+MODELS = {
+    "Redmi Buds 3 Pro": {"authenticate": True, "acknowledge": True,
+                         "status_battery": True},
+}
+# The earbuds' own announcements, which a row with "acknowledge" answers.
+OP_REPORT_STATUS = 0x0E
+ANNOUNCEMENTS = (OP_REPORT_STATUS, OP_NOTIFY_CONFIG)
+STATUS_BATTERY = 0
 
 EXIT_TRANSIENT = 1
 EXIT_UNSUPPORTED = 3
@@ -146,6 +198,95 @@ def encode_get_noise(sn):
 def encode_set_noise(sn, state, level):
     config = bytes([4]) + CONFIG_NOISE.to_bytes(2, "big") + bytes([state, level])
     return encode(OP_SET_CONFIG, sn, config)
+
+
+def encode_response(opcode, sn, payload=b""):
+    """Our answer to a command the earbuds sent: status 0, their sn."""
+    body = b"\x00" + bytes([sn & 0xFF]) + payload
+    return (HEADER + bytes([FLAG_APP, opcode]) + len(body).to_bytes(2, "big")
+            + body + bytes([TAIL]))
+
+
+def encode_auth_challenge(sn, challenge):
+    return encode(OP_AUTH_CHALLENGE, sn, b"\x01" + challenge,
+                  flags=FLAG_COMMAND | FLAG_WANTS_RESPONSE | FLAG_APP)
+
+
+def encode_auth_confirm(sn):
+    return encode(OP_AUTH_CONFIRM, sn, b"\x01\x00",
+                  flags=FLAG_COMMAND | FLAG_WANTS_RESPONSE | FLAG_APP)
+
+
+# ---- Authentication: SAFER+ as Bluetooth's Ar' (Core spec, E1), 8 rounds.
+
+def _safer_tables():
+    exp = [0 if i == 128 else pow(45, i, 257) for i in range(256)]
+    log = [0] * 256
+    for i, value in enumerate(exp):
+        log[value] = i
+    log[0] = 128
+    bias = [[0] * 16 for _ in range(16)]
+    for i in range(16):
+        for j in range(16):
+            value = pow(45, pow(45, 17 * (i + 2) + j + 1, 257), 257)
+            bias[i][j] = 0 if value == 256 else value
+    return exp, log, bias
+
+
+SAFER_EXP, SAFER_LOG, SAFER_BIAS = _safer_tables()
+# Which of the 16 bytes take XOR (the rest take addition), byte 0 first.
+SAFER_XOR = [bool(0x9999 >> i & 1) for i in range(16)]
+# The Pseudo-Hadamard layer of SAFER+, row i giving output byte i.
+SAFER_PHT = [
+    [2, 1, 1, 1, 4, 2, 1, 1, 2, 2, 4, 2, 4, 4, 16, 8],
+    [2, 1, 1, 1, 4, 2, 1, 1, 1, 1, 2, 1, 2, 2, 8, 4],
+    [1, 1, 4, 2, 2, 2, 4, 2, 16, 8, 4, 4, 2, 1, 1, 1],
+    [1, 1, 4, 2, 1, 1, 2, 1, 8, 4, 2, 2, 2, 1, 1, 1],
+    [16, 8, 2, 2, 4, 2, 4, 4, 1, 1, 4, 2, 1, 1, 2, 1],
+    [8, 4, 1, 1, 2, 1, 2, 2, 1, 1, 4, 2, 1, 1, 2, 1],
+    [2, 2, 4, 2, 4, 4, 16, 8, 2, 1, 1, 1, 4, 2, 1, 1],
+    [1, 1, 2, 1, 2, 2, 8, 4, 2, 1, 1, 1, 4, 2, 1, 1],
+    [4, 2, 4, 4, 16, 8, 2, 2, 1, 1, 2, 1, 1, 1, 4, 2],
+    [2, 1, 2, 2, 8, 4, 1, 1, 1, 1, 2, 1, 1, 1, 4, 2],
+    [4, 4, 16, 8, 1, 1, 2, 1, 4, 2, 1, 1, 4, 2, 2, 2],
+    [2, 2, 8, 4, 1, 1, 2, 1, 4, 2, 1, 1, 2, 1, 1, 1],
+    [1, 1, 2, 1, 1, 1, 4, 2, 4, 4, 16, 8, 2, 2, 4, 2],
+    [1, 1, 2, 1, 1, 1, 4, 2, 2, 2, 8, 4, 1, 1, 2, 1],
+    [4, 2, 1, 1, 2, 1, 1, 1, 4, 2, 2, 2, 16, 8, 4, 4],
+    [4, 2, 1, 1, 2, 1, 1, 1, 2, 1, 1, 1, 8, 4, 2, 2],
+]
+AUTH_BLOCK = bytes([0x11, 0x22, 0x33, 0x33, 0x22, 0x11] * 2 + [0x11, 0x22, 0x33, 0x33])
+
+
+def _mix(a, b, xor):
+    return [(x ^ y) if use_xor else (x + y) & 0xFF
+            for x, y, use_xor in zip(a, b, xor)]
+
+
+def auth_response(challenge):
+    """The 16 bytes that answer a 16-byte challenge."""
+    key = list(bytes(challenge))
+    key[15] ^= 6
+    register = key + [0]
+    for byte in key:
+        register[16] ^= byte
+    keys = [key]
+    for k in range(1, 17):
+        register = [((byte >> 5) | (byte << 3)) & 0xFF for byte in register]
+        keys.append([(register[(k + i) % 17] + SAFER_BIAS[k - 1][i]) & 0xFF
+                     for i in range(16)])
+    plain = list(AUTH_BLOCK)
+    block = list(plain)
+    inverse = [not use_xor for use_xor in SAFER_XOR]
+    for r in range(8):
+        if r == 2:
+            block = _mix(block, plain, SAFER_XOR)
+        block = _mix(block, keys[2 * r], SAFER_XOR)
+        block = [SAFER_EXP[b] if use_xor else SAFER_LOG[b]
+                 for b, use_xor in zip(block, SAFER_XOR)]
+        block = _mix(block, keys[2 * r + 1], inverse)
+        block = [sum(c * b for c, b in zip(row, block)) & 0xFF for row in SAFER_PHT]
+    return bytes(_mix(block, keys[16], SAFER_XOR))
 
 
 def split_frame(buffer):
@@ -249,6 +390,15 @@ def battery_of(frame):
     return battery_from(values) if values else None
 
 
+def status_battery_of(frame):
+    """The battery an earbuds' status report carries, or None."""
+    is_command, opcode, _status, payload = parts_of(frame)
+    if not is_command or opcode != OP_REPORT_STATUS:
+        return None
+    values = attributes(payload).get(STATUS_BATTERY)
+    return battery_from(values) if values and len(values) == 3 else None
+
+
 def noise_of(frame):
     """(state, level) of the noise control a frame carries, or None."""
     is_command, opcode, status, payload = parts_of(frame)
@@ -264,10 +414,11 @@ def noise_of(frame):
 
 
 class Bridge:
-    def __init__(self, bus, address, loop):
+    def __init__(self, bus, address, loop, model=NAMELESS):
         self.bus = bus
         self.address = address
         self.loop = loop
+        self.model = model
         self.exit_code = None
         self.device = None
         self.manager = None
@@ -283,6 +434,12 @@ class Bridge:
         self.mode = None
         self.levels = {}
         self.battery = None
+        # Authentication: nothing but it goes out until both sides confirmed.
+        self.authenticated = not model["authenticate"]
+        self.make_challenge = new_challenge
+        self.challenge = None
+        self.ours_verified = False
+        self.theirs_confirmed = False
 
     def finish(self, code, message=None):
         if self.exit_code is not None:
@@ -371,7 +528,11 @@ class Bridge:
         self.watch = GLib.io_add_watch(fd, GLib.PRIORITY_DEFAULT,
                                        GLib.IO_IN | GLib.IO_HUP | GLib.IO_ERR,
                                        self.on_io)
-        self.ask()
+        if self.authenticated:
+            self.ask()
+        else:
+            self.challenge = self.make_challenge()
+            self.write(encode_auth_challenge(self.next_sn(), self.challenge))
         GLib.timeout_add(FIRST_ANSWER_MS, self.first_answer_timeout)
         GLib.timeout_add(MODE_GRACE_MS, self.grace_timeout)
         GLib.timeout_add(POLL_MS, self.poll)
@@ -381,7 +542,7 @@ class Bridge:
         return self.sn
 
     def ask(self):
-        if self.exit_code is not None:
+        if self.exit_code is not None or not self.authenticated:
             return
         self.write(encode_get_noise(self.next_sn()))
         self.write(encode_get_target_info(self.next_sn()))
@@ -393,7 +554,7 @@ class Bridge:
         return True
 
     def recheck(self):
-        if self.exit_code is None and self.fd is not None:
+        if self.exit_code is None and self.fd is not None and self.authenticated:
             self.write(encode_get_noise(self.next_sn()))
         return False
 
@@ -435,7 +596,35 @@ class Bridge:
             self.last_line = line
             emit(line)
 
+    def on_auth_frame(self, frame):
+        is_command, opcode, status, payload = parts_of(frame)
+        if is_command:
+            if opcode == OP_AUTH_CHALLENGE and len(payload) == 17 and payload[0] == 1:
+                self.write(encode_response(OP_AUTH_CHALLENGE, frame[7],
+                                           b"\x01" + auth_response(payload[1:])))
+            elif opcode == OP_AUTH_CONFIRM and self.ours_verified:
+                self.theirs_confirmed = True
+                self.write(encode_response(OP_AUTH_CONFIRM, frame[7], b"\x01"))
+        elif opcode == OP_AUTH_CHALLENGE and status is not None and self.challenge:
+            if status != 0 or payload != b"\x01" + auth_response(self.challenge):
+                self.finish(EXIT_UNSUPPORTED,
+                            "the Redmi Buds did not answer the authentication")
+                return
+            self.ours_verified = True
+            self.write(encode_auth_confirm(self.next_sn()))
+        if self.ours_verified and self.theirs_confirmed:
+            self.authenticated = True
+            self.ask()
+
     def on_frame(self, frame):
+        if self.exit_code is not None:
+            return
+        if not self.authenticated:
+            self.on_auth_frame(frame)
+            return
+        if self.model["acknowledge"] and frame[3] & FLAG_COMMAND \
+                and frame[3] & FLAG_WANTS_RESPONSE and frame[4] in ANNOUNCEMENTS:
+            self.write(encode_response(frame[4], frame[7]))
         noise = noise_of(frame)
         if noise is not None:
             state, level = noise
@@ -445,6 +634,8 @@ class Bridge:
             self.publish()
             return
         battery = battery_of(frame)
+        if battery is None and self.model["status_battery"]:
+            battery = status_battery_of(frame)
         if battery is not None:
             self.answered = True
             self.battery = battery
@@ -455,7 +646,7 @@ class Bridge:
         if len(parts) != 2 or parts[0] != "set" or parts[1] not in STATE_FROM_MODE:
             return
         # Nothing is sent before the earbuds have said what they are set to.
-        if self.mode is None:
+        if self.mode is None or not self.authenticated:
             return
         if self.exit_code is not None:
             return
@@ -511,6 +702,10 @@ class Bridge:
         return True
 
 
+def new_challenge():
+    return os.urandom(16)
+
+
 def find_device_path(bus, address):
     wanted = address.upper()
     objects = dbus.Interface(bus.get_object("org.bluez", "/"),
@@ -526,13 +721,21 @@ def main():
     argv = sys.argv[1:]
     address = argv[0].strip() if argv else ""
     if argv and argv[0] in ("-h", "--help"):
-        print("usage: redmi-bridge <classic-address>")
+        print("usage: redmi-bridge <classic-address> [<reported-name>]")
         return 0
     if not argv or not ADDRESS.match(address):
         emit({"modes": False,
-              "error": "usage: redmi-bridge <classic-address> "
+              "error": "usage: redmi-bridge <classic-address> [<reported-name>] "
                        "(not a Bluetooth address: %r)" % address})
         sys.exit(EXIT_SETUP)
+    if len(argv) > 2:
+        emit({"modes": False,
+              "error": "usage: redmi-bridge <classic-address> [<reported-name>]"})
+        sys.exit(EXIT_SETUP)
+    if len(argv) == 2 and argv[1] not in MODELS:
+        emit({"modes": False, "error": "no Redmi model row for %r" % argv[1]})
+        sys.exit(EXIT_SETUP)
+    model = MODELS[argv[1]] if len(argv) == 2 else NAMELESS
 
     dbus.mainloop.glib.DBusGMainLoop(set_as_default=True)
     try:
@@ -542,7 +745,7 @@ def main():
         sys.exit(EXIT_TRANSIENT)
 
     loop = GLib.MainLoop()
-    bridge = Bridge(bus, address, loop)
+    bridge = Bridge(bus, address, loop, model)
 
     class Profile(dbus.service.Object):
         @dbus.service.method("org.bluez.Profile1", in_signature="", out_signature="")
