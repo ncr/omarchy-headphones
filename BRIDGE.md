@@ -23,6 +23,8 @@ The Classic-channel bridges take the device's Bluetooth address. `sony-bridge`
 takes the MDR UUID to register after it and the name the headset reports after
 that. `nothing-bridge` takes the reported name after the address to select
 its model-specific RFCOMM channel; omitting the name retains channel 15.
+`redmi-bridge` takes the reported name the same way, optionally: without it
+the bridge is the Redmi Buds 5's, and the Buds 3 Pro's row passes it.
 `jbl-bridge` takes the BLE address the Fast Pair stream announced and the
 Fast Pair model id. A bridge validates its arguments before doing anything
 else: an address that is not one is exit 4 with an error line, never a string
@@ -161,3 +163,18 @@ the Fast Pair stream's. The earbuds neither acknowledge a set nor announce a
 change, so after a set the bridge asks every second, at most five times, until
 they report the mode that was set, and asks again every 10 s besides. Exit 3
 means the mode get went unanswered twice.
+
+
+### Redmi Buds 3 Pro extension
+
+`redmi-bridge <classic-address> "Redmi Buds 3 Pro"` picks the bridge's
+`MODELS` row for its owner's model; another name is exit 4, and no name is the
+Redmi Buds 5 as before. The row adds three things to the Buds 5's
+conversation. A mutual authentication goes first and nothing else is sent
+until both sides have confirmed; an answer to our challenge that does not
+match the bridge's own computation is exit 3, as is a handshake left
+unfinished when the first-answer timer fires. Each announcement the earbuds
+make (`0E`, `F4`) is answered, because they repeat it until it is. And the
+battery is also read from their status reports, which carry it with the
+charging bit. The line is the Buds 5's: `available` `off`, `anc`, `ambient`
+and the `battery` object.

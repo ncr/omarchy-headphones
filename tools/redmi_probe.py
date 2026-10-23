@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
-"""Probe the Redmi Buds 5 Xiaomi channel: read the mode and battery, print every frame.
+"""Probe a Redmi Buds Xiaomi channel: read the mode and battery, print every frame.
 
-Usage: redmi_probe.py [--listen SECONDS] [--cycle MODE[,MODE...]] <address>
+Usage: redmi_probe.py [--name NAME] [--listen SECONDS] [--cycle MODE[,MODE...]] <address>
 
 Opens the earbuds' 0xFD2D service through BlueZ (a Profile1 registration, as
 the widget's bridge does), asks for the noise control (GetDeviceConfig 11) and
@@ -21,11 +21,21 @@ set the mode by hand. A mode change is audible, and cancelling can briefly cut
 what is playing. Each mode is set with the strength the earbuds last reported
 for it, or 0.
 
+`--name` is the name the earbuds report, and picks their row in the bridge's
+MODELS. Where the row says so (the Redmi Buds 3 Pro) the probe authenticates
+first, as the bridge does, and sends nothing else until both sides have
+confirmed; the earbuds' answer to its challenge is checked against its own
+computation. Where the row says so it also answers each announcement the
+earbuds make (0E, F4), as the bridge does: unanswered, they repeat it every two
+seconds, and a stale mode would be read as the current one. Without `--name`
+it is the Redmi Buds 5 conversation.
+
 The widget's bridge holds the same service while the earbuds are connected and
 mode control is on: switch `useModeControl` off first.
 
 Exit codes: 0 done, 1 could not open the channel or it closed, 2 the earbuds
-were not restored, 3 asked for a cycle but the initial mode was not known.
+were not restored, 3 asked for a cycle but the initial mode was not known,
+4 the authentication was not completed (nothing else was sent).
 """
 import argparse
 import importlib.machinery
@@ -45,6 +55,7 @@ EXIT_OK = 0
 EXIT_LINK = 1
 EXIT_NOT_RESTORED = 2
 EXIT_NO_INITIAL = 3
+EXIT_NO_AUTH = 4
 
 ANSWER_WAIT = 3.0
 SET_WAIT = 2.5
@@ -68,8 +79,9 @@ class Probe:
     link has closed. The probe keeps the last mode and battery the earbuds
     reported, whichever way they said it."""
 
-    def __init__(self, bridge, io, out, clock=time.monotonic):
+    def __init__(self, bridge, io, out, clock=time.monotonic, model=None):
         self.bridge = bridge
+        self.model = model or bridge.NAMELESS
         self.io = io
         self.out = out
         self.clock = clock
@@ -81,6 +93,10 @@ class Probe:
         self.levels = {}        # state -> the level it was last seen at
         self.closed = False
         self.rejected = False   # a set was answered with an error status
+        self.challenge = None   # ours, while authenticating
+        self.ours_verified = False
+        self.theirs_confirmed = False
+        self.auth_failed = False
 
     # ---- output
 
@@ -89,6 +105,18 @@ class Probe:
 
     def describe(self, frame):
         is_command, opcode, status, payload = self.bridge.parts_of(frame)
+        if opcode == self.bridge.OP_AUTH_CHALLENGE:
+            if is_command:
+                return "their authentication challenge"
+            if self.challenge is None:
+                return "an answer to a challenge we did not send"
+            expected = b"\x01" + self.bridge.auth_response(self.challenge)
+            if status == 0 and payload == expected:
+                return "their answer to our challenge: matches"
+            return "their answer to our challenge: WRONG (status %s)" % status
+        if opcode == self.bridge.OP_AUTH_CONFIRM:
+            return ("their authentication confirmation" if is_command
+                    else "our confirmation acknowledged (status %s)" % status)
         noise = self.bridge.noise_of(frame)
         battery = self.bridge.battery_of(frame)
         if noise is not None:
@@ -149,6 +177,13 @@ class Probe:
 
     def take(self, frame):
         self.say("RX  %s  # %s" % (frame.hex(" "), self.describe(frame)))
+        if self.challenge is not None and not (self.ours_verified and self.theirs_confirmed):
+            self.take_auth(frame)
+            return
+        is_command, opcode, status, _payload = self.bridge.parts_of(frame)
+        if self.model["acknowledge"] and is_command and frame[3] & self.bridge.FLAG_WANTS_RESPONSE \
+                and opcode in self.bridge.ANNOUNCEMENTS:
+            self.send(self.bridge.encode_response(opcode, frame[7]), "acknowledge it")
         noise = self.bridge.noise_of(frame)
         if noise is not None:
             self.noise = noise
@@ -156,9 +191,40 @@ class Probe:
         battery = self.bridge.battery_of(frame)
         if battery is not None:
             self.battery = battery
-        is_command, opcode, status, _payload = self.bridge.parts_of(frame)
         if not is_command and opcode == self.bridge.OP_SET_CONFIG and status != 0:
             self.rejected = True
+
+    # ---- authentication, for a model whose row asks for it
+
+    def authenticate(self, challenge):
+        """Both challenges, as the bridge runs them. True once both sides confirmed."""
+        self.challenge = challenge
+        self.send(self.bridge.encode_auth_challenge(self.next_sn(), challenge),
+                  "our authentication challenge")
+        done = self.pump(ANSWER_WAIT, until=lambda: self.auth_failed
+                         or (self.ours_verified and self.theirs_confirmed))
+        ok = done and not self.auth_failed
+        self.say("authenticated" if ok else "NOT AUTHENTICATED: nothing else is sent")
+        return ok
+
+    def take_auth(self, frame):
+        bridge = self.bridge
+        is_command, opcode, status, payload = bridge.parts_of(frame)
+        if is_command and opcode == bridge.OP_AUTH_CHALLENGE \
+                and len(payload) == 17 and payload[0] == 1:
+            self.send(bridge.encode_response(bridge.OP_AUTH_CHALLENGE, frame[7],
+                                             b"\x01" + bridge.auth_response(payload[1:])),
+                      "our answer to their challenge")
+        elif is_command and opcode == bridge.OP_AUTH_CONFIRM and self.ours_verified:
+            self.theirs_confirmed = True
+            self.send(bridge.encode_response(bridge.OP_AUTH_CONFIRM, frame[7], b"\x01"),
+                      "acknowledge their confirmation")
+        elif not is_command and opcode == bridge.OP_AUTH_CHALLENGE:
+            if status != 0 or payload != b"\x01" + bridge.auth_response(self.challenge):
+                self.auth_failed = True
+                return
+            self.ours_verified = True
+            self.send(bridge.encode_auth_confirm(self.next_sn()), "our confirmation")
 
     # ---- a set, checked against what the earbuds say
 
@@ -182,9 +248,13 @@ class Probe:
         return confirmed and not self.closed
 
 
-def run(bridge, io, modes, listen, out, clock=time.monotonic):
+def run(bridge, io, modes, listen, out, clock=time.monotonic,
+        model=None, challenge=os.urandom):
     """The whole probe. Returns the exit code."""
-    probe = Probe(bridge, io, out, clock)
+    probe = Probe(bridge, io, out, clock, model)
+    if model and model["authenticate"]:
+        if not probe.authenticate(challenge(16)):
+            return EXIT_LINK if probe.closed else EXIT_NO_AUTH
     probe.ask()
     probe.pump(ANSWER_WAIT, until=lambda: probe.noise is not None and probe.battery is not None)
     if probe.closed:
@@ -318,6 +388,8 @@ class Channel:
 def main(argv=None):
     parser = argparse.ArgumentParser(description=__doc__.split("\n")[0])
     parser.add_argument("address")
+    parser.add_argument("--name", default="", metavar="NAME",
+                        help="the name the earbuds report, for their row in MODELS")
     parser.add_argument("--listen", type=float, default=3.0, metavar="SECONDS")
     parser.add_argument("--cycle", default="", metavar="MODES",
                         help="set these modes in turn, then restore (off, anc, ambient)")
@@ -330,13 +402,20 @@ def main(argv=None):
         if mode not in bridge.STATE_FROM_MODE:
             parser.error("unknown mode %r (off, anc, ambient)" % mode)
 
+    model = None
+    if args.name:
+        if args.name not in bridge.MODELS:
+            parser.error("no Redmi model row for %r (%s)"
+                         % (args.name, ", ".join(sorted(bridge.MODELS))))
+        model = bridge.MODELS[args.name]
+
     channel = Channel(args.address)
     try:
         if not channel.open():
             print("could not open the channel%s" % (": " + channel.error if channel.error else ""),
                   file=sys.stderr)
             return EXIT_LINK
-        return run(bridge, channel, modes, args.listen, print)
+        return run(bridge, channel, modes, args.listen, print, model=model)
     except KeyboardInterrupt:
         return EXIT_LINK
     finally:

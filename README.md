@@ -145,6 +145,17 @@ Headphones not on the list? [Add yours](#add-your-own-headphones).
 </tr>
 </table>
 
+<table>
+<tr>
+<td width="50%"><img src="docs/gallery/redmi-buds-3-pro.png" alt="Redmi Buds 3 Pro: left, right and case, Off / ANC / Transparency" width="100%"></td>
+<td width="50%"></td>
+</tr>
+<tr>
+<td align="center">Redmi Buds 3 Pro — <a href="https://github.com/osteotek">@osteotek</a></td>
+<td align="center"></td>
+</tr>
+</table>
+
 ## What it does
 
 - **Battery level** — per earbud and the case, or the single battery of
@@ -153,7 +164,7 @@ Headphones not on the list? [Add yours](#add-your-own-headphones).
   headphones, filling up as they charge. Readable from the bar without opening
   anything.
 - **Noise control** — Off / ANC / Ambient / TalkThru, from the panel or a key.
-  JBL, Sony, Samsung, Nothing / CMF, Soundcore, Xiaomi Buds 5 Pro, Redmi Buds 5, OPPO Enco Air3 Pro,
+  JBL, Sony, Samsung, Nothing / CMF, Soundcore, Xiaomi Buds 5 Pro, Redmi Buds 5 and 3 Pro, OPPO Enco Air3 Pro,
   EarFun Air Pro 4, Bose QC45 and Bose QC35 today; built to learn
   your brand. Sony and Soundcore add the ambient level with Focus on Voice or
   wind noise reduction; Nothing / CMF the ANC strength (Low / Mid / High / Adaptive)
@@ -190,6 +201,7 @@ same idea, built for Apple's own protocol, and the plugin this one is modelled o
 | Soundcore Space 2 (over-ear)| <img src="docs/icons/yes.svg" width="14" alt="yes"> one figure        | <img src="docs/icons/yes.svg" width="14" alt="yes"> Off · ANC · Ambient (level, wind noise reduction) | [@Sovego](https://github.com/Sovego) |
 | Xiaomi Buds 5 Pro (earbuds) | <img src="docs/icons/yes.svg" width="14" alt="yes"> one figure        | <img src="docs/icons/yes.svg" width="14" alt="yes"> Off · ANC · Ambient                          | [@KentoNion](https://github.com/KentoNion)|
 | Redmi Buds 5 (earbuds)      | <img src="docs/icons/yes.svg" width="14" alt="yes"> left, right, case | <img src="docs/icons/yes.svg" width="14" alt="yes"> Off · ANC · Transparency                    | [@quocldce-sys](https://github.com/quocldce-sys) |
+| Redmi Buds 3 Pro (earbuds)  | <img src="docs/icons/yes.svg" width="14" alt="yes"> left, right, case | <img src="docs/icons/yes.svg" width="14" alt="yes"> Off · ANC · Transparency                    | [@osteotek](https://github.com/osteotek) |
 | EarFun Air Pro 4 (earbuds)  | <img src="docs/icons/yes.svg" width="14" alt="yes"> left, right, case (Fast Pair) | <img src="docs/icons/yes.svg" width="14" alt="yes"> Off · ANC · Ambient                          | [@UnFik](https://github.com/UnFik) |
 | OPPO Enco Air3 Pro (earbuds) | <img src="docs/icons/yes.svg" width="14" alt="yes"> left, right, case | <img src="docs/icons/yes.svg" width="14" alt="yes"> Off · ANC · Ambient | [@Aryan447](https://github.com/Aryan447) |
 | Bose QC45 (over-ear)         | <img src="docs/icons/yes.svg" width="14" alt="yes"> one figure        | <img src="docs/icons/yes.svg" width="14" alt="yes"> ANC · Ambient (no Off) | [@Driskol](https://github.com/Driskol) |

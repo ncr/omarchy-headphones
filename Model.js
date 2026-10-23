@@ -503,6 +503,8 @@ function uuidsFromBluetoothctl(text) {
 // things the Fast Pair stream announces. A bridge that gets one argument
 // today keeps getting one unless its model selection needs the reported name.
 // Nothing accepts that name optionally; a nameless caller retains channel 15.
+// Redmi does too: the Buds 5's row passes no name and the bridge does what it
+// always did; the Buds 3 Pro's row passes it.
 var BACKENDS = [
   { name: "sony", bridge: "sony-bridge",
     uuids: [SONY_MDR_V2_UUID, SONY_MDR_V1_UUID],
@@ -553,6 +555,16 @@ var BACKENDS = [
     // the battery, and an empty stream must not stand in front of them.
     fastPairWithoutBattery: true,
     // What the Xiaomi Earbuds app calls the second mode.
+    modeLabels: { ambient: "Transparency" } },
+  { name: "redmi-buds-3-pro", bridge: "redmi-bridge",
+    // The same 0xFD2D service and frames as the row above, behind an
+    // authentication the Buds 5 are not asked for: the bridge's MODELS row for
+    // the reported name does it. A row of its own so that the Buds 5 keep
+    // being started with the address alone. The record has no Fast Pair
+    // stream; the battery is the bridge's.
+    modelNames: ["Redmi Buds 3 Pro"],
+    modelUuids: [REDMI_FD2D_UUID],
+    args: ["address", "name"],
     modeLabels: { ambient: "Transparency" } },
   { name: "earfun", bridge: "earfun-bridge",
     // Noise control (Off / ANC / Transparency) on plain SPP; the battery is

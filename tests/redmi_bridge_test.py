@@ -45,13 +45,19 @@ STATUS_REPORT_ANC = bytes.fromhex("fe dc ba c7 0e 00 04 04 02 04 01 ef")
 class Session(harness.Session):
     """A Redmi session. "device" in a pin is bytes as hex, fed through the
     bridge's framer. "sent" is every frame the bridge wrote, as hex. "open" is
-    the channel coming up, which asks for the mode and the battery and
-    schedules the first-answer check, the mode grace and the poll."""
+    the channel coming up, which asks for the mode and the battery (or, for a
+    model whose row authenticates, sends the challenge) and schedules the
+    first-answer check, the mode grace and the poll. A pin's session may name
+    the model ("name", the bridge's second argument) and fix the 16-byte
+    challenge it sends ("challenge", hex) to the one in its capture."""
 
-    def __init__(self):
+    def __init__(self, name=None, challenge=None):
         super().__init__(bridge)
-        self.bridge = bridge.Bridge(None, ADDRESS, harness.FakeLoop())
+        model = bridge.MODELS[name] if name else bridge.NAMELESS
+        self.bridge = bridge.Bridge(None, ADDRESS, harness.FakeLoop(), model)
         self.bridge.write = self.frames.append
+        if challenge:
+            self.bridge.make_challenge = lambda: harness.hexbytes(challenge)
 
     def device(self, spec):
         self.bridge.buffer += harness.hexbytes(spec)
@@ -503,6 +509,259 @@ class Silent(unittest.TestCase):
         s.device(NOISE_AMBIENT.hex(" "))
         s.bridge.first_answer_timeout()
         self.assertIsNone(s.bridge.exit_code)
+
+
+
+# ---- Redmi Buds 3 Pro: the same frames behind an authentication. Verbatim
+#      from docs/captures/redmi-buds-3-pro.txt, the third run unless marked.
+
+BUDS_3_PRO = "Redmi Buds 3 Pro"
+OUR_CHALLENGE = bytes.fromhex("dd3b5c5dfbe669841c2e8184758e6600")
+THEIR_ANSWER = bytes.fromhex(
+    "fe dc ba 04 50 00 13 00 01 01 bd 04 53 94 ac 59 2f f4 4e be c2 18 fe 55 63 e9 ef")
+CONFIRM_ACK = bytes.fromhex("fe dc ba 04 51 00 03 00 02 01 ef")
+THEIR_CHALLENGE = bytes.fromhex(
+    "fe dc ba c0 50 00 12 00 01 78 5a f7 fb b2 60 9c c7 74 c2 7d 69 d1 36 21 b9 ef")
+OUR_ANSWER = bytes.fromhex(
+    "fe dc ba 04 50 00 13 00 00 01 ff dc 81 66 35 b6 d1 a4 88 7a e1 42 f6 22 7c cc ef")
+THEIR_CONFIRM = bytes.fromhex("fe dc ba c0 51 00 03 01 01 00 ef")
+B3P_NOISE_AMBIENT = bytes.fromhex("fe dc ba 00 f3 00 07 00 03 04 00 0b 02 00 ef")
+B3P_ANSWER = bytes.fromhex(
+    "fe dc ba 00 02 00 38 00 04 11 00 52 65 64 6d 69 20 42 75 64 73 20 33 20 50 72 6f "
+    "05 01 11 11 11 11 02 02 5e 05 03 5a 4d ea 0b 02 04 01 02 05 00 03 06 11 11 02 08 "
+    "01 04 07 5e 5e 2c 02 0d 02 ef")
+CONFIG_12 = bytes.fromhex("fe dc ba c7 f4 00 05 02 03 00 0c 0c ef")
+# The fourth run: status reports with the batteries, the left bud going in.
+STATUS_BATTERY = bytes.fromhex("fe dc ba c7 0e 00 06 08 04 00 5c 5c 2c ef")
+STATUS_NO_READING = bytes.fromhex("fe dc ba c7 0e 00 06 09 04 00 ff ff ff ef")
+STATUS_CHARGING = bytes.fromhex("fe dc ba c7 0e 00 06 0a 04 00 dc 5c 2c ef")
+
+
+def buds_3_pro():
+    s = Session(BUDS_3_PRO, OUR_CHALLENGE.hex())
+    s.do_open()
+    return s
+
+
+def authenticated():
+    s = buds_3_pro()
+    for frame in (THEIR_ANSWER, CONFIRM_ACK, THEIR_CHALLENGE, THEIR_CONFIRM):
+        s.device(frame.hex(" "))
+    return s
+
+
+class Authentication(unittest.TestCase):
+    def test_the_response_to_both_captured_challenges(self):
+        # Ours, answered by the earbuds; theirs, whose answer they accepted.
+        self.assertEqual(b"\x01" + bridge.auth_response(OUR_CHALLENGE),
+                         bridge.parts_of(THEIR_ANSWER)[3])
+        self.assertEqual(bridge.auth_response(THEIR_CHALLENGE[9:25]), OUR_ANSWER[10:26])
+        # And the session from the capture's first authenticated run.
+        self.assertEqual(
+            bridge.auth_response(bytes.fromhex("f72c67873c8a3a67a5ffff5c018f4b0a")).hex(),
+            "1bf76a9f5b2bce90ba6dc4e311022f16")
+
+    def test_the_challenge_does_not_change_the_caller_s_bytes(self):
+        challenge = bytes(OUR_CHALLENGE)
+        bridge.auth_response(challenge)
+        self.assertEqual(challenge, OUR_CHALLENGE)
+
+    def test_only_the_challenge_goes_out_until_both_sides_confirmed(self):
+        s = buds_3_pro()
+        self.assertEqual(s.sent, [bridge.encode_auth_challenge(1, OUR_CHALLENGE).hex(" ")])
+        s.bridge.ask()
+        self.assertTrue(s.bridge.poll())
+        s.bridge.recheck()
+        s.command("set anc")
+        self.assertEqual(len(s.frames), 1)
+
+    def test_after_the_handshake_the_reads_are_the_buds_5_s(self):
+        s = authenticated()
+        self.assertEqual(s.sent[-2:], ["fe dc ba c0 f3 00 03 03 00 0b ef",
+                                       "fe dc ba c0 02 00 05 04 ff ff ff ff ef"])
+        self.assertTrue(s.bridge.authenticated)
+
+    def test_a_wrong_answer_to_our_challenge_is_exit_3_and_nothing_more(self):
+        # Synthetic damage: one byte of the captured answer changed.
+        s = buds_3_pro()
+        wrong = bytearray(THEIR_ANSWER)
+        wrong[12] ^= 0x01
+        s.device(bytes(wrong).hex(" "))
+        self.assertEqual(s.bridge.exit_code, bridge.EXIT_UNSUPPORTED)
+        self.assertEqual(len(s.frames), 1)
+        self.assertFalse(s.lines[-1]["modes"])
+
+    def test_an_error_status_to_our_challenge_is_exit_3(self):
+        # Synthetic: status 1 on the captured answer.
+        s = buds_3_pro()
+        failed = bytearray(THEIR_ANSWER)
+        failed[7] = 0x01
+        s.device(bytes(failed).hex(" "))
+        self.assertEqual(s.bridge.exit_code, bridge.EXIT_UNSUPPORTED)
+
+    def test_their_confirmation_before_ours_was_checked_is_not_taken(self):
+        s = buds_3_pro()
+        s.device(THEIR_CONFIRM.hex(" "))
+        self.assertEqual(len(s.frames), 1)
+        self.assertFalse(s.bridge.authenticated)
+
+    def test_a_silent_handshake_is_found_by_the_timer_and_is_exit_3(self):
+        s = buds_3_pro()
+        self.assertIn(bridge.FIRST_ANSWER_MS, s.timers)
+        s.fire()
+        self.assertEqual(s.bridge.exit_code, bridge.EXIT_UNSUPPORTED)
+        self.assertEqual(len(s.frames), 1)
+
+    def test_a_handshake_that_stalls_halfway_is_exit_3_too(self):
+        s = buds_3_pro()
+        s.device(THEIR_ANSWER.hex(" "))
+        s.fire()
+        self.assertEqual(s.bridge.exit_code, bridge.EXIT_UNSUPPORTED)
+
+    def test_the_handshake_split_at_every_byte_boundary(self):
+        stream = THEIR_ANSWER + CONFIRM_ACK + THEIR_CHALLENGE + THEIR_CONFIRM \
+            + B3P_NOISE_AMBIENT + B3P_ANSWER
+        for cut in range(1, len(stream)):
+            s = buds_3_pro()
+            s.device(stream[:cut].hex(" "))
+            s.device(stream[cut:].hex(" "))
+            self.assertEqual(s.lines[-1]["mode"], "ambient", cut)
+            self.assertEqual(s.lines[-1]["battery"]["left"], 94, cut)
+            self.assertEqual(s.sent, authenticated_sent(), cut)
+
+    def test_the_handshake_and_the_answers_in_one_read(self):
+        s = buds_3_pro()
+        stream = THEIR_ANSWER + CONFIRM_ACK + THEIR_CHALLENGE + THEIR_CONFIRM + CONFIG_12 \
+            + B3P_NOISE_AMBIENT + B3P_ANSWER
+        RunLoop().feed(s, stream)
+        self.assertEqual(s.lines[-1]["battery"], {"left": 94, "right": 94, "case": 44,
+                                                  "charging": []})
+        self.assertEqual(s.sent[-1], "fe dc ba 04 f4 00 02 00 02 ef")
+
+    def test_a_stop_during_the_handshake_writes_nothing_more(self):
+        s = buds_3_pro()
+        s.bridge.finish(0)
+        s.frames.clear()
+        for frame in (THEIR_ANSWER, THEIR_CHALLENGE, THEIR_CONFIRM):
+            s.device(frame.hex(" "))
+        self.assertFalse(s.bridge.poll())
+        self.assertEqual(s.frames, [])
+
+    def test_the_link_closing_during_the_handshake_is_exit_1(self):
+        s = buds_3_pro()
+        self.assertFalse(RunLoop().feed(s, THEIR_ANSWER[:9], b""))
+        self.assertEqual(s.bridge.exit_code, bridge.EXIT_TRANSIENT)
+
+    def test_the_buds_5_are_not_asked_to_authenticate(self):
+        s = Session()
+        s.do_open()
+        self.assertEqual([f[4] for f in s.frames], [bridge.OP_GET_CONFIG, bridge.OP_GET_TARGET_INFO])
+
+
+def authenticated_sent():
+    return [
+        bridge.encode_auth_challenge(1, OUR_CHALLENGE).hex(" "),
+        "fe dc ba c4 51 00 03 02 01 00 ef",
+        OUR_ANSWER.hex(" "),
+        "fe dc ba 04 51 00 03 00 01 01 ef",
+        "fe dc ba c0 f3 00 03 03 00 0b ef",
+        "fe dc ba c0 02 00 05 04 ff ff ff ff ef",
+    ]
+
+
+class Acknowledgement(unittest.TestCase):
+    def test_each_announcement_is_answered_with_its_sn(self):
+        s = authenticated()
+        s.frames.clear()
+        s.device(CONFIG_12.hex(" "))
+        s.device(STATUS_REPORT_ANC.hex(" "))
+        self.assertEqual(s.sent, ["fe dc ba 04 f4 00 02 00 02 ef",
+                                  "fe dc ba 04 0e 00 02 00 04 ef"])
+
+    def test_answers_and_set_acks_are_not_answered(self):
+        s = authenticated()
+        s.frames.clear()
+        for frame in (B3P_NOISE_AMBIENT, B3P_ANSWER, SET_ACK):
+            s.device(frame.hex(" "))
+        self.assertEqual(s.frames, [])
+
+    def test_the_buds_5_are_sent_no_acknowledgement(self):
+        s = Modes().ready()
+        s.device(NOTIFY_ANC.hex(" "))
+        s.device(STATUS_REPORT_ANC.hex(" "))
+        self.assertEqual(s.frames, [])
+
+
+class StatusBattery(unittest.TestCase):
+    def ready(self):
+        s = authenticated()
+        s.device(B3P_NOISE_AMBIENT.hex(" "))
+        s.device(B3P_ANSWER.hex(" "))
+        return s
+
+    def test_the_status_report_s_battery(self):
+        self.assertEqual(bridge.status_battery_of(STATUS_BATTERY),
+                         {"left": 92, "right": 92, "case": 44, "charging": []})
+        self.assertEqual(bridge.status_battery_of(STATUS_CHARGING),
+                         {"left": 92, "right": 92, "case": 44, "charging": ["left"]})
+        self.assertIsNone(bridge.status_battery_of(STATUS_NO_READING))
+        self.assertIsNone(bridge.status_battery_of(STATUS_REPORT_ANC))
+
+    def test_a_charging_bud_is_printed_and_no_reading_keeps_the_last(self):
+        s = self.ready()
+        s.device(STATUS_BATTERY.hex(" "))
+        count = len(s.lines)
+        s.device(STATUS_NO_READING.hex(" "))
+        self.assertEqual(len(s.lines), count)
+        s.device(STATUS_CHARGING.hex(" "))
+        self.assertEqual(s.lines[-1]["battery"]["charging"], ["left"])
+        self.assertEqual(s.lines[-1]["mode"], "ambient")
+
+    def test_our_own_answer_echoed_back_is_not_a_report(self):
+        self.assertIsNone(bridge.status_battery_of(bridge.encode_response(0x0E, 8, b"\x04\x00\x5c\x5c\x2c")))
+
+    def test_the_buds_5_do_not_read_a_battery_from_a_status_report(self):
+        # Synthetic for them: their reports carried none.
+        s = Modes().ready()
+        before = list(s.lines)
+        s.device(STATUS_CHARGING.hex(" "))
+        self.assertEqual(s.lines, before)
+
+
+class ModelArguments(unittest.TestCase):
+    def run_main(self, argv):
+        return Arguments().run_main(argv)
+
+    def test_an_unknown_name_is_exit_4(self):
+        code, lines = self.run_main([ADDRESS, "Redmi Buds 5"])
+        self.assertEqual(code, bridge.EXIT_SETUP)
+        self.assertIn("no Redmi model row", lines[0]["error"])
+
+    def test_too_many_arguments_is_exit_4(self):
+        code, lines = self.run_main([ADDRESS, BUDS_3_PRO, "extra"])
+        self.assertEqual(code, bridge.EXIT_SETUP)
+
+    def test_the_name_picks_the_row_and_no_name_the_buds_5(self):
+        seen = []
+
+        class Stop(Exception):
+            pass
+
+        def capture(bus, address, loop, model):
+            seen.append(model)
+            raise Stop
+
+        for argv in ([ADDRESS, BUDS_3_PRO], [ADDRESS]):
+            with mock.patch.object(bridge.sys, "argv", ["redmi-bridge"] + argv), \
+                    mock.patch.object(bridge, "Bridge", side_effect=capture), \
+                    mock.patch.object(bridge.dbus, "SystemBus", create=True), \
+                    mock.patch.object(bridge.dbus.mainloop.glib, "DBusGMainLoop", create=True), \
+                    mock.patch.object(bridge.GLib, "MainLoop", create=True):
+                with self.assertRaises(Stop):
+                    bridge.main()
+        self.assertEqual(seen, [bridge.MODELS[BUDS_3_PRO], bridge.NAMELESS])
+        self.assertEqual(bridge.NAMELESS, {"authenticate": False, "acknowledge": False,
+                                           "status_battery": False})
 
 
 if __name__ == "__main__":

@@ -1,0 +1,181 @@
+# Redmi Buds 3 Pro (firmware 1.1.1.1), on the 0xFD2D service, 2026-10-23, owner @osteotek.
+# Output of tools/redmi_probe.py, unedited apart from these comment lines; times are seconds
+# since the probe started, taken at receipt. The address is not in any frame shown.
+#
+# 1. Without --name (the Redmi Buds 5 conversation, read only): the channel opens and the
+#    earbuds answer nothing.
+#
+# 2026-10-23T18:54:17+03:00 tools/redmi_probe.py --listen 8
+  0.00s TX  fe dc ba c0 f3 00 03 01 00 0b ef  # get the noise control
+  0.00s TX  fe dc ba c0 02 00 05 02 ff ff ff ff ef  # get the battery
+  3.00s the earbuds did not report their noise control
+  3.00s the earbuds did not report their battery
+
+# 2. --name 'Redmi Buds 3 Pro' --cycle off,anc,ambient, with the probe authenticating but not
+#    yet acknowledging the earbuds' announcements. Every set was acknowledged and announced;
+#    the restoring set (to the mode they were already in) was acknowledged, and then the
+#    earbuds repeated their first three unanswered announcements (sn 02, 03, 04, the last one
+#    "off"), which the probe took for the current mode. A read straight afterwards found them
+#    in transparency, as before the run: the RESTORE FAILED here is that stale announcement.
+#    This is why the bridge answers every announcement for this model.
+#
+# 2026-10-23T19:01:07+03:00 tools/redmi_probe.py --name 'Redmi Buds 3 Pro' --cycle off,anc,ambient --listen 5
+  0.00s TX  fe dc ba c4 50 00 12 01 01 f7 2c 67 87 3c 8a 3a 67 a5 ff ff 5c 01 8f 4b 0a ef  # our authentication challenge
+  0.05s RX  fe dc ba 04 50 00 13 00 01 01 1b f7 6a 9f 5b 2b ce 90 ba 6d c4 e3 11 02 2f 16 ef  # their answer to our challenge: matches
+  0.05s TX  fe dc ba c4 51 00 03 02 01 00 ef  # our confirmation
+  0.07s RX  fe dc ba 04 51 00 03 00 02 01 ef  # our confirmation acknowledged (status 0)
+  0.12s RX  fe dc ba c0 50 00 12 00 01 cf 8f 23 9c 78 fb 41 ea 13 a8 b8 93 2a 6e 94 41 ef  # their authentication challenge
+  0.12s TX  fe dc ba 04 50 00 13 00 00 01 54 97 ce 0a fc 1b b3 84 56 83 eb 21 a9 8b 99 c5 ef  # our answer to their challenge
+  0.14s RX  fe dc ba c0 51 00 03 01 01 00 ef  # their authentication confirmation
+  0.14s TX  fe dc ba 04 51 00 03 00 01 01 ef  # acknowledge their confirmation
+  0.14s authenticated
+  0.14s TX  fe dc ba c0 f3 00 03 03 00 0b ef  # get the noise control
+  0.14s TX  fe dc ba c0 02 00 05 04 ff ff ff ff ef  # get the battery
+  0.19s RX  fe dc ba c7 f4 00 05 02 03 00 0c 0c ef  # not read
+  0.21s RX  fe dc ba 00 f3 00 07 00 03 04 00 0b 02 00 ef  # noise control ambient (state 2, level 0)
+  0.21s RX  fe dc ba 00 02 00 38 00 04 11 00 52 65 64 6d 69 20 42 75 64 73 20 33 20 50 72 6f 05 01 11 11 11 11 02 02 5e 05 03 5a 4d ea 0b 02 04 01 02 05 00 03 06 11 11 02 08 01 04 07 5e 5e 2c 02 0d 02 ef  # battery left 94%, right 94%, case 44%; charging: none
+  0.21s initial mode: ambient (state 2, level 0)
+  0.21s TX  fe dc ba c0 f2 00 06 05 04 00 0b 00 00 ef  # set off (state 0, level 0)
+  0.28s RX  fe dc ba 00 f2 00 02 00 05 ef  # set acknowledged
+  0.29s RX  fe dc ba c7 0e 00 04 03 02 04 00 ef  # status report (the earbuds' own)
+  0.29s RX  fe dc ba c7 f4 00 06 04 04 00 0b 00 00 ef  # noise control off (state 0, level 0)
+  0.29s off: the earbuds agree
+  0.59s TX  fe dc ba c0 f2 00 06 06 04 00 0b 01 00 ef  # set anc (state 1, level 0)
+  0.63s RX  fe dc ba 00 f2 00 02 00 06 ef  # set acknowledged
+  0.63s RX  fe dc ba c7 0e 00 04 05 02 04 01 ef  # status report (the earbuds' own)
+  0.63s RX  fe dc ba c7 f4 00 06 06 04 00 0b 01 00 ef  # noise control anc (state 1, level 0)
+  0.63s anc: the earbuds agree
+  0.93s TX  fe dc ba c0 f2 00 06 07 04 00 0b 02 00 ef  # set ambient (state 2, level 0)
+  0.96s RX  fe dc ba 00 f2 00 02 00 07 ef  # set acknowledged
+  1.30s RX  fe dc ba c7 0e 00 04 07 02 04 02 ef  # status report (the earbuds' own)
+  1.31s RX  fe dc ba c7 f4 00 06 08 04 00 0b 02 00 ef  # noise control ambient (state 2, level 0)
+  1.31s ambient: the earbuds agree
+  1.61s TX  fe dc ba c0 f2 00 06 08 04 00 0b 02 00 ef  # set ambient (state 2, level 0)
+  1.63s RX  fe dc ba 00 f2 00 02 00 08 ef  # set acknowledged
+  2.21s RX  fe dc ba c7 f4 00 05 02 03 00 0c 0c ef  # not read
+  2.30s RX  fe dc ba c7 0e 00 04 03 02 04 00 ef  # status report (the earbuds' own)
+  2.30s RX  fe dc ba c7 f4 00 06 04 04 00 0b 00 00 ef  # noise control off (state 0, level 0)
+  2.30s ambient: NOT CONFIRMED
+  2.60s RESTORE FAILED: set ambient by hand
+# exit 2
+
+# 2b. The read straight after run 2 (between 19:01:07 and 19:02:03, not timed; --name 'Redmi Buds 3 Pro'
+#     --listen 6, before the probe acknowledged): transparency. The unanswered config 12
+#     announcement repeats every two seconds.
+#
+  0.00s TX  fe dc ba c4 50 00 12 01 01 78 bf 93 4b 53 16 89 1a 3f a4 d0 e0 60 66 7f b7 ef  # our authentication challenge
+  0.05s RX  fe dc ba 04 50 00 13 00 01 01 a7 d0 11 3f 60 e5 07 83 38 79 64 a2 2e e7 af 4e ef  # their answer to our challenge: matches
+  0.05s TX  fe dc ba c4 51 00 03 02 01 00 ef  # our confirmation
+  0.07s RX  fe dc ba 04 51 00 03 00 02 01 ef  # our confirmation acknowledged (status 0)
+  0.12s RX  fe dc ba c0 50 00 12 00 01 c6 9f 55 53 d6 11 8d 3a 20 f6 a5 ae f6 53 a4 ba ef  # their authentication challenge
+  0.12s TX  fe dc ba 04 50 00 13 00 00 01 1e d1 8a fe 85 82 cb b2 11 42 93 cb 0f 85 2b ae ef  # our answer to their challenge
+  0.14s RX  fe dc ba c0 51 00 03 01 01 00 ef  # their authentication confirmation
+  0.14s TX  fe dc ba 04 51 00 03 00 01 01 ef  # acknowledge their confirmation
+  0.14s authenticated
+  0.14s TX  fe dc ba c0 f3 00 03 03 00 0b ef  # get the noise control
+  0.14s TX  fe dc ba c0 02 00 05 04 ff ff ff ff ef  # get the battery
+  0.19s RX  fe dc ba c7 f4 00 05 02 03 00 0c 0c ef  # not read
+  0.21s RX  fe dc ba 00 f3 00 07 00 03 04 00 0b 02 00 ef  # noise control ambient (state 2, level 0)
+  0.21s RX  fe dc ba 00 02 00 38 00 04 11 00 52 65 64 6d 69 20 42 75 64 73 20 33 20 50 72 6f 05 01 11 11 11 11 02 02 5e 05 03 5a 4d ea 0b 02 04 01 02 05 00 03 06 11 11 02 08 01 04 07 5e 5e 2c 02 0d 02 ef  # battery left 94%, right 94%, case 44%; charging: none
+  2.21s RX  fe dc ba c7 f4 00 05 02 03 00 0c 0c ef  # not read
+  4.21s RX  fe dc ba c7 f4 00 05 02 03 00 0c 0c ef  # not read
+
+# 3. The same cycle with the announcements acknowledged, as the bridge does.
+#
+# 2026-10-23T19:02:03+03:00 tools/redmi_probe.py --name 'Redmi Buds 3 Pro' --cycle off,anc,ambient --listen 8
+  0.00s TX  fe dc ba c4 50 00 12 01 01 dd 3b 5c 5d fb e6 69 84 1c 2e 81 84 75 8e 66 00 ef  # our authentication challenge
+  0.05s RX  fe dc ba 04 50 00 13 00 01 01 bd 04 53 94 ac 59 2f f4 4e be c2 18 fe 55 63 e9 ef  # their answer to our challenge: matches
+  0.05s TX  fe dc ba c4 51 00 03 02 01 00 ef  # our confirmation
+  0.07s RX  fe dc ba 04 51 00 03 00 02 01 ef  # our confirmation acknowledged (status 0)
+  0.12s RX  fe dc ba c0 50 00 12 00 01 78 5a f7 fb b2 60 9c c7 74 c2 7d 69 d1 36 21 b9 ef  # their authentication challenge
+  0.13s TX  fe dc ba 04 50 00 13 00 00 01 ff dc 81 66 35 b6 d1 a4 88 7a e1 42 f6 22 7c cc ef  # our answer to their challenge
+  0.14s RX  fe dc ba c0 51 00 03 01 01 00 ef  # their authentication confirmation
+  0.14s TX  fe dc ba 04 51 00 03 00 01 01 ef  # acknowledge their confirmation
+  0.14s authenticated
+  0.14s TX  fe dc ba c0 f3 00 03 03 00 0b ef  # get the noise control
+  0.14s TX  fe dc ba c0 02 00 05 04 ff ff ff ff ef  # get the battery
+  0.19s RX  fe dc ba c7 f4 00 05 02 03 00 0c 0c ef  # not read
+  0.19s TX  fe dc ba 04 f4 00 02 00 02 ef  # acknowledge it
+  0.21s RX  fe dc ba 00 f3 00 07 00 03 04 00 0b 02 00 ef  # noise control ambient (state 2, level 0)
+  0.23s RX  fe dc ba 00 02 00 38 00 04 11 00 52 65 64 6d 69 20 42 75 64 73 20 33 20 50 72 6f 05 01 11 11 11 11 02 02 5e 05 03 5a 4d ea 0b 02 04 01 02 05 00 03 06 11 11 02 08 01 04 07 5e 5e 2c 02 0d 02 ef  # battery left 94%, right 94%, case 44%; charging: none
+  0.23s initial mode: ambient (state 2, level 0)
+  0.23s TX  fe dc ba c0 f2 00 06 05 04 00 0b 00 00 ef  # set off (state 0, level 0)
+  0.29s RX  fe dc ba 00 f2 00 02 00 05 ef  # set acknowledged
+  0.32s RX  fe dc ba c7 0e 00 04 03 02 04 00 ef  # status report (the earbuds' own)
+  0.32s TX  fe dc ba 04 0e 00 02 00 03 ef  # acknowledge it
+  0.32s RX  fe dc ba c7 f4 00 06 04 04 00 0b 00 00 ef  # noise control off (state 0, level 0)
+  0.32s TX  fe dc ba 04 f4 00 02 00 04 ef  # acknowledge it
+  0.32s off: the earbuds agree
+  0.62s TX  fe dc ba c0 f2 00 06 06 04 00 0b 01 00 ef  # set anc (state 1, level 0)
+  0.66s RX  fe dc ba 00 f2 00 02 00 06 ef  # set acknowledged
+  0.66s RX  fe dc ba c7 0e 00 04 05 02 04 01 ef  # status report (the earbuds' own)
+  0.66s TX  fe dc ba 04 0e 00 02 00 05 ef  # acknowledge it
+  0.66s RX  fe dc ba c7 f4 00 06 06 04 00 0b 01 00 ef  # noise control anc (state 1, level 0)
+  0.66s TX  fe dc ba 04 f4 00 02 00 06 ef  # acknowledge it
+  0.66s anc: the earbuds agree
+  0.96s TX  fe dc ba c0 f2 00 06 07 04 00 0b 02 00 ef  # set ambient (state 2, level 0)
+  1.00s RX  fe dc ba 00 f2 00 02 00 07 ef  # set acknowledged
+  1.34s RX  fe dc ba c7 0e 00 04 07 02 04 02 ef  # status report (the earbuds' own)
+  1.34s TX  fe dc ba 04 0e 00 02 00 07 ef  # acknowledge it
+  1.34s RX  fe dc ba c7 f4 00 06 08 04 00 0b 02 00 ef  # noise control ambient (state 2, level 0)
+  1.34s TX  fe dc ba 04 f4 00 02 00 08 ef  # acknowledge it
+  1.34s ambient: the earbuds agree
+  1.64s TX  fe dc ba c0 f2 00 06 08 04 00 0b 02 00 ef  # set ambient (state 2, level 0)
+  1.66s RX  fe dc ba 00 f2 00 02 00 08 ef  # set acknowledged
+  4.15s TX  fe dc ba c0 f3 00 03 09 00 0b ef  # read it back
+  4.17s RX  fe dc ba 00 f3 00 07 00 09 04 00 0b 02 00 ef  # noise control ambient (state 2, level 0)
+  4.17s ambient: the earbuds agree
+  4.47s restored: ambient
+# exit 0
+
+# 4. Read only, listening 60 s. The owner long-pressed a stem twice (cancelling, then
+#    transparency), then put the left bud in the case with the lid open (31 s) and took it
+#    out again (41 s). The status reports carry the batteries as attribute 0: ff ff ff while
+#    the bud went in, then dc 5c 2c (left 92 and charging, right 92, case 44). Config 12,
+#    announced with the case moves, is not read.
+#
+# 2026-10-23T19:02:57+03:00 tools/redmi_probe.py --name 'Redmi Buds 3 Pro' --listen 60  (owner: long-press twice, then left bud into the case and out)
+  0.00s TX  fe dc ba c4 50 00 12 01 01 2c 74 1b 23 53 9c b0 ca 55 ba 40 c1 2a 1e 0e 5f ef  # our authentication challenge
+  0.05s RX  fe dc ba 04 50 00 13 00 01 01 00 7b 09 f8 d9 04 d7 20 89 91 be 20 45 03 95 8a ef  # their answer to our challenge: matches
+  0.05s TX  fe dc ba c4 51 00 03 02 01 00 ef  # our confirmation
+  0.06s RX  fe dc ba 04 51 00 03 00 02 01 ef  # our confirmation acknowledged (status 0)
+  0.12s RX  fe dc ba c0 50 00 12 00 01 f3 fe 3c dc 53 da 26 c3 9f 96 58 48 e1 f7 73 a8 ef  # their authentication challenge
+  0.12s TX  fe dc ba 04 50 00 13 00 00 01 37 14 f0 4a 74 ad 7d 98 f0 ad 75 f3 d3 02 2f 4d ef  # our answer to their challenge
+  0.14s RX  fe dc ba c0 51 00 03 01 01 00 ef  # their authentication confirmation
+  0.14s TX  fe dc ba 04 51 00 03 00 01 01 ef  # acknowledge their confirmation
+  0.14s authenticated
+  0.14s TX  fe dc ba c0 f3 00 03 03 00 0b ef  # get the noise control
+  0.14s TX  fe dc ba c0 02 00 05 04 ff ff ff ff ef  # get the battery
+  0.19s RX  fe dc ba c7 f4 00 05 02 03 00 0c 0c ef  # not read
+  0.19s TX  fe dc ba 04 f4 00 02 00 02 ef  # acknowledge it
+  0.20s RX  fe dc ba 00 f3 00 07 00 03 04 00 0b 02 00 ef  # noise control ambient (state 2, level 0)
+  0.23s RX  fe dc ba 00 02 00 38 00 04 11 00 52 65 64 6d 69 20 42 75 64 73 20 33 20 50 72 6f 05 01 11 11 11 11 02 02 5d 05 03 5a 4d ea 0b 02 04 01 02 05 00 03 06 11 11 02 08 01 04 07 5d 5d 2c 02 0d 02 ef  # battery left 93%, right 93%, case 44%; charging: none
+ 12.85s RX  fe dc ba c7 0e 00 06 03 04 00 5c 5d 2c ef  # status report (the earbuds' own)
+ 12.85s TX  fe dc ba 04 0e 00 02 00 03 ef  # acknowledge it
+ 13.22s RX  fe dc ba c7 0e 00 04 04 02 04 01 ef  # status report (the earbuds' own)
+ 13.22s TX  fe dc ba 04 0e 00 02 00 04 ef  # acknowledge it
+ 13.22s RX  fe dc ba c7 f4 00 06 05 04 00 0b 01 00 ef  # noise control anc (state 1, level 0)
+ 13.22s TX  fe dc ba 04 f4 00 02 00 05 ef  # acknowledge it
+ 18.84s RX  fe dc ba c7 0e 00 04 06 02 04 02 ef  # status report (the earbuds' own)
+ 18.84s TX  fe dc ba 04 0e 00 02 00 06 ef  # acknowledge it
+ 18.84s RX  fe dc ba c7 f4 00 06 07 04 00 0b 02 00 ef  # noise control ambient (state 2, level 0)
+ 18.84s TX  fe dc ba 04 f4 00 02 00 07 ef  # acknowledge it
+ 19.51s RX  fe dc ba c7 0e 00 06 08 04 00 5c 5c 2c ef  # status report (the earbuds' own)
+ 19.51s TX  fe dc ba 04 0e 00 02 00 08 ef  # acknowledge it
+ 31.17s RX  fe dc ba c7 0e 00 06 09 04 00 ff ff ff ef  # status report (the earbuds' own)
+ 31.17s TX  fe dc ba 04 0e 00 02 00 09 ef  # acknowledge it
+ 31.18s RX  fe dc ba c7 0e 00 06 0a 04 00 dc 5c 2c ef  # status report (the earbuds' own)
+ 31.18s TX  fe dc ba 04 0e 00 02 00 0a ef  # acknowledge it
+ 31.25s RX  fe dc ba c7 f4 00 05 0b 03 00 0c 04 ef  # not read
+ 31.25s TX  fe dc ba 04 f4 00 02 00 0b ef  # acknowledge it
+ 31.35s RX  fe dc ba c7 f4 00 05 0c 03 00 0c 06 ef  # not read
+ 31.35s TX  fe dc ba 04 f4 00 02 00 0c ef  # acknowledge it
+ 31.39s RX  fe dc ba c7 f4 00 05 0d 03 00 0c 06 ef  # not read
+ 31.39s TX  fe dc ba 04 f4 00 02 00 0d ef  # acknowledge it
+ 41.20s RX  fe dc ba c7 0e 00 06 0e 04 00 5c 5c 2c ef  # status report (the earbuds' own)
+ 41.20s TX  fe dc ba 04 0e 00 02 00 0e ef  # acknowledge it
+ 41.23s RX  fe dc ba c7 f4 00 05 0f 03 00 0c 04 ef  # not read
+ 41.23s TX  fe dc ba 04 f4 00 02 00 0f ef  # acknowledge it
+ 42.58s RX  fe dc ba c7 f4 00 05 10 03 00 0c 0c ef  # not read
+ 42.58s TX  fe dc ba 04 f4 00 02 00 10 ef  # acknowledge it
+# exit 0

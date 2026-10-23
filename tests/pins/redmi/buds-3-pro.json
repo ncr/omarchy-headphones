@@ -1,0 +1,307 @@
+{
+  "model": "Redmi Buds 3 Pro",
+  "owner": "osteotek",
+  "bridge": "redmi-bridge",
+  "capture": "docs/captures/redmi-buds-3-pro.txt",
+  "notes": "Battery and noise control on the Xiaomi 0000fd2d service, as the Redmi Buds 5's, behind a mutual authentication the earbuds require before they answer anything (a SAFER+ challenge each way, checked against the bridge's own computation). After it, the reads and sets are the Buds 5's frames. These earbuds repeat each of their own announcements (0E, F4) until it is answered, so the bridge answers each one; and their status reports carry the batteries (attribute 0), charging bit included. The frames are verbatim from the capture: the third run (the handshake, the reads and the off, cancelling, transparency sets, our challenge fixed to the one sent there) and the fourth (a long press, the battery reports with the left bud going into the case). The Fast Pair Message Stream is not in their record.",
+  "session": {
+    "name": "Redmi Buds 3 Pro",
+    "challenge": "dd 3b 5c 5d fb e6 69 84 1c 2e 81 84 75 8e 66 00"
+  },
+  "steps": [
+    {
+      "call": "open",
+      "note": "the channel is up: our challenge, and nothing else until both sides have confirmed"
+    },
+    {
+      "sent": [
+        "fe dc ba c4 50 00 12 01 01 dd 3b 5c 5d fb e6 69 84 1c 2e 81 84 75 8e 66 00 ef"
+      ]
+    },
+    {
+      "command": "set anc",
+      "note": "nothing is sent before the earbuds have said their mode"
+    },
+    {
+      "device": "fe dc ba 04 50 00 13 00 01 01 bd 04 53 94 ac 59 2f f4 4e be c2 18 fe 55 63 e9 ef",
+      "note": "their answer to our challenge, which the bridge computes and compares"
+    },
+    {
+      "sent_last": "fe dc ba c4 51 00 03 02 01 00 ef"
+    },
+    {
+      "device": "fe dc ba 04 51 00 03 00 02 01 ef",
+      "note": "our confirmation acknowledged"
+    },
+    {
+      "device": "fe dc ba c0 50 00 12 00 01 78 5a f7 fb b2 60 9c c7 74 c2 7d 69 d1 36 21 b9 ef",
+      "note": "their challenge"
+    },
+    {
+      "sent_last": "fe dc ba 04 50 00 13 00 00 01 ff dc 81 66 35 b6 d1 a4 88 7a e1 42 f6 22 7c cc ef",
+      "note": "the answer the earbuds accepted"
+    },
+    {
+      "device": "fe dc ba c0 51 00 03 01 01 00 ef",
+      "note": "their confirmation: authenticated"
+    },
+    {
+      "sent": [
+        "fe dc ba c4 50 00 12 01 01 dd 3b 5c 5d fb e6 69 84 1c 2e 81 84 75 8e 66 00 ef",
+        "fe dc ba c4 51 00 03 02 01 00 ef",
+        "fe dc ba 04 50 00 13 00 00 01 ff dc 81 66 35 b6 d1 a4 88 7a e1 42 f6 22 7c cc ef",
+        "fe dc ba 04 51 00 03 00 01 01 ef",
+        "fe dc ba c0 f3 00 03 03 00 0b ef",
+        "fe dc ba c0 02 00 05 04 ff ff ff ff ef"
+      ],
+      "note": "after the handshake, the Buds 5's two reads, byte for byte"
+    },
+    {
+      "device": "fe dc ba c7 f4 00 05 02 03 00 0c 0c ef",
+      "note": "config 12, announced on their own: acknowledged, not read"
+    },
+    {
+      "sent_last": "fe dc ba 04 f4 00 02 00 02 ef"
+    },
+    {
+      "lines": []
+    },
+    {
+      "device": "fe dc ba 00 f3 00 07 00 03 04 00 0b 02 00 ef",
+      "note": "transparency, as the earbuds were set"
+    },
+    {
+      "line": {
+        "modes": true,
+        "available": [
+          "off",
+          "anc",
+          "ambient"
+        ],
+        "mode": "ambient"
+      },
+      "note": "the mode answer came first: it goes out alone, the battery follows"
+    },
+    {
+      "device": "fe dc ba 00 02 00 38 00 04 11 00 52 65 64 6d 69 20 42 75 64 73 20 33 20 50 72 6f 05 01 11 11 11 11 02 02 5e 05 03 5a 4d ea 0b 02 04 01 02 05 00 03 06 11 11 02 08 01 04 07 5e 5e 2c 02 0d 02 ef",
+      "note": "GetTargetInfo: attribute 7 is 94, 94, 44"
+    },
+    {
+      "line": {
+        "modes": true,
+        "available": [
+          "off",
+          "anc",
+          "ambient"
+        ],
+        "mode": "ambient",
+        "battery": {
+          "left": 94,
+          "right": 94,
+          "case": 44,
+          "charging": []
+        }
+      }
+    },
+    {
+      "line_count": 2
+    },
+    {
+      "command": "set off"
+    },
+    {
+      "sent_last": "fe dc ba c0 f2 00 06 05 04 00 0b 00 00 ef"
+    },
+    {
+      "line_count": 2,
+      "note": "the bridge does not print the mode on the strength of having asked"
+    },
+    {
+      "device": "fe dc ba 00 f2 00 02 00 05 ef fe dc ba c7 0e 00 04 03 02 04 00 ef fe dc ba c7 f4 00 06 04 04 00 0b 00 00 ef",
+      "note": "the set acknowledged, then the status report and the announcement, both answered"
+    },
+    {
+      "sent": [
+        "fe dc ba c4 50 00 12 01 01 dd 3b 5c 5d fb e6 69 84 1c 2e 81 84 75 8e 66 00 ef",
+        "fe dc ba c4 51 00 03 02 01 00 ef",
+        "fe dc ba 04 50 00 13 00 00 01 ff dc 81 66 35 b6 d1 a4 88 7a e1 42 f6 22 7c cc ef",
+        "fe dc ba 04 51 00 03 00 01 01 ef",
+        "fe dc ba c0 f3 00 03 03 00 0b ef",
+        "fe dc ba c0 02 00 05 04 ff ff ff ff ef",
+        "fe dc ba 04 f4 00 02 00 02 ef",
+        "fe dc ba c0 f2 00 06 05 04 00 0b 00 00 ef",
+        "fe dc ba 04 0e 00 02 00 03 ef",
+        "fe dc ba 04 f4 00 02 00 04 ef"
+      ]
+    },
+    {
+      "line": {
+        "modes": true,
+        "available": [
+          "off",
+          "anc",
+          "ambient"
+        ],
+        "mode": "off",
+        "battery": {
+          "left": 94,
+          "right": 94,
+          "case": 44,
+          "charging": []
+        }
+      }
+    },
+    {
+      "command": "set anc"
+    },
+    {
+      "sent_last": "fe dc ba c0 f2 00 06 06 04 00 0b 01 00 ef"
+    },
+    {
+      "device": "fe dc ba 00 f2 00 02 00 06 ef fe dc ba c7 0e 00 04 05 02 04 01 ef fe dc ba c7 f4 00 06 06 04 00 0b 01 00 ef"
+    },
+    {
+      "line": {
+        "modes": true,
+        "available": [
+          "off",
+          "anc",
+          "ambient"
+        ],
+        "mode": "anc",
+        "battery": {
+          "left": 94,
+          "right": 94,
+          "case": 44,
+          "charging": []
+        }
+      }
+    },
+    {
+      "command": "set ambient"
+    },
+    {
+      "sent_last": "fe dc ba c0 f2 00 06 07 04 00 0b 02 00 ef"
+    },
+    {
+      "device": "fe dc ba 00 f2 00 02 00 07 ef"
+    },
+    {
+      "line_has": {
+        "mode": "anc"
+      },
+      "note": "the acknowledgement alone is not the mode"
+    },
+    {
+      "device": "fe dc ba c7 0e 00 04 07 02 04 02 ef fe dc ba c7 f4 00 06 08 04 00 0b 02 00 ef"
+    },
+    {
+      "sent_last": "fe dc ba 04 f4 00 02 00 08 ef"
+    },
+    {
+      "line": {
+        "modes": true,
+        "available": [
+          "off",
+          "anc",
+          "ambient"
+        ],
+        "mode": "ambient",
+        "battery": {
+          "left": 94,
+          "right": 94,
+          "case": 44,
+          "charging": []
+        }
+      }
+    },
+    {
+      "device": "fe dc ba c7 0e 00 04 04 02 04 01 ef fe dc ba c7 f4 00 06 05 04 00 0b 01 00 ef",
+      "note": "from the capture's fourth run: a long press on a stem, announced on its own"
+    },
+    {
+      "sent_last": "fe dc ba 04 f4 00 02 00 05 ef"
+    },
+    {
+      "line": {
+        "modes": true,
+        "available": [
+          "off",
+          "anc",
+          "ambient"
+        ],
+        "mode": "anc",
+        "battery": {
+          "left": 94,
+          "right": 94,
+          "case": 44,
+          "charging": []
+        }
+      }
+    },
+    {
+      "device": "fe dc ba c7 0e 00 06 08 04 00 5c 5c 2c ef",
+      "note": "the battery in a status report (fourth run): 92, 92, 44"
+    },
+    {
+      "sent_last": "fe dc ba 04 0e 00 02 00 08 ef"
+    },
+    {
+      "line": {
+        "modes": true,
+        "available": [
+          "off",
+          "anc",
+          "ambient"
+        ],
+        "mode": "anc",
+        "battery": {
+          "left": 92,
+          "right": 92,
+          "case": 44,
+          "charging": []
+        }
+      }
+    },
+    {
+      "device": "fe dc ba c7 0e 00 06 09 04 00 ff ff ff ef",
+      "note": "the left bud going into the case: no reading, so the last one stands"
+    },
+    {
+      "line_count": 7
+    },
+    {
+      "device": "fe dc ba c7 0e 00 06 0a 04 00 dc 5c 2c ef",
+      "note": "in the case: left 92 and charging"
+    },
+    {
+      "line": {
+        "modes": true,
+        "available": [
+          "off",
+          "anc",
+          "ambient"
+        ],
+        "mode": "anc",
+        "battery": {
+          "left": 92,
+          "right": 92,
+          "case": 44,
+          "charging": [
+            "left"
+          ]
+        }
+      }
+    },
+    {
+      "command": "set talkthru",
+      "note": "a mode these earbuds do not have is ignored"
+    },
+    {
+      "sent_last": "fe dc ba 04 0e 00 02 00 0a ef"
+    },
+    {
+      "line_count": 8
+    }
+  ]
+}

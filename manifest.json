@@ -78,7 +78,7 @@
         "type": "boolean",
         "label": "Noise cancellation (Off / ANC / Ambient)",
         "defaultValue": true,
-        "description": "The MODE row, following changes made on the device too — plus the ambient level on Sony and Soundcore, and the ANC strength and low-latency switch on Nothing / CMF. Works on Sony MDR v1 and v2, Samsung Galaxy Buds2, Nothing / CMF, Soundcore, Xiaomi Buds 5 Pro, OPPO Enco Air3 Pro, Bose QC45, Bose QC35, TOZO NC9 Pro, and some JBL earbuds (JBL needs Fast Pair above). Hidden when the device answers for none. TOZO NC9 Pro also offers Reduce Wind Noise, Leisure and Adaptive modes."
+        "description": "The MODE row, following changes made on the device too — plus the ambient level on Sony and Soundcore, and the ANC strength and low-latency switch on Nothing / CMF. Works on Sony MDR v1 and v2, Samsung Galaxy Buds2, Nothing / CMF, Soundcore, Xiaomi Buds 5 Pro, Redmi Buds 3 Pro, OPPO Enco Air3 Pro, Bose QC45, Bose QC35, TOZO NC9 Pro, and some JBL earbuds (JBL needs Fast Pair above). Hidden when the device answers for none. TOZO NC9 Pro also offers Reduce Wind Noise, Leisure and Adaptive modes."
       },
       {
         "key": "lowBatteryThreshold",
