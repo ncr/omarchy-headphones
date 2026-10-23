@@ -1,5 +1,6 @@
 import QtQuick
 import qs.Commons
+import qs.Commons as Commons
 import qs.Ui
 import "Model.js" as Model
 
@@ -251,10 +252,10 @@ Panel {
   readonly property bool shouldShow: followed.length > 0 && (anyConnected || !hideWhenDisconnected)
   readonly property bool vertical: bar ? bar.vertical : false
 
-  readonly property color foreground: bar ? bar.foreground : Color.foreground
-  readonly property color urgent: bar ? bar.urgent : Color.urgent
+  readonly property color foreground: bar ? bar.foreground : Commons.Color.foreground
+  readonly property color urgent: bar ? bar.urgent : Commons.Color.urgent
   readonly property color dim: Qt.darker(foreground, 1.55)
-  readonly property color track: Style.selectedFillFor(foreground, Color.accent, urgent)
+  readonly property color track: Style.selectedFillFor(foreground, Commons.Color.accent, urgent)
   readonly property string fontFamily: bar ? bar.fontFamily : Style.font.family
 
   implicitWidth: vertical ? markColumn.implicitWidth : markRow.implicitWidth
@@ -726,7 +727,7 @@ Panel {
               options: modelData
               value: root.ancMode
               foreground: root.foreground
-              background: Color.background
+              background: Commons.Color.background
               fontFamily: root.fontFamily
               fontSize: Style.font.bodySmall
               // Selection follows device readback, including physical changes.
@@ -755,7 +756,7 @@ Panel {
               options: root.ancLevelOptions
               value: root.ancMode === "anc" ? root.ancLevel : ""
               foreground: root.foreground
-              background: Color.background
+              background: Commons.Color.background
               fontFamily: root.fontFamily
               fontSize: Style.font.bodySmall
               onChanged: function(level) { root.setAncLevel(level) }
@@ -836,7 +837,7 @@ Panel {
                 id: voiceSwitch
                 checked: root.ambientVoice
                 foreground: root.foreground
-                accent: Color.accent
+                accent: Commons.Color.accent
                 anchors.right: parent.right
                 anchors.verticalCenter: parent.verticalCenter
 
@@ -867,7 +868,7 @@ Panel {
               id: latencySwitch
               checked: root.latencyEnabled
               foreground: root.foreground
-              accent: Color.accent
+              accent: Commons.Color.accent
               anchors.right: parent.right
               anchors.verticalCenter: parent.verticalCenter
 
