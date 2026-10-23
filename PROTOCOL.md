@@ -1060,7 +1060,7 @@ record [`docs/captures/redmi-buds-5-bluetoothctl.txt`](docs/captures/redmi-buds-
 
 | UUID | What it is | Answers? |
 |---|---|---|
-| `df21fe2c-2515-4fdb-8886-f12c4d67927c` | Fast Pair Message Stream | **Opens, and its battery is not to be believed**: a model id (`2b677d`), an all-zero BLE address and firmware `0.0.1.0`, and then, depending on the session, no battery frame (150 s, including with a bud put in the case and taken out), one byte `fe` (126%, charging), or two bytes `94 94` (20% charging twice) while the levels were 65–70 ([capture](docs/captures/redmi-buds-5-fastpair.txt)) |
+| `df21fe2c-2515-4fdb-8886-f12c4d67927c` | Fast Pair Message Stream | **Opens, and its battery is not to be believed**: a model id (`2b677d`), an all-zero BLE address and firmware `0.0.1.0`, and then, depending on the session, no battery frame (150 s, including with a bud put in the case and taken out), one byte `fe` (126%, charging; the right bud was at 50%), or two bytes `94 94` (20% charging twice; both buds were at 65%) ([capture](docs/captures/redmi-buds-5-fastpair.txt)) |
 | `0000fd2d-0000-1000-8000-00805f9b34fb` | Xiaomi's 16-bit service | **Yes: RCSP, below** |
 | `00001101-0000-1000-8000-00805f9b34fb` | standard SPP | not tried |
 | `66666666-6666-6666-6666-666666666666`, `99999999-9999-9999-9999-999999999999` | vendor | not tried |

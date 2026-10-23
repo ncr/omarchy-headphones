@@ -1,6 +1,6 @@
 Redmi Buds 5, Fast Pair Message Stream (df21fe2c-2515-4fdb-8886-f12c4d67927c), in
-three sessions on one pair. Address masked. The earbuds' own app (Xiaomi Earbuds)
-and the RCSP read in redmi-buds-5.txt showed the true levels each time.
+three sessions on one pair. Address masked. Where a session says what the real levels
+were, they are the RCSP bridge's (redmi-buds-5.txt), not the Fast Pair stream's.
 
 1. 2026-10-14, gfps-reader, 25 s and then 150 s (the owner moved a bud out of the case
    and back during the second): the channel opens and the reader prints, once each,
@@ -9,12 +9,13 @@ and the RCSP read in redmi-buds-5.txt showed the true levels each time.
    {... "bleAddress":"00:00:00:00:00:00"}
    {... "firmware":"0.0.1.0"}
 
-   and nothing after: no battery frame.
+   and nothing after: no battery frame. The real levels were not recorded with it.
 
 2. 2026-10-23 10:08, gfps-reader, with the left bud not working (no sound from it,
    and no level for it in the widget; it worked again after both buds went into the
-   case with the lid shut for a few seconds). The first three lines are as above,
-   then:
+   case with the lid shut for a few seconds). The RCSP bridge showed the right bud at
+   50% and the case at 68%, and no level for the left. The first three lines are as
+   above, then:
 
    {"address":"AA:BB:CC:00:00:01","stream":true,"single":true,"battery":126,
     "batteryCharging":true,"left":-1,...,"modelId":"2b677d","bleAddress":"00:00:00:00:00:00"}
@@ -48,8 +49,8 @@ and the RCSP read in redmi-buds-5.txt showed the true levels each time.
    probe before it was changed to say that two bytes are not a layout it reads.
 
 What this shows, and what it does not: on this pair the stream's battery was absent
-in one session, one byte 0xFE in another, and two bytes saying 20% charging in a
-third, with the true levels 65-70% each time. Its battery is not to be believed, and
-that is what the RCSP bridge is for. Why it changes (the left bud's link to the
+in one session, one byte 0xFE in another (the right bud at 50%), and two bytes saying
+20% charging in a third (both buds at 65%). Never a level the buds had. Its battery
+is not to be believed, and that is what the RCSP bridge is for. Why it changes (the left bud's link to the
 right one was down in session 2; the earbuds' firmware reports 0.0.1.0 and an
 all-zero BLE address throughout) was not tested.
