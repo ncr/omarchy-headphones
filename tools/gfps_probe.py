@@ -30,6 +30,8 @@ GROUPS = {1: "BLUETOOTH_EVENT", 2: "COMPANION_APP_EVENT", 3: "DEVICE_INFO",
 def parse_component(byte):
     if (byte & 0x7F) == 0x7F:
         return "n/a"
+    if (byte & 0x7F) > 100:
+        return "n/a (0x%02x is above 100)" % byte
     return "%d%%%s" % (byte & 0x7F, " charging" if byte & 0x80 else "")
 
 
@@ -38,10 +40,15 @@ def show(group, code, payload):
     print("frame group=0x%02x (%s) code=0x%02x len=%d payload=%s"
           % (group, name, code, len(payload), payload.hex()), flush=True)
     if group == 0x03 and code == 0x03:
-        parts = [parse_component(b) for b in payload]
-        labels = ["left", "right", "case"] if len(payload) == 3 else ["battery"]
-        print("  BATTERY: " + ", ".join("%s=%s" % (l, v) for l, v in zip(labels, parts)),
-              flush=True)
+        if len(payload) in (1, 3):
+            parts = [parse_component(b) for b in payload]
+            labels = ["left", "right", "case"] if len(payload) == 3 else ["battery"]
+            print("  BATTERY: " + ", ".join("%s=%s" % (l, v) for l, v in zip(labels, parts)),
+                  flush=True)
+        else:
+            # The widget reads one byte or three and nothing else.
+            print("  BATTERY: %d bytes, not a layout the widget reads: %s"
+                  % (len(payload), payload.hex(" ")), flush=True)
     if group == 0x03 and code == 0x09:
         print("  FIRMWARE: %s" % payload.decode("utf-8", "replace"), flush=True)
     if group == 0x08 and code == 0x13 and len(payload) >= 4:

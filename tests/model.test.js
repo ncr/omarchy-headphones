@@ -1264,3 +1264,11 @@ Deno.test("the Redmi row takes no other device's claim, and every other claim st
   // A Fast Pair address alone, as for any other headset, is still the JBL row.
   assertEquals(Model.controlBackend([], BLE_ADDRESS, "Redmi Buds 5"), "jbl");
 });
+
+Deno.test("a reader level above 100 is not a level", () => {
+  assertEquals(Model.readerLevel({ battery: 126 }, "battery"), -1);
+  assertEquals(Model.readerLevel({ battery: 101 }, "battery"), -1);
+  assertEquals(Model.readerLevel({ battery: 100 }, "battery"), 100);
+  assertEquals(Model.readerLevel({ battery: 0 }, "battery"), 0);
+  assertEquals(Model.readerLevel({ battery: -1 }, "battery"), -1);
+});

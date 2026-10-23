@@ -1,0 +1,55 @@
+Redmi Buds 5, Fast Pair Message Stream (df21fe2c-2515-4fdb-8886-f12c4d67927c), in
+three sessions on one pair. Address masked. The earbuds' own app (Xiaomi Earbuds)
+and the RCSP read in redmi-buds-5.txt showed the true levels each time.
+
+1. 2026-10-14, gfps-reader, 25 s and then 150 s (the owner moved a bud out of the case
+   and back during the second): the channel opens and the reader prints, once each,
+
+   {"address":"AA:BB:CC:00:00:01","stream":true,"single":false,"battery":-1,...,"modelId":"2b677d"}
+   {... "bleAddress":"00:00:00:00:00:00"}
+   {... "firmware":"0.0.1.0"}
+
+   and nothing after: no battery frame.
+
+2. 2026-10-23 10:08, gfps-reader, with the left bud not working (no sound from it,
+   and no level for it in the widget; it worked again after both buds went into the
+   case with the lid shut for a few seconds). The first three lines are as above,
+   then:
+
+   {"address":"AA:BB:CC:00:00:01","stream":true,"single":true,"battery":126,
+    "batteryCharging":true,"left":-1,...,"modelId":"2b677d","bleAddress":"00:00:00:00:00:00"}
+
+   A single battery byte, 0xFE: level part 0x7E = 126, bit 7 set. The reader printed
+   it as 126% and charging. The widget showed "126%" in its tooltip and the bridge's
+   left, right and case never reached the panel. (The raw frame is not in this
+   session's output; 03 03 00 01 fe is what the reader's line implies.)
+
+3. 2026-10-23, later the same day, tools/gfps_probe.py, both buds working, the widget
+   showing L 65 / R 65 / case 61 from the RCSP bridge. The probe's own output:
+
+   profile registered for df21fe2c-2515-4fdb-8886-f12c4d67927c
+   NewConnection from /org/bluez/hci0/dev_AA_BB_CC_00_00_01 fd=9 props={dbus.String('Version'): dbus.UInt16(258, variant_level=1)}
+   <<< 030100032b677d
+   frame group=0x03 (DEVICE_INFO) code=0x01 len=3 payload=2b677d
+   <<< 0302000600000000000003030002949403090007302e302e312e30030b0018000006dc0000000000000000000000000000000000000000
+   frame group=0x03 (DEVICE_INFO) code=0x02 len=6 payload=000000000000
+   frame group=0x03 (DEVICE_INFO) code=0x03 len=2 payload=9494
+     BATTERY: battery=20% charging
+   frame group=0x03 (DEVICE_INFO) code=0x09 len=7 payload=302e302e312e30
+     FIRMWARE: 0.0.1.0
+   frame group=0x03 (DEVICE_INFO) code=0x0b len=24 payload=000006dc0000000000000000000000000000000000000000
+   ConnectProfile returned
+   >>> 08110000
+
+   The battery frame is 03 03 00 02 94 94: two bytes, each 0x94 = level 20 with
+   bit 7 set, "20% charging", while the levels were 65 and 65.
+   The reader reads one byte or three, so it says nothing for a frame like this.
+   The probe's line "BATTERY: battery=20% charging" in the output above is from the
+   probe before it was changed to say that two bytes are not a layout it reads.
+
+What this shows, and what it does not: on this pair the stream's battery was absent
+in one session, one byte 0xFE in another, and two bytes saying 20% charging in a
+third, with the true levels 65-70% each time. Its battery is not to be believed, and
+that is what the RCSP bridge is for. Why it changes (the left bud's link to the
+right one was down in session 2; the earbuds' firmware reports 0.0.1.0 and an
+all-zero BLE address throughout) was not tested.
