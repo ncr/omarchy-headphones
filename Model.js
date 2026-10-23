@@ -419,7 +419,7 @@ function supportVerdict(support, modelId) {
 
 function readerLevel(state, key) {
   var value = state ? state[key] : undefined
-  return typeof value === "number" && value >= 0 ? value : -1
+  return typeof value === "number" && value >= 0 && value <= 100 ? value : -1
 }
 
 // ---- Which helper can control the listening mode of a given device.

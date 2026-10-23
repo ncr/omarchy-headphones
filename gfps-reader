@@ -241,10 +241,18 @@ def registration_error(error):
 
 
 def component(byte):
-    """(level, charging) for one battery byte; level -1 when unreported."""
+    """(level, charging) for one battery byte; level -1 when unreported.
+
+    Levels are 0-100 and 0x7F is "unknown"; a byte whose level part is above
+    100 is no level either, and is reported as unreported rather than as a
+    figure: a Redmi Buds 5 sent 0xFE as its only battery byte, which read as
+    126% and charging (docs/captures/redmi-buds-5-fastpair.txt)."""
     if (byte & NO_READING) == NO_READING:
         return -1, False
-    return byte & 0x7F, bool(byte & 0x80)
+    level = byte & 0x7F
+    if level > 100:
+        return -1, False
+    return level, bool(byte & 0x80)
 
 
 def address_from_path(path):

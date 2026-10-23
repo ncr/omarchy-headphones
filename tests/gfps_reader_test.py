@@ -143,6 +143,32 @@ class FastPair(unittest.TestCase):
         self.send(r, fd, canonical.frame('jbl', 'gfps', 'battery'))
         self.assertEqual(self.lines[-1]['left'], 70)
 
+    def test_a_byte_above_100_is_not_a_level(self):
+        # 0xFE is the only battery byte a Redmi Buds 5 sent in one session
+        # (docs/captures/redmi-buds-5-fastpair.txt); the spec's levels are 0-100
+        # and 0x7F is unknown. The neighbours around the boundary are synthetic.
+        for byte in (0xfe, 0x7e, 101, 0xe5):
+            self.assertEqual(reader.component(byte), (-1, False), hex(byte))
+        self.assertEqual(reader.component(100), (100, False))
+        self.assertEqual(reader.component(0x80 | 100), (100, True))
+        self.assertEqual(reader.component(0x80 | 101), (-1, False))
+
+    def test_a_single_battery_byte_above_100_is_unreported_not_126_percent(self):
+        r, fd = self.stream('jbl')
+        self.send(r, fd, bytes.fromhex('03 03 00 01 fe'))
+        last = self.lines[-1]
+        self.assertTrue(last['single'])
+        self.assertEqual((last['battery'], last['batteryCharging']), (-1, False))
+
+    def test_the_two_byte_battery_a_redmi_buds_5_sent_is_not_read(self):
+        # Real frame from docs/captures/redmi-buds-5-fastpair.txt: `94 94`, which
+        # would read as 20% charging on both buds while the app showed 65 / 65.
+        # The reader reads one byte or three, so it says nothing.
+        r, fd = self.stream('jbl')
+        before = list(self.lines)
+        self.send(r, fd, bytes.fromhex('03 03 00 02 94 94'))
+        self.assertEqual(self.lines, before)
+
     def test_synthetic_charging_and_unknown_components(self):
         # Protocol boundary inputs; not claims about what these owners captured.
         for byte, expected in [(0, (0, False)), (100, (100, False)),
