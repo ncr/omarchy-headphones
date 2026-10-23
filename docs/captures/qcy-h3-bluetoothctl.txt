@@ -1,4 +1,4 @@
-# QCY H3 - bluetoothctl view (Classic only; no LE advertisement, no GATT)
+# QCY H3 - bluetoothctl view
 
 Captured: 2026-09-28T13:00:28-03:00
 
@@ -26,9 +26,4 @@ Device 84:AC:60:4A:43:F0 (public)
 	UUID: PnP Information           (00001200-0000-1000-8000-00805f9b34fb)
 	Modalias: bluetooth:v05D6p000Ad0240
 	Battery Percentage: 0x46 (70)
-
-## No LE advertisement/control MAC: RSSI updates during scan_on are Classic inquiry replies.
-## GATT service ObjectManager tree for the device: (empty - running probe shows only sep1..sep5 BR/EDR endpoints)
-## ConnectProfile a001/GATT/1800 => org.bluez.Error.BREDR.ProfileUnavailable
-## SPP (00001101) opens a channel; QCY standard frames get no reply (Jieli JL7018F6).
 ```

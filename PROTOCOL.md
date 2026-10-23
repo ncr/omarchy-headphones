@@ -2264,19 +2264,16 @@ channel.
 
 A **QCY H3** (`84:AC:60:4A:43:F0`, public). Its Classic SDP carries only the
 standard set the BlueZ view lists — Serial Port `00001101`, Audio Sink
-`0000110b`, A/V Remote Control Target `0000110c`, A/V Remote Control
-`0000110e`, Handsfree `0000111e`, PnP Information `00001200` — and no GATT
-UUID. The hardware is a Jieli JL7018F6 (per teardown), which Quicky's
-protocol-variant table routes via its `JLDeviceImpl` Jieli BLE command set
-rather than the pure QCY Standard `0000a001`/`00001001` channel.
+`0000110b`, A/V Remote Control Target `0000110c`, Advanced Audio
+Distribution `0000110d`, A/V Remote Control `0000110e`, Handsfree `0000111e`,
+PnP Information `00001200` — and no GATT UUID.
 
 What one `--spp` run shows, with the H3 connected, is these three things:
 
 - **GATT: no tree at all.** The probe waits the 45 seconds it allows for the
   device's managed-objects tree to fill, and then logs
   `GATT TREE 0 services 0 characteristics under /org/bluez/hci0/dev_84_AC_60_4A_43_F0`:
-  no `GattService1` and no `GattCharacteristic1` object appears, only the
-  BR/EDR media endpoints.
+  no `GattService1` and no `GattCharacteristic1` object appears.
 - **The SDP server names the Serial Port channel.** SDP is not an RFCOMM
   service: it is an L2CAP service on PSM 1, so the probe opens
   `SDP CONNECTED psm 1` there and sends a well-formed
@@ -2309,11 +2306,11 @@ headset that answered none.
 
 `fe 01 02`, `fe 01 0c`, `fe 01 17` and `fe 01 30` are the read requests of the
 QCY standard protocol table — battery, listening mode, anc setting, version —
-the same candidate set as `REQUESTS` in `tools/qcy_probe.py`. They come from
+`SPP_FRAMES` in `tools/qcy_probe.py`. They come from
 public reverse-engineering of the QCY/Quicky protocol, not from anything this
 headset ever answered; the capture above is what the headset does with them,
 which is nothing. The `01 00` tails of `fe 01 0c 01 00` and `fe 01 17 01 00`
-seen in an earlier probe of this table are the length and the value of a
+that an earlier revision of the probe listed are the length and the value of a
 *setting* (mode 0, anc 0), so the probe sends the bare queries `fe 01 0c` and
 `fe 01 17` instead. Nothing in `SPP_FRAMES` carries a parameter at all, so no
 run of this probe can set a mode on anybody's headphones.

@@ -114,20 +114,11 @@ Headphones not on the list? [Add yours](#add-your-own-headphones).
 
 <table>
 <tr>
-<td width="50%"><img src="docs/gallery/qcy-h3.png" alt="QCY H3: one battery, no noise control row (no reachable control channel on this host)" width="100%"></td>
 <td width="50%"><img src="docs/gallery/bose-qc35.png" alt="Bose QC35: one battery, Off / ANC, and the ANC level row Low / High" width="100%"></td>
-</tr>
-<tr>
-<td align="center">QCY H3 — <a href="https://github.com/carraly">@carraly</a></td>
-<td align="center">Bose QC35 — <a href="https://github.com/pedrohfp">@pedrohfp</a></td>
-</tr>
-</table>
-
-<table>
-<tr>
 <td width="50%"><img src="docs/gallery/tozo-nc9-pro.png" alt="TOZO NC9 Pro: left, right and case batteries, and all six noise control modes" width="100%"></td>
 </tr>
 <tr>
+<td align="center">Bose QC35 — <a href="https://github.com/pedrohfp">@pedrohfp</a></td>
 <td align="center">TOZO NC9 Pro — <a href="https://github.com/seth-reee">@seth-reee</a></td>
 </tr>
 </table>
@@ -135,9 +126,11 @@ Headphones not on the list? [Add yours](#add-your-own-headphones).
 <table>
 <tr>
 <td width="50%"><img src="docs/gallery/redmi-buds-5.png" alt="Redmi Buds 5: left, right and case, Off / ANC / Transparency" width="100%"></td>
+<td width="50%"><img src="docs/gallery/qcy-h3.png" alt="QCY H3: one battery, no noise control row (no reachable control channel on this host)" width="100%"></td>
 </tr>
 <tr>
 <td align="center">Redmi Buds 5 — <a href="https://github.com/quocldce-sys">@quocldce-sys</a></td>
+<td align="center">QCY H3 — <a href="https://github.com/carraly">@carraly</a></td>
 </tr>
 </table>
 
@@ -209,7 +202,7 @@ same idea, built for Apple's own protocol, and the plugin this one is modelled o
 | Sony WH-CH520             | <img src="docs/icons/yes.svg" width="14" alt="yes"> one figure (BlueZ) | <img src="docs/icons/no.svg" width="14" alt="no"> none — Sony lists no ANC/Ambient on this model, confirmed on hardware | [@enobale](https://github.com/enobale) |
 | TOZO NC9 Pro (earbuds) | <img src="docs/icons/yes.svg" width="14" alt="yes"> left, right, case | <img src="docs/icons/yes.svg" width="14" alt="yes"> Normal · ANC · Transparency · Reduce Wind Noise · Leisure · Adaptive | [@seth-reee](https://github.com/seth-reee) |
 | HUAWEI FreeBuds SE 2 (earbuds) | <img src="docs/icons/yes.svg" width="14" alt="yes"> left, right, case | <img src="docs/icons/no.svg" width="14" alt="no"> none — the model has no noise control | [@defkode](https://github.com/defkode) |
-| QCY H3 (over-ear)     | <img src="docs/icons/yes.svg" width="14" alt="yes"> one figure (BlueZ) | <img src="docs/icons/no.svg" width="14" alt="no"> none — no reachable control channel on this host (Jieli BLE control never advertised; see [PROTOCOL.md](PROTOCOL.md)) | [@carraly](https://github.com/carraly) |
+| QCY H3 (over-ear)     | <img src="docs/icons/yes.svg" width="14" alt="yes"> one figure (BlueZ) | <img src="docs/icons/no.svg" width="14" alt="no"> none — its Serial Port channel answers none of the QCY reads (see [PROTOCOL.md](PROTOCOL.md#qcy-h3-battery-only-no-reachable-control-channel)) | [@carraly](https://github.com/carraly) |
 | other Fast Pair headphones  | <img src="docs/icons/yes.svg" width="14" alt="yes"> expected          | <img src="docs/icons/unknown.svg" width="14" alt="untested">                                    | —                              |
 
 CMF Headphone Pro's connection, reconnect recovery and all panel controls were
