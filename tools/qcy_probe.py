@@ -2,12 +2,10 @@
 """Discover what a QCY headset exposes and capture its replies.
 
     tools/qcy_probe.py ADDRESS [--listen SECONDS]
-    tools/qcy_probe.py ADDRESS --requests   # send candidate read/request probes
     tools/qcy_probe.py ADDRESS --spp        # Serial Port (00001101) over RFCOMM
 
-Enumerates the whole GATT tree the device exposes to BlueZ, subscribes to
-every notify-capable service, and logs raw TX/RX bytes with timestamps. It
-writes nothing to the device except the requests explicitly asked for.
+Lists the GATT tree the device exposes to BlueZ and logs raw TX/RX bytes
+with timestamps. Without `--spp` it writes nothing to the device.
 
 `--spp` takes the other door as well: it asks the headset's own SDP server
 (L2CAP PSM 1) which channel serves Serial Port, opens a Bluetooth RFCOMM socket
@@ -15,9 +13,8 @@ on that channel — or, when the record is unreadable, on each channel that open
 and sends the read requests of the QCY standard table there. No frame with a
 trailing parameter is sent, so nothing in this run can set anything.
 
-On the QCY H3 (Jieli JL7018F6) no GATT tree ever appears: BlueZ opens only
-the BR/EDR bearer, the device never advertises its BLE control service, and
-the probe reports no write channel. See docs/captures/qcy-h3-live.txt.
+On the QCY H3 no GATT tree appears in 45 s, and its Serial Port channel 1
+answers none of the reads. See docs/captures/qcy-h3-live.txt.
 """
 import argparse
 import datetime
@@ -30,19 +27,6 @@ import dbus
 import dbus.mainloop.glib
 from gi.repository import GLib
 
-WRITE_CANDIDATES = [
-    "00001001-0000-1000-8000-00805f9b34fb",
-    "0000a001-0000-1000-8000-00805f9b34fb",
-]
-NOTIFY_CANDIDATES = [
-    "00001002-0000-1000-8000-00805f9b34fb",
-    "0000000e-0000-1000-8000-00805f9b34fb",
-]
-V1_BATTERY = "00000008-0000-1000-8000-00805f9b34fb"
-V1_VERSION = "00000007-0000-1000-8000-00805f9b34fb"
-V1_BATTERY_STD = "00002a19-0000-1000-8000-00805f9b34fb"
-
-REPLY_TIMEOUT = 8.0
 CONNECT_TIMEOUT = 45.0
 
 
@@ -53,23 +37,6 @@ def now():
 def log(text):
     print(now(), text, flush=True)
 
-
-def qcy(cmd, plen, *params):
-    body = bytes([cmd, plen] + list(params))
-    return b"\xff" + bytes([len(body) + 1]) + body
-
-
-REQUESTS = {
-    "battery_req": b"\xfe\x01\x2f",
-    "mode_req": b"\xfe\x01\x0c",
-    "anc_setting_req": b"\xfe\x01\x17",
-    "version_req": b"\xfe\x01\x30",
-    "lowlvl_req": b"\xfe\x01\x09",
-    "wear_req": b"\xfe\x01\x29",
-    "inesense_req": b"\xfe\x01\x48",
-    "ancwear_req": b"\xfe\x01\x2c",
-    "gen_req": b"\xfe\x01\x01",
-}
 
 # --- Serial Port (00001101) over RFCOMM.
 #
@@ -98,7 +65,7 @@ SDP_QUERY = (b"\x06\x00\x01\x00\x16"
              + b"\x02\x00"
              + b"\x35\x0c\x09\x00\x00\x09\x00\x01\x09\x00\x04\x09\x00\x05"
              + b"\x00")
-# The read requests of the same table, in the form that carries no parameter.
+# The read requests of the QCY standard table, in the form that carries no parameter.
 # The 01 00 tails of fe 01 0c 01 00 and fe 01 17 01 00 are the length and the
 # value of a *setting*, so the bare queries are sent instead.
 SPP_FRAMES = (
@@ -485,7 +452,6 @@ def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("address")
     parser.add_argument("--listen", type=float, default=5)
-    parser.add_argument("--requests", action="store_true")
     parser.add_argument("--spp", action="store_true", help="Serial Port (00001101) test with SPP frames")
     args = parser.parse_args()
     if len(args.address.replace(":", "")) != 12 or not 0 <= args.listen <= 600:
@@ -507,11 +473,6 @@ def main():
             log("FAILED " + repr(e))
         if state["stopping"]:
             return 0
-        if args.requests:
-            try:
-                probe.requests()
-            except Exception as e:
-                log("FAILED " + repr(e))
         if args.spp:
             probe.spp_test()
         probe.listen(args.listen)
