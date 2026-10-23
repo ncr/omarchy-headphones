@@ -157,12 +157,18 @@ marketplace status separately: a push does not establish all four.
 
 When local deployment is in scope, inspect the installed branch and dirty
 state first. Do not replace unrelated work or switch away from an active
-development branch. Preserve settings and bar placement. Inspect current
-shell/plugin tooling, temporarily unload this plugin before writing its files,
-update the verified revision, and restore its prior enabled state and
-configuration even if deployment fails. Avoid broad destructive copies.
-Check logs since deployment and IPC readiness. A gallery-only change does
-not require a shell restart merely to satisfy a ritual.
+development branch. Preserve settings and bar placement. Do not unload the
+plugin with `omarchy plugin disable` / `enable`: for a bar widget, disable
+deletes its bar layout entry in `~/.config/omarchy/shell.json`, with its
+position and per-widget settings (`useFastPair`), and enable inserts a bare
+entry at the default place. Update the verified revision, then load it with
+`omarchy-shell shell rescanPlugins`, which clears the QML component cache and
+restarts plugin services without touching the configuration. The shell's
+file watcher does not follow a symlinked plugin directory, so writing the
+files alone may load nothing, and a re-enable without a rescan keeps the
+cached QML. Avoid broad destructive copies. Check logs since deployment and
+IPC readiness. A gallery-only change does not require a shell restart merely
+to satisfy a ritual.
 
 Post only the approved text, using a structured body or `--body-file` with
 real newlines. Keep it short, natural and warm: thank the contributor by
