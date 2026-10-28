@@ -1,0 +1,95 @@
+{
+  "note": "Owner live check of the Redmi Buds 3 Pro through the running plugin's IPC (omarchy-shell omaphones setModeFor / modeFor / leftFor / rightFor / batteryCaseFor / chargingFor), on the installed plugin at plugin_sha. Each set waits for the mode the bridge reports from the earbuds; 'reconnect' is bluetoothctl disconnect, 4 s, connect, after which a new bridge process authenticated and reported the mode again; the initial mode is restored in a finally and checked the same way. The address is masked. Not measured: acoustic effect, a second pair at the same time (the owner has one), the Fast Pair stream (the earbuds have none).",
+  "date": "2026-10-23T19:12:34+03:00",
+  "device": "Redmi Buds 3 Pro",
+  "plugin_sha": "be70d7bc870bc8b8ff698973851abb8410871a5e",
+  "bridge_process": "python3 redmi-bridge AA:BB:CC:00:00:03 Redmi Buds 3 Pro",
+  "initial": {
+    "mode": "ambient",
+    "left": "86",
+    "right": "86",
+    "batteryCase": "44",
+    "charging": ""
+  },
+  "steps": [
+    {
+      "set": "anc",
+      "ipc_reply": "ok",
+      "reported": "anc",
+      "seconds": 0.32,
+      "state": {
+        "mode": "anc",
+        "left": "86",
+        "right": "86",
+        "batteryCase": "44",
+        "charging": ""
+      }
+    },
+    {
+      "set": "off",
+      "ipc_reply": "ok",
+      "reported": "off",
+      "seconds": 0.59,
+      "state": {
+        "mode": "off",
+        "left": "86",
+        "right": "86",
+        "batteryCase": "44",
+        "charging": ""
+      }
+    },
+    {
+      "set": "ambient",
+      "ipc_reply": "ok",
+      "reported": "ambient",
+      "seconds": 0.31,
+      "state": {
+        "mode": "ambient",
+        "left": "86",
+        "right": "86",
+        "batteryCase": "44",
+        "charging": ""
+      }
+    },
+    {
+      "set": "anc",
+      "ipc_reply": "ok",
+      "reported": "anc",
+      "seconds": 0.31,
+      "state": {
+        "mode": "anc",
+        "left": "86",
+        "right": "85",
+        "batteryCase": "44",
+        "charging": ""
+      }
+    },
+    {
+      "reconnect": true,
+      "mode_before": "anc",
+      "reported_after": "anc",
+      "seconds": 2.92,
+      "state": {
+        "mode": "anc",
+        "left": "86",
+        "right": "85",
+        "batteryCase": "44",
+        "charging": ""
+      },
+      "bridge_process": "python3 redmi-bridge AA:BB:CC:00:00:03 Redmi Buds 3 Pro"
+    }
+  ],
+  "restore": {
+    "set": "ambient",
+    "ipc_reply": "ok",
+    "reported": "ambient",
+    "ok": true,
+    "state": {
+      "mode": "ambient",
+      "left": "86",
+      "right": "85",
+      "batteryCase": "44",
+      "charging": ""
+    }
+  }
+}

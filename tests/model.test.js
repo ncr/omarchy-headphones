@@ -810,14 +810,19 @@ Deno.test("every backend row names a bridge that exists, with a test file and a 
   const root = new URL("../", import.meta.url);
   for (const row of Model.BACKENDS) {
     assertEquals(typeof row.name, "string", "name");
-    assertEquals(row.bridge, row.name + "-bridge", row.name + ": bridge file name");
+    // A row is named after its bridge, except a second row for a bridge that
+    // must be started differently for one model (redmi-buds-3-pro, which needs
+    // the name the Buds 5's row does not pass): it is named after that model.
+    const brand = row.bridge.replace(/-bridge$/, "");
+    assertEquals(row.name === brand || row.name.startsWith(brand + "-"), true,
+      row.name + ": bridge file name");
     assertEquals(Deno.statSync(new URL(row.bridge, root)).isFile, true, row.bridge);
     assertEquals(
-      Deno.statSync(new URL("tests/" + row.name + "_bridge_test.py", root)).isFile,
+      Deno.statSync(new URL("tests/" + brand + "_bridge_test.py", root)).isFile,
       true,
       row.name + " test file",
     );
-    const pins = [...Deno.readDirSync(new URL("tests/pins/" + row.name + "/", root))]
+    const pins = [...Deno.readDirSync(new URL("tests/pins/" + brand + "/", root))]
       .filter((entry) => entry.name.endsWith(".json"));
     assertEquals(pins.length > 0, true, row.name + " has a pin");
     assertEquals(Array.isArray(row.args), true, row.name + " args");
@@ -1341,4 +1346,50 @@ Deno.test("the EarFun row takes no other device's claim", () => {
   assertEquals(Model.controlBackend(["00001101-0000-1000-8000-00805f9b34fb"], "", "HUAWEI FreeBuds SE 2"), "huawei");
   assertEquals(Model.controlBackend(["00001101-0000-1000-8000-00805f9b34fb"], "", "TOZO NC9 Pro"), "tozo");
   assertEquals(Model.controlBackend(REDMI_BUDS_5_UUIDS, BLE_ADDRESS, "Redmi Buds 5"), "redmi");
+});
+
+// ---- Redmi Buds 3 Pro: its SDP record, docs/captures/redmi-buds-3-pro-bluetoothctl.txt.
+
+const REDMI_BUDS_3_PRO = "Redmi Buds 3 Pro";
+
+async function redmiBuds3ProUuids() {
+  const record = await Deno.readTextFile(
+    new URL("../docs/captures/redmi-buds-3-pro-bluetoothctl.txt", import.meta.url));
+  return Model.uuidsFromBluetoothctl(record);
+}
+
+Deno.test("Redmi Buds 3 Pro are picked by their name and 0xFD2D, and the bridge gets the name", async () => {
+  const ids = await redmiBuds3ProUuids();
+  assertEquals(ids.length, 12, "complete captured UUID list");
+  for (const uuids of [ids, [...ids].reverse(), ids.map(id => id.toUpperCase())])
+    assertEquals(Model.controlBackend(uuids, "", REDMI_BUDS_3_PRO), "redmi-buds-3-pro");
+  assertEquals(Model.bridgeFor("redmi-buds-3-pro"), "redmi-bridge");
+  assertEquals(Model.isClassicBackend("redmi-buds-3-pro"), true);
+  assertEquals(Model.bridgeArgs("redmi-buds-3-pro", { address: "AA:BB:CC:00:00:03", name: REDMI_BUDS_3_PRO }),
+    ["AA:BB:CC:00:00:03", REDMI_BUDS_3_PRO]);
+  assertEquals(Model.fastPairWithoutBattery("redmi-buds-3-pro"), false);
+  assertEquals(Model.hasAmbientDial("redmi-buds-3-pro"), false);
+  assertEquals(Model.modeOptions(["off", "anc", "ambient"], "redmi-buds-3-pro").map(o => o.label),
+    ["Off", "ANC", "Transparency"]);
+});
+
+Deno.test("neither the Buds 3 Pro name nor their record alone is the claim", async () => {
+  const ids = await redmiBuds3ProUuids();
+  const withoutService = ids.filter(id => !id.startsWith("0000fd2d"));
+  assertEquals(Model.controlBackend(withoutService, "", REDMI_BUDS_3_PRO), "");
+  assertEquals(Model.controlBackend(ids, "", ""), "");
+  assertEquals(Model.controlBackend(ids, "", "Redmi Buds 3"), "");
+  assertEquals(Model.controlBackend(ids, "", "Redmi Buds 5"), "redmi");
+});
+
+Deno.test("the Buds 3 Pro row takes no other device's claim, and the Buds 5 keep theirs", () => {
+  for (const device of DEVICES) {
+    assertEquals(Model.controlBackend(device.uuids, device.bleAddress, REDMI_BUDS_3_PRO),
+      device.backend, device.model);
+  }
+  assertEquals(Model.controlBackend(REDMI_BUDS_5_UUIDS, "", "Redmi Buds 5"), "redmi");
+  assertEquals(Model.bridgeArgs("redmi", { address: "AA:BB:CC:00:00:01", name: "Redmi Buds 5" }),
+    ["AA:BB:CC:00:00:01"]);
+  // The Buds 5 record with this name: the same service, so the row that names it.
+  assertEquals(Model.controlBackend(REDMI_BUDS_5_UUIDS, "", REDMI_BUDS_3_PRO), "redmi-buds-3-pro");
 });
