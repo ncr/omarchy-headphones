@@ -1,0 +1,173 @@
+{
+  "model": "JBL Tour Pro 3 (ANC strength)",
+  "owner": "rickthestig",
+  "bridge": "airoha-bridge",
+  "capture": "docs/captures/jbl-tour-pro-3-levels.txt",
+  "notes": "ANC strength 1-7: the byte after the mode in the mode frames, written with 06 0e 00 1e <level> 00 only while in ANC, confirmed by asking the mode read again. The same frame is the Ambient level in Ambient, where it is not written as a strength.",
+  "session": {},
+  "steps": [
+    {
+      "call": "open"
+    },
+    {
+      "sent": [
+        "05 5a 04 00 01 09 05 00"
+      ]
+    },
+    {
+      "device": "05 5b 09 00 01 09 05 00 00 01 01 00 00",
+      "note": "mode read at connect: ANC, strength 1 (levels capture, 192.27)"
+    },
+    {
+      "lines": [
+        {
+          "modes": true,
+          "mode": "anc",
+          "available": [
+            "off",
+            "anc",
+            "ambient",
+            "talkthru"
+          ],
+          "strength": 1
+        }
+      ]
+    },
+    {
+      "command": "strength 7"
+    },
+    {
+      "sent_last": "05 5a 06 00 06 0e 00 1e 07 00",
+      "note": "ANC only: the app's own 1e frame"
+    },
+    {
+      "timers": [
+        300
+      ]
+    },
+    {
+      "device": "05 5b 04 00 06 0e 00 1e",
+      "note": "the echo says nothing about the strength"
+    },
+    {
+      "line_count": 1
+    },
+    {
+      "fire": null
+    },
+    {
+      "sent_last": "05 5a 04 00 01 09 05 00",
+      "note": "the earbuds are asked what mode and level they now have"
+    },
+    {
+      "device": "05 5b 09 00 01 09 05 00 00 01 07 00 00",
+      "note": "and answer: ANC, 7"
+    },
+    {
+      "line": {
+        "modes": true,
+        "mode": "anc",
+        "available": [
+          "off",
+          "anc",
+          "ambient",
+          "talkthru"
+        ],
+        "strength": 7
+      }
+    },
+    {
+      "line_count": 2
+    },
+    {
+      "command": "strength 0",
+      "note": "not a strength the earbuds were seen to take: nothing goes out"
+    },
+    {
+      "command": "strength 8",
+      "note": "not a strength the earbuds were seen to take: nothing goes out"
+    },
+    {
+      "command": "strength x",
+      "note": "not a strength the earbuds were seen to take: nothing goes out"
+    },
+    {
+      "command": "strength 3 4",
+      "note": "not a strength the earbuds were seen to take: nothing goes out"
+    },
+    {
+      "command": "strength -1",
+      "note": "not a strength the earbuds were seen to take: nothing goes out"
+    },
+    {
+      "command": "strength",
+      "note": "not a strength the earbuds were seen to take: nothing goes out"
+    },
+    {
+      "sent": [
+        "05 5a 04 00 01 09 05 00",
+        "05 5a 06 00 06 0e 00 1e 07 00",
+        "05 5a 04 00 01 09 05 00"
+      ]
+    },
+    {
+      "timers": []
+    },
+    {
+      "device": "05 5d 08 00 01 09 05 00 00 0a 07 00",
+      "note": "Ambient: no strength on the line"
+    },
+    {
+      "line": {
+        "modes": true,
+        "mode": "ambient",
+        "available": [
+          "off",
+          "anc",
+          "ambient",
+          "talkthru"
+        ],
+        "level": 7
+      }
+    },
+    {
+      "command": "strength 3",
+      "note": "in Ambient the same 1e frame is the Ambient level: not written"
+    },
+    {
+      "sent": [
+        "05 5a 04 00 01 09 05 00",
+        "05 5a 06 00 06 0e 00 1e 07 00",
+        "05 5a 04 00 01 09 05 00"
+      ]
+    },
+    {
+      "device": "05 5d 08 00 01 09 05 00 00 00 1e e4"
+    },
+    {
+      "line": {
+        "modes": true,
+        "mode": "off",
+        "available": [
+          "off",
+          "anc",
+          "ambient",
+          "talkthru"
+        ]
+      }
+    },
+    {
+      "command": "strength 3"
+    },
+    {
+      "sent": [
+        "05 5a 04 00 01 09 05 00",
+        "05 5a 06 00 06 0e 00 1e 07 00",
+        "05 5a 04 00 01 09 05 00"
+      ]
+    },
+    {
+      "exit": null
+    }
+  ]
+}

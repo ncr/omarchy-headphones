@@ -588,7 +588,9 @@ var BACKENDS = [
     args: ["address", "name"],
     // The Ambient dial, 1-7, and no switch beside it: an empty label is a row
     // the panel does not draw.
-    ambient: { min: 1, max: 7, voice: "", command: "", key: "" } },
+    ambient: { min: 1, max: 7, voice: "", command: "", key: "" },
+    // A numeric ANC strength slider, 1-7, drawn while in ANC.
+    strength: { min: 1, max: 7 } },
   { name: "jbl", bridge: "jbl-bridge",
     ble: true, args: ["bleAddress", "modelId"] }
 ]
@@ -681,6 +683,16 @@ function heroPhrases(all, aboutModes, hasModes) {
 function ambientRange(backend) {
   var row = backendRow(backend)
   return row && row.ambient ? row.ambient : AMBIENT_DEFAULT
+}
+
+// The ANC strength slider's range on this backend, or null for a row with none.
+function strengthRange(backend) {
+  var row = backendRow(backend)
+  return row && row.strength ? row.strength : null
+}
+
+function hasStrengthSlider(backend) {
+  return strengthRange(backend) !== null
 }
 
 // Whether this backend's row has an Ambient dial to write (Sony, Soundcore).

@@ -5,11 +5,12 @@
 
 Prints one JSON object per line, and reads one command per line:
 
-    stdout   {"modes": true, "mode": "ambient", "level": 4,
+    stdout   {"modes": true, "mode": "ambient", "level": 4,   (ANC: "strength": 4)
               "available": ["off","anc","ambient","talkthru"]}
              {"modes": false, "error": "..."}
     stdin    set off | set anc | set ambient | set talkthru
              level <1-7>                       (Ambient only)
+             strength <1-7>                    (ANC only)
 
 Exit codes, which the shell-side service reads to decide what to do next:
 
@@ -61,7 +62,10 @@ The byte after `<mode>` in a mode reply or event is that mode's level too; it is
 read only for Ambient. The get above answers with the Ambient level whatever the
 mode; it is asked 0.3 s after each set, as the earbuds' own confirmation. `level <n>` is therefore written only while
 the earbuds are in Ambient, where the 1e frame is the Ambient level; in ANC the
-same frame is the ANC strength, which this bridge does not touch.
+same frame is the ANC strength, which `strength <n>` writes, in ANC only. The
+earbuds' own level read for the strength is the byte after the mode in the mode
+read (`05 5a 04 00 01 09 05 00`, as at connect), so that is what is asked 0.3 s
+after a set, and what an ANC mode frame reports.
 
 Nothing else is read: no battery (Fast Pair carries it).
 """
@@ -232,6 +236,7 @@ class Bridge:
         self.last_mode = None
         self.ears = {}
         self.level = None
+        self.strength = None
         self.last_line = None
 
     def finish(self, code, message=None):
@@ -360,6 +365,8 @@ class Bridge:
         # figure on the other modes' lines would say more than the earbuds did.
         if self.last_mode == "ambient" and self.level is not None:
             line["level"] = self.level
+        if self.last_mode == "anc" and self.strength is not None:
+            line["strength"] = self.strength
         worn = self.worn()
         if worn is not None:
             line["worn"] = worn
@@ -382,18 +389,23 @@ class Bridge:
         if mode is None:
             return
         self.last_mode = mode
-        if mode == "ambient":
-            mode_level = parse_mode_level(frame)
-            if mode_level is not None:
+        mode_level = parse_mode_level(frame)
+        if mode_level is not None:
+            if mode == "ambient":
                 self.level = mode_level
+            elif mode == "anc":
+                self.strength = mode_level
         self.publish()
 
-    def read_back(self):
+    def read_back(self, frame=GET_AMBIENT_LEVEL):
         # The earbuds answer a set with an echo that carries no level, so the
         # level that is printed is the one they give when asked afterwards.
         if self.exit_code is None:
-            self.write(GET_AMBIENT_LEVEL)
+            self.write(frame)
         return False
+
+    def read_back_strength(self):
+        return self.read_back(GET_MODE)
 
     def parse_buffer(self):
         while self.buffer:
@@ -425,6 +437,9 @@ class Bridge:
         if len(parts) == 2 and parts[0] == "level":
             self.set_ambient_level(parts[1])
             return
+        if len(parts) == 2 and parts[0] == "strength":
+            self.set_anc_strength(parts[1])
+            return
         if len(parts) != 2 or parts[0] != "set" or parts[1] not in SET:
             return
         # Nothing goes out before the earbuds have said what mode they are in.
@@ -445,6 +460,19 @@ class Bridge:
             return
         self.write(set_level(level))
         GLib.timeout_add(READBACK_DELAY, self.read_back)
+
+    def set_anc_strength(self, text):
+        # Only in ANC, where the 1e frame is the ANC strength.
+        if self.last_mode != "anc":
+            return
+        try:
+            level = int(text)
+        except ValueError:
+            return
+        if not LEVEL_MIN <= level <= LEVEL_MAX:
+            return
+        self.write(set_level(level))
+        GLib.timeout_add(READBACK_DELAY, self.read_back_strength)
 
     def on_io(self, _fd, condition):
         if condition & (GLib.IO_HUP | GLib.IO_ERR):

@@ -139,6 +139,10 @@ Panel {
   readonly property int ambientLevel: current ? current.ambientLevel : -1
   readonly property bool ambientVoice: current ? current.ambientVoice : false
   readonly property bool ambientControls: current ? current.ambientControls : false
+  readonly property int ancStrength: current ? current.ancStrength : -1
+  readonly property bool strengthControls: current ? current.strengthControls : false
+  readonly property int strengthMin: current ? current.strengthMin : 0
+  readonly property int strengthMax: current ? current.strengthMax : 0
   // The dial's range and the switch's name, which differ by brand (Sony 0-20
   // and Focus on voice; Soundcore 1-5 and Wind noise reduction).
   readonly property int ambientMin: current ? current.ambientMin : 0
@@ -164,6 +168,9 @@ Panel {
   // on a Sony the level is stored with the ambient setting — a dial drawn next
   // to Noise Cancelling would move a number nothing is listening to.
   readonly property bool ambientRowVisible: modeRowVisible && ambientControls && ancMode === "ambient"
+  // The numeric ANC strength, on a device that has it: drawn under ANC only,
+  // like the Ambient dial under Ambient.
+  readonly property bool strengthRowVisible: modeRowVisible && strengthControls && ancMode === "anc"
   // The strengths are drawn whenever the device grades its ANC, whichever mode
   // it is in: unlike the dial, an unlit row of buttons claims nothing, and a
   // strength pressed from Off or Ambient turns ANC on at it — one press to any
@@ -181,6 +188,9 @@ Panel {
   // so holding ] walks up the dial rather than stepping off a figure the
   // headset has not caught up with.
   property int askedAmbientLevel: -1
+  // The same two for the ANC strength slider.
+  property int pendingStrength: -1
+  property int askedStrength: -1
 
   readonly property var summary: current ? current.summary : ({
     hasDevice: false, connected: false, name: "",
@@ -229,6 +239,7 @@ Panel {
     // they are named only then: a hint that listed them the rest of the time
     // would be offering keys that do nothing. Same for the strengths and the
     // latency switch.
+    if (strengthRowVisible && !ambientRowVisible) parts.push("[ ] Strength")
     if (ambientRowVisible) {
       parts.push("[ ] Level")
       if (ambientVoiceKey !== "") parts.push("f " + ambientVoiceKey)
@@ -366,6 +377,23 @@ Panel {
     return true
   }
 
+  function setAncStrength(value) {
+    if (!current) return false
+    pendingStrength = Model.clamp(value, strengthMin, strengthMax)
+    askedStrength = pendingStrength
+    strengthWrite.restart()
+    return true
+  }
+
+  // The brackets and the arrows step whichever of the two sliders is drawn.
+  function stepLevel(delta) {
+    if (strengthRowVisible) {
+      var from = askedStrength >= 0 ? askedStrength : ancStrength
+      return setAncStrength(from + delta)
+    }
+    return stepAmbientLevel(delta)
+  }
+
   function stepAmbientLevel(delta) {
     if (!ambientRowVisible) return false
     var from = askedAmbientLevel >= 0 ? askedAmbientLevel : ambientLevel
@@ -427,6 +455,19 @@ Panel {
   // Whatever the headset says outranks whatever was asked for, including a
   // level turned on the headset itself while a write was in flight.
   onAmbientLevelChanged: askedAmbientLevel = -1
+
+  Timer {
+    id: strengthWrite
+    interval: 150
+    repeat: false
+    onTriggered: {
+      var value = root.pendingStrength
+      root.pendingStrength = -1
+      if (value < 0) return
+      if (!root.current || !root.current.setAncStrength(value)) root.askedStrength = -1
+    }
+  }
+  onAncStrengthChanged: askedStrength = -1
 
   // A mode key, resolved against the same filtered list the buttons and the hint
   // are built from: a key for a mode this device does not offer is not a key at
@@ -541,8 +582,8 @@ Panel {
         // The brackets are the dial, and they are dead unless it is drawn. The
         // mode keys are letters, so a bracket cannot be mistaken for one, and a
         // headset with no dial simply has nothing on them.
-        else if (t === "[") root.stepAmbientLevel(-1)
-        else if (t === "]") root.stepAmbientLevel(1)
+        else if (t === "[") root.stepLevel(-1)
+        else if (t === "]") root.stepLevel(1)
         else if (t === "f" || t === "F") root.toggleAmbientVoice()
         else if (t === "g" || t === "G") root.toggleLatency()
         // The two device keys, punctuation for the same reason the brackets
@@ -557,7 +598,7 @@ Panel {
       // h/l and the arrows, the way the stock Audio panel moves a slider. This
       // panel has no cursor to walk, so they mean the one slider it can have.
       onMoveRequested: function(dx, dy) {
-        if (dx !== 0) root.stepAmbientLevel(dx)
+        if (dx !== 0) root.stepLevel(dx)
       }
 
       Column {
@@ -848,6 +889,54 @@ Panel {
 
                 onToggled: root.toggleAmbientVoice()
               }
+            }
+          }
+
+          // ---- The numeric ANC strength: a slider under the mode buttons while
+          //      ANC is the mode, on a device that grades it in steps (Tour Pro 3).
+          Column {
+            width: parent.width
+            visible: root.strengthRowVisible
+            spacing: Style.space(6)
+
+            Item {
+              width: parent.width
+              implicitHeight: Math.max(strengthLabel.implicitHeight, strengthValue.implicitHeight)
+
+              Text {
+                id: strengthLabel
+                text: "ANC strength"
+                color: root.foreground
+                font.family: root.fontFamily
+                font.pixelSize: Style.font.body
+                anchors.left: parent.left
+                anchors.verticalCenter: parent.verticalCenter
+              }
+
+              Text {
+                id: strengthValue
+                text: String(Math.round(strengthSlider.liveValue))
+                color: root.dim
+                font.family: root.fontFamily
+                font.pixelSize: Style.font.bodySmall
+                anchors.right: parent.right
+                anchors.verticalCenter: parent.verticalCenter
+              }
+            }
+
+            PanelSlider {
+              id: strengthSlider
+              bar: root.bar
+              width: parent.width
+              minimum: root.strengthMin
+              maximum: root.strengthMax
+              step: 1
+              integer: true
+              value: root.askedStrength >= 0
+                ? root.askedStrength
+                : Math.max(root.strengthMin, root.ancStrength)
+
+              onMoved: function(value) { root.setAncStrength(value) }
             }
           }
 

@@ -3,7 +3,7 @@
   "owner": "rickthestig",
   "bridge": "airoha-bridge",
   "capture": "docs/captures/jbl-tour-pro-3-wear.txt",
-  "notes": "Wear notifications 05 5c 05 00 0c 00 00 <ear> <state>, from the JBL app's phone-side HCI snoop log. Polarity (1 = in the ear) from the two ends of capture B. Which ear is which is not known and not needed: worn is true while any ear is in.",
+  "notes": "Wear notifications 05 5c 05 00 0c 00 00 <ear> <state>, from the JBL app's phone-side HCI snoop log. Polarity (1 = in the ear) from the two ends of capture B. Which ear is which is not known and not needed: worn is true while any ear is in. ANC lines carry the strength the earbuds reported in the same frame (7 in these captures); amended with the strength slider.",
   "session": {},
   "steps": [
     {
@@ -110,7 +110,8 @@
           "ambient",
           "talkthru"
         ],
-        "worn": true
+        "worn": true,
+        "strength": 7
       }
     },
     {

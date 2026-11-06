@@ -37,6 +37,8 @@ EVENTS = {
 def line(mode, **extra):
     if mode == "ambient":
         extra.setdefault("level", 7)        # EVENTS["ambient"] reports 7
+    if mode == "anc":
+        extra.setdefault("strength", 7)     # EVENTS["anc"] reports 7
     return dict({"modes": True, "mode": mode, "available": AVAILABLE}, **extra)
 
 
@@ -238,6 +240,44 @@ class Levels(unittest.TestCase):
         sent = len(s.sent)
         s.fire()
         self.assertEqual(len(s.sent), sent)
+
+
+class Strength(unittest.TestCase):
+    ANC = "05 5b 09 00 01 09 05 00 00 01 04 00 00"           # synthetic: strength 4
+
+    def anc_session(self):
+        s = Session()
+        s.device(self.ANC)
+        return s
+
+    def test_the_strength_is_the_one_the_earbuds_reported_in_anc(self):
+        self.assertEqual(self.anc_session().lines, [line("anc", strength=4)])
+
+    def test_synthetic_strengths_outside_one_to_seven_are_not_read(self):
+        for level in ("00", "08", "ff"):
+            s = Session()
+            s.device("05 5b 09 00 01 09 05 00 00 01 %s 00 00" % level)
+            self.assertEqual(s.lines, [{"modes": True, "mode": "anc", "available": AVAILABLE}], level)
+
+    def test_the_strength_is_set_with_the_apps_frame_for_every_step(self):
+        for level in range(1, 8):
+            s = self.anc_session()
+            s.command("strength %d" % level)
+            self.assertEqual(s.sent[-1], "05 5a 06 00 06 0e 00 1e %02x 00" % level)
+
+    def test_a_strength_is_not_printed_on_the_strength_of_having_been_sent(self):
+        s = self.anc_session()
+        s.command("strength 6")
+        self.assertEqual(s.lines, [line("anc", strength=4)])
+
+    def test_the_two_sliders_never_write_the_other_modes_setting(self):
+        s = Session()
+        s.device(Levels.AMBIENT)
+        s.command("strength 5")
+        self.assertEqual(s.sent, [])
+        t = self.anc_session()
+        t.command("level 5")
+        self.assertEqual(t.sent, [])
 
 
 class Silent(unittest.TestCase):

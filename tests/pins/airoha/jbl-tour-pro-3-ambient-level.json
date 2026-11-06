@@ -127,7 +127,8 @@
           "anc",
           "ambient",
           "talkthru"
-        ]
+        ],
+        "strength": 7
       }
     },
     {

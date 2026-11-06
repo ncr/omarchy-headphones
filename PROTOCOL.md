@@ -2598,7 +2598,7 @@ LDAC was off. Spatial sound cannot be applied while LDAC is on.
 | setting | read | write | in the plugin |
 |:--|:--|:--|:--|
 | Ambient level, 1-7 | `05 5a 04 00 01 09 07 00` → `… 01 09 07 00 00 <level> 00`; also the byte after the mode in a mode reply or event | `05 5a 06 00 06 0e 00 1e <level> 00`, acknowledged by an echo with no level | yes: the panel's Ambient dial, only while in Ambient |
-| ANC strength, 1-7 | the byte after the mode in a mode reply or event, only while in ANC | the same `1e` frame, applied to the mode the earbuds are in | no: the panel's ANC strengths are named, not numbered |
+| ANC strength, 1-7 | the byte after the mode in a mode reply or event, only while in ANC | the same `1e` frame, applied to the mode the earbuds are in | yes: a numeric slider under ANC; written only in ANC, confirmed by asking the mode read again |
 | Adaptive ANC | `05 5a 04 00 17 0e 03 02` → `05 5b 05 00 17 0e 00 03 <state>` | `05 5a 04 00 17 0e 03 01` on / `… 03 00` off, echoed | no: the panel has no switch for it |
 | Spatial sound | notification `05 5d 05 00 13 00 00 <x> 01`, `x` 00 off, 01 on (fixed or head tracking, not told apart) | none seen on this channel | no |
 
