@@ -148,11 +148,11 @@ Headphones not on the list? [Add yours](#add-your-own-headphones).
 <table>
 <tr>
 <td width="50%"><img src="docs/gallery/redmi-buds-3-pro.png" alt="Redmi Buds 3 Pro: left, right and case, Off / ANC / Transparency" width="100%"></td>
-<td width="50%"></td>
+<td width="50%"><img src="docs/gallery/jbl-tour-pro-3.png" alt="JBL Tour Pro 3: left, right and case, Off / ANC / Ambient / TalkThru" width="100%"></td>
 </tr>
 <tr>
 <td align="center">Redmi Buds 3 Pro — <a href="https://github.com/osteotek">@osteotek</a></td>
-<td align="center"></td>
+<td align="center">JBL Tour Pro 3 — <a href="https://github.com/rickthestig">@rickthestig</a></td>
 </tr>
 </table>
 

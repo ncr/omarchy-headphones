@@ -2564,7 +2564,7 @@ announce their mode on connect, so the bridge asks.
 
 Checked on one pair: Off → ANC → Ambient → TalkThru → Off from a PC, every
 reply and event matching the table, the earbuds back in Off at the end and
-audio uninterrupted. **Not tested:** the ambient level, ANC strength, wear
+audio uninterrupted. Through the installed plugin as well (IPC set and read back for each mode, restored to Off). **Not tested:** the ambient level, ANC strength, wear
 detection, the case's screen, charging state, a second device connected at the
 same time, and any reconnect behaviour of the bridge itself on hardware.
 Other commands the app sends at connect (`09 00`, `0b 00`, `d6 0c`, `26 0e`,
