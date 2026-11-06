@@ -2516,3 +2516,61 @@ that an earlier revision of the probe listed are the length and the value of a
 *setting* (mode 0, anc 0), so the probe sends the bare queries `fe 01 0c` and
 `fe 01 17` instead. Nothing in `SPP_FRAMES` carries a parameter at all, so no
 run of this probe can set a mode on anybody's headphones.
+
+## JBL Tour Pro 3 — Airoha RACE on the vendor RFCOMM channel
+
+A **JBL Tour Pro 3** (`A0:11:22:33:44:55`, modalias `bluetooth:v0094p0004d0100`)
+is not served by `jbl-bridge`. Its LE GATT tree has no `excelpoint.com` service
+(`65786365-…`): the vendor services are Airoha's (`5052494d-2dab-0341-…`, the
+bytes spell `PRIM…ohaBLE`) plus the usual GAP, battery, device information and
+`fe2c` ones. With the default handles `jbl-bridge` fails with "Failed to
+register notify handler". The Fast Pair stream still carries the battery
+(left, right, case), so that part works unchanged; the listening mode does not.
+
+Its classic record lists the vendor UUID `00000000-0000-0000-0099-aabbccddeeff`
+([`docs/captures/jbl-tour-pro-3-bluetoothctl.txt`](docs/captures/jbl-tour-pro-3-bluetoothctl.txt)).
+That channel opens without pairing prompts and speaks Airoha's RACE framing:
+
+```
+05 <type> <length u16 LE> <command u16 LE> <payload>
+type  5a command · 5b reply · 5c / 5d notification
+```
+
+Two other vendor UUIDs in the record (`5052494d-2dab-0341-…`,
+`454c4261-686f-7269-4103-ab2d60875250`) accept a connection and answer every
+write with `01 aa 00 00 06`: they were not pursued.
+
+What the earbuds were seen to do, from a passive listener, from the JBL
+Headphones app's phone-side HCI snoop log, and from a replay of the app's own
+frames ([`docs/captures/jbl-tour-pro-3.txt`](docs/captures/jbl-tour-pro-3.txt)):
+
+| | frame |
+|:--|:--|
+| get mode | `05 5a 04 00 01 09 05 00` |
+| reply | `05 5b 09 00 01 09 05 00 00 <mode> <b> <c> <t>` |
+| event, on any change | `05 5d 08 00 01 09 05 00 00 <mode> <b> <c>` |
+| set Off | `05 5a 04 00 06 0e 00 0b` |
+| set ANC | `05 5a 06 00 06 0e 00 0a 01 00` |
+| set Ambient | `05 5a 06 00 06 0e 00 0a 0a 04` |
+| set TalkThru | `05 5a 06 00 06 0e 00 0a 09 04` |
+
+`<mode>` is `00` Off, `01` ANC, `0a` Ambient, `09` TalkThru, in replies and
+events alike. The three bytes after it differ between the two (Off is
+`00 00 00` in a reply, `00 1e e4` in an event; TalkThru `09 00 00` against
+`09 00 04`) and are not read. A set is acknowledged by an echo of its payload
+(`05 5b 08 00 06 0e 00 0a 01 00 00 00`, the last bytes varied between runs)
+and followed by the event; the acknowledgement is not read. The earbuds do not
+announce their mode on connect, so the bridge asks.
+
+Checked on one pair: Off → ANC → Ambient → TalkThru → Off from a PC, every
+reply and event matching the table, the earbuds back in Off at the end and
+audio uninterrupted. **Not tested:** the ambient level, ANC strength, wear
+detection, the case's screen, charging state, a second device connected at the
+same time, and any reconnect behaviour of the bridge itself on hardware.
+Other commands the app sends at connect (`09 00`, `0b 00`, `d6 0c`, `26 0e`,
+`17 0e`, `83 2c`, `75`) are shown in the capture and are not understood.
+
+Airoha's RACE channel is reported to accept far more than mode control on
+some devices (flash and RAM access; see ERNW's white paper on the Airoha
+chipset). The bridge sends only the five frames above, the ones the JBL app
+sends.

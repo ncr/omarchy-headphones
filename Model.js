@@ -458,6 +458,7 @@ var OPPO_HEYMELODY_UUID = "0000079a-d102-11e1-9b23-00025b00a5a5"
 var BOSE_BMAP_UUID = "00000000-deca-fade-deca-deafdecacaff"
 var BOSE_SPP_UUID = "9b26d8c0-a8ed-440b-95b0-c4714a518bcc"
 var REDMI_FD2D_UUID = "0000fd2d-0000-1000-8000-00805f9b34fb"
+var AIROHA_RACE_UUID = "00000000-0000-0000-0099-aabbccddeeff"
 
 // The UUIDs `bluetoothctl info <address>` printed, lowercased.
 // Quickshell.Bluetooth exposes no uuids property, so the SDP record is read the
@@ -574,6 +575,16 @@ var BACKENDS = [
     // BLE address on Fast Pair, which alone would hand them to the JBL bridge.
     modelNames: ["EarFun Air Pro 4"],
     modelUuids: ["00001101-0000-1000-8000-00805f9b34fb"],
+    args: ["address", "name"] },
+  { name: "airoha", bridge: "airoha-bridge",
+    // Off / ANC / Ambient / TalkThru over Airoha RACE on the vendor RFCOMM
+    // channel in the record. These earbuds have no excelpoint.com service, so
+    // the JBL row below cannot serve them, but they announce a BLE address on
+    // Fast Pair and would be handed to it: the row is above it. Claimed by the
+    // reported name and that UUID like the rows above — the same UUID on
+    // another brand's earbuds is not a claim. The battery stays Fast Pair's.
+    modelNames: ["JBL Tour Pro 3"],
+    modelUuids: [AIROHA_RACE_UUID],
     args: ["address", "name"] },
   { name: "jbl", bridge: "jbl-bridge",
     ble: true, args: ["bleAddress", "modelId"] }
