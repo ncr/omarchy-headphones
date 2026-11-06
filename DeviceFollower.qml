@@ -510,9 +510,11 @@ Item {
   }
 
   // The numeric ANC strength, on a row with the slider. The bridge writes it
-  // only while the device is in ANC and prints what the device says after.
+  // only while the device is in ANC and prints what the device says after;
+  // outside ANC it is "unavailable" here too, not an "ok" the bridge drops.
   function setAncStrength(value) {
     if (!Model.hasStrengthSlider(controlBackend) || !classicLive(controlBackend)) return false
+    if (ancMode !== "anc") return false
     var level = Math.max(strengthMin, Math.min(strengthMax, Math.round(Number(value))))
     if (!isFinite(level)) return false
     classicBridge.write("strength " + level + "\n")

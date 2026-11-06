@@ -42,17 +42,18 @@ device changed on its own. Flush after every line. Keys:
 | `error` | string | with `modes: false` — the one sentence the panel shows |
 | `mode` | string | `off` · `anc` · `ambient` · `talkthru` — `MODE_ORDER` in `Model.js`, the names every bridge may use; a row in `BACKENDS` may allow more in its `extraModes` (TOZO: `wind`, `leisure`, `adaptive`) |
 | `available` | list | the modes this device has, from the list above. Absent means all four (the JBL protocol has fixed slots); otherwise list exactly what the device offers |
-| `level` | int | the Ambient dial — Sony 0-20, Soundcore 1-5; the range is the row's `ambient` in `BACKENDS`. Only on a device that has one |
+| `level` | int | the Ambient dial — Sony 0-20, Soundcore 1-5, JBL Tour Pro 3 1-7; the range is the row's `ambient` in `BACKENDS`. Only on a device that has one |
 | `voice` | bool | the switch beside the dial — Focus on voice (Sony), wind noise reduction (Soundcore). Only with `level` |
 | `worn` | bool | a wear sensor: on the ears or not. Sent only after the device has said; a device that never says never carries the key |
+| `strength` | int | a numeric ANC strength while in ANC (JBL Tour Pro 3, 1-7); the range is the row's `strength` in `BACKENDS`. Only on a device that has one |
 | `ancLevel` | string | how strong the noise cancelling is: `low` · `mid` · `high` · `adaptive` (Nothing). With `ancLevels` |
 | `ancLevels` | list | the strengths this device grades in, from the four above, weakest first |
 | `latency` | bool | the low-latency switch (Nothing). Only after the device has answered for it |
 | `battery` | object | `{"left", "right", "case", "headset"}` 0-100 for the parts the device reports, `"charging": [names]`, `"caseStale": bool` when the case reading is the last one seen rather than a live one. A fallback for a device with no Fast Pair stream |
 
 Keys a line omits keep their last value in the shell (`applyAncLine` in
-`DeviceFollower.qml` carries `available`, `level`, `voice`, `worn`, `ancLevel`,
-`ancLevels`, `latency` and `battery` forward), so a bridge that reports only
+`DeviceFollower.qml` carries `available`, `level`, `voice`, `worn`, `strength`,
+`ancLevel`, `ancLevels`, `latency` and `battery` forward), so a bridge that reports only
 what changed is read correctly — but a bridge that reports the whole state is
 simpler to pin, and every bridge here does.
 
@@ -64,7 +65,8 @@ not print the new mode on the strength of having sent it.
 
 ```
 set off | set anc | set ambient | set talkthru
-level <n>                        # the Ambient dial (Sony, Soundcore)
+level <n>                        # the Ambient dial (Sony, Soundcore, JBL Tour Pro 3)
+strength <n>                     # numeric ANC strength, in ANC only (JBL Tour Pro 3)
 level low | mid | high | adaptive  # ANC strength (Nothing); turns ANC on at it
 voice on | off
 latency on | off
