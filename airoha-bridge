@@ -1,0 +1,595 @@
+#!/usr/bin/env python3
+"""Hold one Airoha RACE link and mirror the JBL Tour Pro 3's listening mode.
+
+    airoha-bridge <classic-address> <reported-name>
+
+Prints one JSON object per line, and reads one command per line:
+
+    stdout   {"modes": true, "mode": "ambient", "level": 4,   (ANC: "strength": 4)
+              "available": ["off","anc","ambient","talkthru"]}
+             {"modes": false, "error": "..."}
+    stdin    set off | set anc | set ambient | set talkthru
+             level <1-7>                       (Ambient only)
+             strength <1-7>                    (ANC only)
+
+Exit codes, which the shell-side service reads to decide what to do next:
+
+    0   clean stop: SIGTERM/SIGINT, or the widget closed the pipe
+    1   transient: the channel never opened, or closed under us. Says nothing
+        about the device, so the service retries with a growing pause
+    3   linked but silent: connected, asked, heard nothing. The service parks
+        the address
+    4   setup failure: bad arguments, a name that is not a known model, or a
+        Python without Bluetooth sockets. About this machine, not the device
+
+Only the JBL Tour Pro 3 has a row (MODELS). Its record lists the vendor
+UUID `00000000-0000-0000-0099-aabbccddeeff`, an RFCOMM channel that speaks
+Airoha's RACE framing: `05 <type> <length u16 LE> <command u16 LE> <payload>`,
+type 5a a command, 5b its reply, 5c / 5d a notification. The frames below are
+the ones the JBL Headphones app sent that earbuds answered, taken from an
+Android HCI snoop log, and then replayed from a PC; see PROTOCOL.md and
+docs/captures/jbl-tour-pro-3.txt:
+
+    get   05 5a 04 00 01 09 05 00
+    reply 05 5b 09 00 01 09 05 00 00 <mode> <b> <c> <t>
+    event 05 5d 08 00 01 09 05 00 00 <mode> <b> <c>      (unprompted, on any change)
+
+    set   off       05 5a 04 00 06 0e 00 0b
+          anc       05 5a 06 00 06 0e 00 0a 01 00
+          ambient   05 5a 06 00 06 0e 00 0a 0a 04
+          talkthru  05 5a 06 00 06 0e 00 0a 09 04
+
+`<mode>` is 00 off, 01 anc, 0a ambient, 09 talkthru. The three bytes after it
+differ between a reply and an event (Off is `00 00 00` in a reply and
+`00 1e e4` in an event) and are not read.
+
+Wear: the earbuds announce each ear's state unprompted, `05 5c 05 00 0c 00 00
+<ear> <state>`, ear 00 or 01 (which is the left is not known) and state 01 in
+the ear, 00 out. Both polarities are in docs/captures/jbl-tour-pro-3-wear.txt.
+`worn` is false once both ears are known and both are out, true once any ear
+is in, and absent until an ear has been heard from (the earbuds do not say
+on connect, and no query for it was seen to answer). One ear out is still
+worn: taking a single bud out to talk should not pause the music.
+
+Ambient level, 1 to 7, the panel's Ambient dial:
+
+    get   05 5a 04 00 01 09 07 00
+    reply 05 5b 07 00 01 09 07 00 00 <level> 00
+    set   05 5a 06 00 06 0e 00 1e <level> 00      (applies to the mode the earbuds are in)
+    ack   05 5b 04 00 06 0e 00 1e                 (an echo; says nothing about the level)
+
+The byte after `<mode>` in a mode reply or event is that mode's level too; it is
+read only for Ambient. The get above answers with the Ambient level whatever the
+mode; it is asked 0.3 s after each set, as the earbuds' own confirmation. `level <n>` is therefore written only while
+the earbuds are in Ambient, where the 1e frame is the Ambient level; in ANC the
+same frame is the ANC strength, which `strength <n>` writes, in ANC only. The
+earbuds' own level read for the strength is the byte after the mode in the mode
+read (`05 5a 04 00 01 09 05 00`, as at connect), so that is what is asked 0.3 s
+after a set, and what an ANC mode frame reports.
+
+Nothing else is read: no battery (Fast Pair carries it).
+"""
+import ctypes
+import json
+import os
+import re
+import signal
+import sys
+
+try:
+    import dbus
+    import dbus.mainloop.glib
+    import dbus.service
+    from gi.repository import GLib
+except ImportError as error:
+    sys.stdout.write(json.dumps({
+        "modes": False,
+        "error": "missing python dependency %s"
+                 % (getattr(error, "name", None) or error),
+    }) + "\n")
+    sys.stdout.flush()
+    sys.exit(4)
+
+try:
+    from gi.repository import GLibUnix
+    unix_signal_add = GLibUnix.signal_add
+except ImportError:
+    unix_signal_add = GLib.unix_signal_add
+
+UUID = "00000000-0000-0000-0099-aabbccddeeff"
+PROFILE_PATH = "/io/github/ncr/omaphones/airoha"
+USAGE = "usage: airoha-bridge <classic-address> <reported-name>"
+ADDRESS = re.compile(r"^([0-9A-Fa-f]{2}:){5}[0-9A-Fa-f]{2}$")
+
+# A model not listed here is refused: the same UUID on another brand's
+# earbuds says nothing about what these frames mean there.
+MODELS = {"JBL Tour Pro 3": {}}
+
+AVAILABLE = ["off", "anc", "ambient", "talkthru"]
+
+HEAD = 0x05
+TYPE_COMMAND = 0x5A
+TYPE_REPLY = 0x5B
+TYPE_NOTIFY_A = 0x5C
+TYPE_NOTIFY_B = 0x5D
+TYPES = (TYPE_COMMAND, TYPE_REPLY, TYPE_NOTIFY_A, TYPE_NOTIFY_B)
+# The largest frame ever seen is 0x3c payload; anything claiming more than this
+# is line noise and is skipped a byte at a time rather than waited for.
+MAX_LENGTH = 512
+
+GET_MODE = bytes.fromhex("055a040001090500")
+GET_AMBIENT_LEVEL = bytes.fromhex("055a040001090700")
+LEVEL_MIN = 1
+LEVEL_MAX = 7
+READBACK_DELAY = 300
+
+
+def set_level(level):
+    return bytes.fromhex("055a0600060e001e") + bytes([level, 0])
+
+
+SET = {
+    "off":      bytes.fromhex("055a0400060e000b"),
+    "anc":      bytes.fromhex("055a0600060e000a0100"),
+    "ambient":  bytes.fromhex("055a0600060e000a0a04"),
+    "talkthru": bytes.fromhex("055a0600060e000a0904"),
+}
+
+# Command 0x0901 with payload 05 00: the reply and the unprompted event both
+# carry `05 00 00 <mode> ...`; the first byte after that is the mode.
+WEAR_COMMAND = bytes.fromhex("0c00")
+MODE_COMMAND = bytes.fromhex("0109")
+MODE_PREFIX = bytes.fromhex("050000")
+MODE_FROM_BYTE = {0x00: "off", 0x01: "anc", 0x0A: "ambient", 0x09: "talkthru"}
+
+EXIT_TRANSIENT = 1
+EXIT_UNSUPPORTED = 3
+EXIT_SETUP = 4
+REPLY_TIMEOUT = 5
+CONNECT_TIMEOUT = 30
+CONNECT_DELAY = 500
+ANSWER_TIMEOUT = 5000
+
+
+def emit(payload):
+    try:
+        sys.stdout.write(json.dumps(payload, separators=(",", ":")) + "\n")
+        sys.stdout.flush()
+    except (BrokenPipeError, ValueError):
+        os._exit(0)
+
+
+def arm_parent_death_signal():
+    try:
+        libc = ctypes.CDLL("libc.so.6", use_errno=True)
+        libc.prctl(1, signal.SIGTERM)
+    except Exception:
+        return
+    if os.getppid() == 1:
+        os._exit(0)
+
+
+def parse_mode(frame):
+    """The mode a whole frame reports, or None.
+
+    Only a reply (5b) or notification (5d) to command 0x0901 whose payload
+    opens 05 00 00 counts; an echo of the app's own command (5a), the write
+    acknowledgement (command 0x0e06) and every other notification say nothing.
+    """
+    if len(frame) < 4 + 2 + 3 + 1:
+        return None
+    if frame[1] not in (TYPE_REPLY, TYPE_NOTIFY_B):
+        return None
+    if frame[4:6] != MODE_COMMAND or frame[6:9] != MODE_PREFIX:
+        return None
+    return MODE_FROM_BYTE.get(frame[9])
+
+
+def parse_mode_level(frame):
+    """The level byte that follows the mode in a mode frame, or None."""
+    if parse_mode(frame) is None or len(frame) < 11:
+        return None
+    return frame[10] if LEVEL_MIN <= frame[10] <= LEVEL_MAX else None
+
+
+def parse_ambient_level(frame):
+    """The Ambient level from the answer to the level get, or None.
+
+    `05 5b 07 00 01 09 07 00 00 <level> 00`: only that exact shape.
+    """
+    if len(frame) != 11 or frame[1] != TYPE_REPLY or frame[2:4] != b"\x07\x00":
+        return None
+    if frame[4:9] != bytes.fromhex("0109070000"):
+        return None
+    return frame[9] if LEVEL_MIN <= frame[9] <= LEVEL_MAX else None
+
+
+def parse_wear(frame):
+    """(ear, in_ear) from a wear notification, or None.
+
+    `05 5c 05 00 0c 00 00 <ear> <state>`: only that exact shape — type 5c,
+    length 5, command 0x000c, status 00, ear 0 or 1, state 0 or 1.
+    """
+    if len(frame) != 9 or frame[1] != TYPE_NOTIFY_A or frame[2:4] != b"\x05\x00":
+        return None
+    if frame[4:6] != WEAR_COMMAND or frame[6] != 0:
+        return None
+    ear, state = frame[7], frame[8]
+    if ear not in (0, 1) or state not in (0, 1):
+        return None
+    return ear, state == 1
+
+
+class Bridge:
+    def __init__(self, bus, address, loop):
+        self.bus = bus
+        self.address = address
+        self.loop = loop
+        self.exit_code = None
+        self.device = None
+        self.manager = None
+        self.registered = False
+        self.fd = None
+        self.watch = None
+        self.buffer = bytearray()
+        self.pending = ""
+        self.last_mode = None
+        self.ears = {}
+        self.level = None
+        self.strength = None
+        self.last_line = None
+
+    def finish(self, code, message=None):
+        if self.exit_code is not None:
+            return False
+        self.exit_code = code
+        if message:
+            emit({"modes": False, "error": message})
+        self.loop.quit()
+        return False
+
+    def unregister(self):
+        if self.watch is not None:
+            try:
+                GLib.source_remove(self.watch)
+            except Exception:
+                pass
+            self.watch = None
+        if self.fd is not None:
+            try:
+                os.close(self.fd)
+            except OSError:
+                pass
+            self.fd = None
+        if self.manager is not None and self.registered:
+            try:
+                self.manager.UnregisterProfile(PROFILE_PATH, timeout=REPLY_TIMEOUT)
+            except dbus.DBusException:
+                pass
+            self.registered = False
+
+    def register(self):
+        try:
+            device_path = find_device_path(self.bus, self.address)
+        except dbus.DBusException as error:
+            return self.finish(EXIT_TRANSIENT,
+                               "cannot reach BlueZ: %s" % error.get_dbus_message())
+        if not device_path:
+            return self.finish(EXIT_TRANSIENT,
+                               "no paired device with address %s" % self.address)
+        self.device = dbus.Interface(
+            self.bus.get_object("org.bluez", device_path), "org.bluez.Device1")
+        self.manager = dbus.Interface(
+            self.bus.get_object("org.bluez", "/org/bluez"), "org.bluez.ProfileManager1")
+        try:
+            self.manager.RegisterProfile(PROFILE_PATH, UUID, {
+                "Name": "Omaphones Airoha",
+                "Role": "client",
+                "RequireAuthentication": dbus.Boolean(False),
+                "RequireAuthorization": dbus.Boolean(False),
+            }, timeout=REPLY_TIMEOUT)
+        except dbus.DBusException as error:
+            return self.finish(EXIT_TRANSIENT,
+                               "cannot register the Airoha profile: %s"
+                               % error.get_dbus_message())
+        self.registered = True
+        GLib.timeout_add(CONNECT_DELAY, self.connect, 0)
+        return False
+
+    def connect(self, attempt):
+        if self.exit_code is not None or self.fd is not None:
+            return False
+
+        def failed(error):
+            if self.exit_code is not None or self.fd is not None:
+                return
+            self.finish(EXIT_TRANSIENT, "cannot open the Airoha channel: %s"
+                        % error.get_dbus_message())
+
+        try:
+            self.device.ConnectProfile(UUID, reply_handler=lambda: None,
+                                       error_handler=failed, timeout=CONNECT_TIMEOUT)
+        except dbus.DBusException as error:
+            failed(error)
+        return False
+
+    def opened(self, fd):
+        if self.fd is not None:
+            try:
+                os.close(fd)
+            except OSError:
+                pass
+            return
+        self.fd = fd
+        self.watch = GLib.io_add_watch(fd, GLib.PRIORITY_DEFAULT,
+                                       GLib.IO_IN | GLib.IO_HUP | GLib.IO_ERR,
+                                       self.on_io)
+        self.ask()
+        GLib.timeout_add(ANSWER_TIMEOUT, self.answer_timeout)
+
+    def ask(self):
+        self.write(GET_MODE)
+
+    def answer_timeout(self):
+        # Linked, asked, and nothing that reads as a mode came back: this
+        # address serves the UUID but not this part of it, so it is parked
+        # rather than dialled again every few seconds.
+        if self.exit_code is None and self.last_mode is None:
+            self.finish(EXIT_UNSUPPORTED, "the earbuds did not answer for their mode")
+        return False
+
+    def write(self, frame):
+        if self.fd is None:
+            return
+        try:
+            written = 0
+            while written < len(frame):
+                written += os.write(self.fd, frame[written:])
+        except OSError as error:
+            self.finish(EXIT_TRANSIENT, "the Airoha channel closed: %s" % error)
+
+    def worn(self):
+        """True once any ear is in, False once both are known and out, else None."""
+        if any(self.ears.values()):
+            return True
+        if len(self.ears) == 2:
+            return False
+        return None
+
+    def publish(self):
+        # Nothing is printed before the earbuds have said what mode they are in.
+        if self.last_mode is None:
+            return
+        line = {"modes": True, "mode": self.last_mode, "available": AVAILABLE}
+        # Only while in Ambient: the dial belongs to that mode, and a stale
+        # figure on the other modes' lines would say more than the earbuds did.
+        if self.last_mode == "ambient" and self.level is not None:
+            line["level"] = self.level
+        if self.last_mode == "anc" and self.strength is not None:
+            line["strength"] = self.strength
+        worn = self.worn()
+        if worn is not None:
+            line["worn"] = worn
+        if line != self.last_line:
+            self.last_line = line
+            emit(line)
+
+    def on_frame(self, frame):
+        wear = parse_wear(frame)
+        if wear is not None:
+            self.ears[wear[0]] = wear[1]
+            self.publish()
+            return
+        level = parse_ambient_level(frame)
+        if level is not None:
+            self.level = level
+            self.publish()
+            return
+        mode = parse_mode(frame)
+        if mode is None:
+            return
+        self.last_mode = mode
+        mode_level = parse_mode_level(frame)
+        if mode_level is not None:
+            if mode == "ambient":
+                self.level = mode_level
+            elif mode == "anc":
+                self.strength = mode_level
+        self.publish()
+
+    def read_back(self, frame=GET_AMBIENT_LEVEL):
+        # The earbuds answer a set with an echo that carries no level, so the
+        # level that is printed is the one they give when asked afterwards.
+        if self.exit_code is None:
+            self.write(frame)
+        return False
+
+    def read_back_strength(self):
+        return self.read_back(GET_MODE)
+
+    def parse_buffer(self):
+        while self.buffer:
+            if self.buffer[0] != HEAD:
+                del self.buffer[0]
+                continue
+            if len(self.buffer) < 2:
+                return
+            if self.buffer[1] not in TYPES:
+                del self.buffer[0]
+                continue
+            if len(self.buffer) < 4:
+                return
+            length = self.buffer[2] | (self.buffer[3] << 8)
+            if length < 2 or length > MAX_LENGTH:
+                del self.buffer[0]
+                continue
+            total = 4 + length
+            if len(self.buffer) < total:
+                return
+            frame = bytes(self.buffer[:total])
+            del self.buffer[:total]
+            self.on_frame(frame)
+            if self.exit_code is not None:
+                return
+
+    def command(self, line):
+        parts = line.strip().split()
+        if len(parts) == 2 and parts[0] == "level":
+            self.set_ambient_level(parts[1])
+            return
+        if len(parts) == 2 and parts[0] == "strength":
+            self.set_anc_strength(parts[1])
+            return
+        if len(parts) != 2 or parts[0] != "set" or parts[1] not in SET:
+            return
+        # Nothing goes out before the earbuds have said what mode they are in.
+        if self.last_mode is None:
+            return
+        self.write(SET[parts[1]])
+
+    def set_ambient_level(self, text):
+        # Only in Ambient, where the 1e frame is the Ambient level; in any other
+        # mode it would move a different setting.
+        if self.last_mode != "ambient":
+            return
+        try:
+            level = int(text)
+        except ValueError:
+            return
+        if not LEVEL_MIN <= level <= LEVEL_MAX:
+            return
+        self.write(set_level(level))
+        GLib.timeout_add(READBACK_DELAY, self.read_back)
+
+    def set_anc_strength(self, text):
+        # Only in ANC, where the 1e frame is the ANC strength.
+        if self.last_mode != "anc":
+            return
+        try:
+            level = int(text)
+        except ValueError:
+            return
+        if not LEVEL_MIN <= level <= LEVEL_MAX:
+            return
+        self.write(set_level(level))
+        GLib.timeout_add(READBACK_DELAY, self.read_back_strength)
+
+    def on_io(self, _fd, condition):
+        if condition & (GLib.IO_HUP | GLib.IO_ERR):
+            self.finish(EXIT_TRANSIENT, "the Airoha channel closed")
+            return False
+        try:
+            data = os.read(self.fd, 4096)
+        except OSError as error:
+            self.finish(EXIT_TRANSIENT, "the Airoha channel closed: %s" % error)
+            return False
+        if not data:
+            self.finish(EXIT_TRANSIENT, "the Airoha channel closed")
+            return False
+        self.buffer += data
+        self.parse_buffer()
+        return self.exit_code is None
+
+    def listen_to_stdin(self):
+        GLib.io_add_watch(0, GLib.PRIORITY_DEFAULT,
+                          GLib.IO_IN | GLib.IO_HUP | GLib.IO_ERR, self.on_stdin)
+
+    def on_stdin(self, _fd, condition):
+        if condition & (GLib.IO_HUP | GLib.IO_ERR):
+            self.finish(0)
+            return False
+        try:
+            chunk = os.read(0, 4096)
+        except OSError:
+            self.finish(0)
+            return False
+        if not chunk:
+            self.finish(0)
+            return False
+        self.pending += chunk.decode("utf-8", "replace")
+        while "\n" in self.pending:
+            line, self.pending = self.pending.split("\n", 1)
+            self.command(line)
+        return True
+
+
+def find_device_path(bus, address):
+    wanted = address.upper()
+    objects = dbus.Interface(bus.get_object("org.bluez", "/"),
+                             "org.freedesktop.DBus.ObjectManager").GetManagedObjects()
+    for path, interfaces in objects.items():
+        device = interfaces.get("org.bluez.Device1")
+        if device and str(device.get("Address", "")).upper() == wanted:
+            return str(path)
+    return None
+
+
+def main():
+    argv = sys.argv[1:]
+    if argv and argv[0] in ("-h", "--help"):
+        print(USAGE)
+        return 0
+    address = argv[0].strip() if argv else ""
+    name = argv[1] if len(argv) > 1 else ""
+    if len(argv) != 2 or not ADDRESS.match(address):
+        emit({"modes": False,
+              "error": "%s (not a Bluetooth address: %r)" % (USAGE, address)})
+        sys.exit(EXIT_SETUP)
+    if name not in MODELS:
+        emit({"modes": False, "error": "airoha-bridge has no row for %r" % name})
+        sys.exit(EXIT_SETUP)
+
+    dbus.mainloop.glib.DBusGMainLoop(set_as_default=True)
+    try:
+        bus = dbus.SystemBus()
+    except dbus.DBusException as error:
+        emit({"modes": False, "error": "no system bus: %s" % error.get_dbus_message()})
+        sys.exit(EXIT_TRANSIENT)
+
+    loop = GLib.MainLoop()
+    bridge = Bridge(bus, address, loop)
+
+    class Profile(dbus.service.Object):
+        @dbus.service.method("org.bluez.Profile1", in_signature="", out_signature="")
+        def Release(self):
+            bridge.finish(EXIT_TRANSIENT, "BlueZ released the Airoha profile")
+
+        @dbus.service.method("org.bluez.Profile1", in_signature="oha{sv}",
+                             out_signature="")
+        def NewConnection(self, path, fd, properties):
+            bridge.opened(fd.take())
+
+        @dbus.service.method("org.bluez.Profile1", in_signature="o", out_signature="")
+        def RequestDisconnection(self, path):
+            bridge.finish(EXIT_TRANSIENT, "the Airoha channel closed")
+
+    Profile(bus, PROFILE_PATH)
+    bridge.listen_to_stdin()
+    bridge.register()
+
+    def stop(*_args):
+        bridge.finish(0)
+        return False
+
+    unix_signal_add(GLib.PRIORITY_DEFAULT, signal.SIGTERM, stop)
+    unix_signal_add(GLib.PRIORITY_DEFAULT, signal.SIGINT, stop)
+
+    try:
+        if bridge.exit_code is None:
+            loop.run()
+    finally:
+        bridge.unregister()
+    sys.exit(bridge.exit_code or 0)
+
+
+if __name__ == "__main__":
+    arm_parent_death_signal()
+    try:
+        main()
+    except SystemExit:
+        raise
+    except KeyboardInterrupt:
+        pass
+    except BaseException as error:
+        emit({"modes": False, "error": "%s: %s" % (type(error).__name__, error)})
+        sys.exit(EXIT_TRANSIENT)

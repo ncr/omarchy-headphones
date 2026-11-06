@@ -1,0 +1,263 @@
+{
+  "model": "JBL Tour Pro 3",
+  "owner": "rickthestig",
+  "bridge": "airoha-bridge",
+  "capture": "docs/captures/jbl-tour-pro-3.txt",
+  "notes": "Airoha RACE on the vendor RFCOMM UUID 00000000-0000-0000-0099-aabbccddeeff. Every device frame is a verbatim reply or notification from the replay run (capture section 3); every sent frame is the JBL app's own, from the phone's HCI snoop log (section 2). Read-and-set of Off, ANC, Ambient and TalkThru. Ambient lines carry the level the earbuds reported in the same frame (7 in these captures); amended with the level feature, owner-confirmed on hardware. ANC lines carry the strength the earbuds reported in the same frame (7 in these captures); amended with the strength slider.",
+  "session": {},
+  "steps": [
+    {
+      "call": "open",
+      "note": "the app's get-mode query, sent the moment the channel opens"
+    },
+    {
+      "sent": [
+        "05 5a 04 00 01 09 05 00"
+      ]
+    },
+    {
+      "command": "set anc",
+      "note": "before the earbuds have said what mode they are in: nothing goes out"
+    },
+    {
+      "sent": [
+        "05 5a 04 00 01 09 05 00"
+      ]
+    },
+    {
+      "line_count": 0
+    },
+    {
+      "device": "05 5b 09 00 01 09 05 00 00 00 00 00 06",
+      "note": "reply to the get, earbuds in Off (docs/captures/jbl-tour-pro-3.txt, section 3)"
+    },
+    {
+      "lines": [
+        {
+          "modes": true,
+          "mode": "off",
+          "available": [
+            "off",
+            "anc",
+            "ambient",
+            "talkthru"
+          ]
+        }
+      ]
+    },
+    {
+      "command": "set anc"
+    },
+    {
+      "sent_last": "05 5a 06 00 06 0e 00 0a 01 00"
+    },
+    {
+      "device": "05 5b 08 00 06 0e 00 0a 01 00 00 00",
+      "note": "the write acknowledgement says nothing about the mode"
+    },
+    {
+      "line_count": 1
+    },
+    {
+      "device": "05 5d 05 00 86 00 00 01 00 05 5d 08 00 01 09 05 00 00 01 07 00",
+      "note": "the earbuds' own notification is what is printed"
+    },
+    {
+      "line": {
+        "modes": true,
+        "mode": "anc",
+        "available": [
+          "off",
+          "anc",
+          "ambient",
+          "talkthru"
+        ],
+        "strength": 7
+      }
+    },
+    {
+      "device": "05 5b 09 00 01 09 05 00 00 01 07 00 05",
+      "note": "the answer to a later get: the same mode, nothing new printed"
+    },
+    {
+      "line_count": 2
+    },
+    {
+      "command": "set ambient"
+    },
+    {
+      "sent_last": "05 5a 06 00 06 0e 00 0a 0a 04"
+    },
+    {
+      "device": "05 5b 08 00 06 0e 00 0a 0a 04 00 00",
+      "note": "the write acknowledgement says nothing about the mode"
+    },
+    {
+      "line_count": 2
+    },
+    {
+      "device": "05 5d 08 00 01 09 05 00 00 0a 07 00",
+      "note": "the earbuds' own notification is what is printed"
+    },
+    {
+      "line": {
+        "modes": true,
+        "mode": "ambient",
+        "available": [
+          "off",
+          "anc",
+          "ambient",
+          "talkthru"
+        ],
+        "level": 7
+      }
+    },
+    {
+      "device": "05 5b 09 00 01 09 05 00 00 0a 07 00 06",
+      "note": "the answer to a later get: the same mode, nothing new printed"
+    },
+    {
+      "line_count": 3
+    },
+    {
+      "command": "set talkthru"
+    },
+    {
+      "sent_last": "05 5a 06 00 06 0e 00 0a 09 04"
+    },
+    {
+      "device": "05 5b 08 00 06 0e 00 0a 09 04 22 00",
+      "note": "the write acknowledgement says nothing about the mode"
+    },
+    {
+      "line_count": 3
+    },
+    {
+      "device": "05 5d 08 00 01 09 05 00 00 09 00 04",
+      "note": "the earbuds' own notification is what is printed"
+    },
+    {
+      "line": {
+        "modes": true,
+        "mode": "talkthru",
+        "available": [
+          "off",
+          "anc",
+          "ambient",
+          "talkthru"
+        ]
+      }
+    },
+    {
+      "device": "05 5b 09 00 01 09 05 00 00 09 00 00 00",
+      "note": "the answer to a later get: the same mode, nothing new printed"
+    },
+    {
+      "line_count": 4
+    },
+    {
+      "command": "set off"
+    },
+    {
+      "sent_last": "05 5a 04 00 06 0e 00 0b"
+    },
+    {
+      "device": "05 5b 08 00 06 0e 00 0b 15 00 00 00",
+      "note": "the write acknowledgement says nothing about the mode"
+    },
+    {
+      "line_count": 4
+    },
+    {
+      "device": "05 5d 08 00 01 09 05 00 00 00 1e e4",
+      "note": "the earbuds' own notification is what is printed"
+    },
+    {
+      "line": {
+        "modes": true,
+        "mode": "off",
+        "available": [
+          "off",
+          "anc",
+          "ambient",
+          "talkthru"
+        ]
+      }
+    },
+    {
+      "device": "05 5b 09 00 01 09 05 00 00 00 00 00 00",
+      "note": "the answer to a later get: the same mode, nothing new printed"
+    },
+    {
+      "line_count": 5
+    },
+    {
+      "sent": [
+        "05 5a 04 00 01 09 05 00",
+        "05 5a 06 00 06 0e 00 0a 01 00",
+        "05 5a 06 00 06 0e 00 0a 0a 04",
+        "05 5a 06 00 06 0e 00 0a 09 04",
+        "05 5a 04 00 06 0e 00 0b"
+      ]
+    },
+    {
+      "lines": [
+        {
+          "modes": true,
+          "mode": "off",
+          "available": [
+            "off",
+            "anc",
+            "ambient",
+            "talkthru"
+          ]
+        },
+        {
+          "modes": true,
+          "mode": "anc",
+          "available": [
+            "off",
+            "anc",
+            "ambient",
+            "talkthru"
+          ],
+          "strength": 7
+        },
+        {
+          "modes": true,
+          "mode": "ambient",
+          "available": [
+            "off",
+            "anc",
+            "ambient",
+            "talkthru"
+          ],
+          "level": 7
+        },
+        {
+          "modes": true,
+          "mode": "talkthru",
+          "available": [
+            "off",
+            "anc",
+            "ambient",
+            "talkthru"
+          ]
+        },
+        {
+          "modes": true,
+          "mode": "off",
+          "available": [
+            "off",
+            "anc",
+            "ambient",
+            "talkthru"
+          ]
+        }
+      ]
+    },
+    {
+      "exit": null
+    }
+  ]
+}

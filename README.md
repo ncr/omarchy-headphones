@@ -148,11 +148,11 @@ Headphones not on the list? [Add yours](#add-your-own-headphones).
 <table>
 <tr>
 <td width="50%"><img src="docs/gallery/redmi-buds-3-pro.png" alt="Redmi Buds 3 Pro: left, right and case, Off / ANC / Transparency" width="100%"></td>
-<td width="50%"></td>
+<td width="50%"><img src="docs/gallery/jbl-tour-pro-3.png" alt="JBL Tour Pro 3: left, right and case, Off / ANC / Ambient / TalkThru" width="100%"></td>
 </tr>
 <tr>
 <td align="center">Redmi Buds 3 Pro — <a href="https://github.com/osteotek">@osteotek</a></td>
-<td align="center"></td>
+<td align="center">JBL Tour Pro 3 — <a href="https://github.com/rickthestig">@rickthestig</a></td>
 </tr>
 </table>
 
@@ -192,6 +192,7 @@ same idea, built for Apple's own protocol, and the plugin this one is modelled o
 |:----------------------------|:----------------------------------------------------------------------|:------------------------------------------------------------------------------------------------|:-------------------------------|
 | JBL TUNE230NC TWS (earbuds) | <img src="docs/icons/yes.svg" width="14" alt="yes"> left, right, case | <img src="docs/icons/yes.svg" width="14" alt="yes"> Off · ANC · Ambient · TalkThru              | [@ncr](https://github.com/ncr) |
 | JBL Wave Buds 2 (earbuds)   | <img src="docs/icons/yes.svg" width="14" alt="yes"> left, right, case | <img src="docs/icons/yes.svg" width="14" alt="yes"> Off · ANC · Ambient · TalkThru              | [@carlosr-sh](https://github.com/carlosr-sh) |
+| JBL Tour Pro 3 (earbuds)    | <img src="docs/icons/yes.svg" width="14" alt="yes"> left, right, case | <img src="docs/icons/yes.svg" width="14" alt="yes"> Off · ANC · Ambient · TalkThru (follows changes made on the earbuds too) · ANC strength and Ambient level 1–7 · wear pause/resume | [@rickthestig](https://github.com/rickthestig) |
 | Sony WH-CH720N (over-ear)   | <img src="docs/icons/yes.svg" width="14" alt="yes"> one figure        | <img src="docs/icons/yes.svg" width="14" alt="yes"> Off · ANC · Ambient (level, Focus on Voice) | [@ncr](https://github.com/ncr) |
 | Sony WH-1000XM5 (over-ear)  | <img src="docs/icons/yes.svg" width="14" alt="yes"> one figure        | <img src="docs/icons/yes.svg" width="14" alt="yes"> Off · ANC · Ambient (level, Focus on Voice) | [@huynguyendinhquang](https://github.com/huynguyendinhquang) |
 | Sony WH-1000XM6 (over-ear)  | <img src="docs/icons/yes.svg" width="14" alt="yes"> one figure        | <img src="docs/icons/yes.svg" width="14" alt="yes"> Off · ANC · Ambient (level, Focus on Voice) · wear pause/resume | [@f-iacono](https://github.com/f-iacono) |

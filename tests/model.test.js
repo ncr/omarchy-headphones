@@ -675,10 +675,11 @@ Deno.test("a sony device always has a UUID to register", () => {
 Deno.test("the rows answer what the follower once asked by brand name", () => {
   for (const row of Model.BACKENDS) {
     assertEquals(Model.isBleBackend(row.name), row.name === "jbl", row.name);
-    assertEquals(Model.hasAmbientDial(row.name), row.name === "sony" || row.name === "soundcore", row.name);
+    assertEquals(Model.hasAmbientDial(row.name), row.name === "sony" || row.name === "soundcore" || row.name === "airoha", row.name);
     const command = { sony: "voice", soundcore: "wind" }[row.name] || "";
     assertEquals(Model.ambientRange(row.name).command, command, row.name);
-    const key = row.name === "soundcore" ? "Wind" : "Voice";
+    // The airoha row has a dial and no switch: an empty key and label.
+    const key = row.name === "soundcore" ? "Wind" : row.name === "airoha" ? "" : "Voice";
     assertEquals(Model.ambientRange(row.name).key, key, row.name);
     if (row.name !== "sony")
       assertEquals(Model.bridgeUuid(row.name, [Model.SONY_MDR_V2_UUID, ...(row.uuids || [])]), "", row.name);
@@ -1392,4 +1393,50 @@ Deno.test("the Buds 3 Pro row takes no other device's claim, and the Buds 5 keep
     ["AA:BB:CC:00:00:01"]);
   // The Buds 5 record with this name: the same service, so the row that names it.
   assertEquals(Model.controlBackend(REDMI_BUDS_5_UUIDS, "", REDMI_BUDS_3_PRO), "redmi-buds-3-pro");
+});
+
+// ---- JBL Tour Pro 3: its SDP record, docs/captures/jbl-tour-pro-3-bluetoothctl.txt.
+
+const TOUR_PRO_3 = "JBL Tour Pro 3";
+
+async function tourPro3Uuids() {
+  const record = await Deno.readTextFile(
+    new URL("../docs/captures/jbl-tour-pro-3-bluetoothctl.txt", import.meta.url));
+  return Model.uuidsFromBluetoothctl(record);
+}
+
+Deno.test("JBL Tour Pro 3 is picked by its name and the Airoha RACE UUID, with or without its Fast Pair address", async () => {
+  const ids = await tourPro3Uuids();
+  assertEquals(ids.length, 15, "complete captured UUID list");
+  for (const uuids of [ids, [...ids].reverse(), ids.map(id => id.toUpperCase())]) {
+    assertEquals(Model.controlBackend(uuids, "", TOUR_PRO_3), "airoha");
+    // The address its Fast Pair stream announced: the JBL row would take it.
+    assertEquals(Model.controlBackend(uuids, "CE:6D:DD:59:9A:F2", TOUR_PRO_3), "airoha");
+  }
+  assertEquals(Model.bridgeFor("airoha"), "airoha-bridge");
+  assertEquals(Model.isClassicBackend("airoha"), true);
+  assertEquals(Model.isBleBackend("airoha"), false);
+  assertEquals(Model.bridgeArgs("airoha", { address: "AA:BB:CC:00:00:04", name: TOUR_PRO_3 }),
+    ["AA:BB:CC:00:00:04", TOUR_PRO_3]);
+  assertEquals(Model.fastPairWithoutBattery("airoha"), false);
+  assertEquals(Model.hasAmbientDial("airoha"), true);
+  assertEquals(Model.ambientRange("airoha"), { min: 1, max: 7, voice: "", command: "", key: "" });
+});
+
+Deno.test("neither the Tour Pro 3 name nor the Airoha UUID alone is the claim", async () => {
+  const ids = await tourPro3Uuids();
+  const withoutRace = ids.filter(id => id !== "00000000-0000-0000-0099-aabbccddeeff");
+  assertEquals(Model.controlBackend(withoutRace, "", TOUR_PRO_3), "");
+  assertEquals(Model.controlBackend(ids, "", ""), "");
+  assertEquals(Model.controlBackend(ids, "", "JBL Tour Pro 2"), "");
+  // Without the name, the record goes where it went before this row.
+  assertEquals(Model.controlBackend(ids, "CE:6D:DD:59:9A:F2"), "jbl");
+  assertEquals(Model.controlBackend(withoutRace, "CE:6D:DD:59:9A:F2", TOUR_PRO_3), "jbl");
+});
+
+Deno.test("the Tour Pro 3 row takes no other device's claim", () => {
+  for (const device of DEVICES) {
+    assertEquals(Model.controlBackend(device.uuids, device.bleAddress, TOUR_PRO_3),
+      device.backend, device.model);
+  }
 });

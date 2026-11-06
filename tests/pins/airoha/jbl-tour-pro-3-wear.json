@@ -1,0 +1,126 @@
+{
+  "model": "JBL Tour Pro 3 (wear)",
+  "owner": "rickthestig",
+  "bridge": "airoha-bridge",
+  "capture": "docs/captures/jbl-tour-pro-3-wear.txt",
+  "notes": "Wear notifications 05 5c 05 00 0c 00 00 <ear> <state>, from the JBL app's phone-side HCI snoop log. Polarity (1 = in the ear) from the two ends of capture B. Which ear is which is not known and not needed: worn is true while any ear is in. ANC lines carry the strength the earbuds reported in the same frame (7 in these captures); amended with the strength slider.",
+  "session": {},
+  "steps": [
+    {
+      "call": "open"
+    },
+    {
+      "device": "05 5c 05 00 0c 00 00 00 01",
+      "note": "wear before the first mode answer: remembered, nothing printed (capture A)"
+    },
+    {
+      "line_count": 0
+    },
+    {
+      "device": "05 5b 09 00 01 09 05 00 00 00 00 00 06",
+      "note": "the mode answer carries what the earbuds said about wear so far"
+    },
+    {
+      "lines": [
+        {
+          "modes": true,
+          "mode": "off",
+          "available": [
+            "off",
+            "anc",
+            "ambient",
+            "talkthru"
+          ],
+          "worn": true
+        }
+      ]
+    },
+    {
+      "device": "05 5c 05 00 0c 00 00 01 01",
+      "note": "the second ear in: still worn, nothing new"
+    },
+    {
+      "line_count": 1
+    },
+    {
+      "device": "05 5c 05 00 0c 00 00 00 00",
+      "note": "one ear out: still worn (capture B, 525.00)"
+    },
+    {
+      "line_count": 1
+    },
+    {
+      "device": "05 5c 05 00 0c 00 00 01 00",
+      "note": "both out: not worn"
+    },
+    {
+      "line": {
+        "modes": true,
+        "mode": "off",
+        "available": [
+          "off",
+          "anc",
+          "ambient",
+          "talkthru"
+        ],
+        "worn": false
+      }
+    },
+    {
+      "line_count": 2
+    },
+    {
+      "device": "05 5c 05 00 0c 00 00 00 00",
+      "note": "repeat: nothing new"
+    },
+    {
+      "line_count": 2
+    },
+    {
+      "device": "05 5c 05 00 0c 00 00 00 01 05 5c 05 00 0c 00 00 01 01",
+      "note": "both back in, glued in one read (capture B, 525.87-525.91)"
+    },
+    {
+      "line": {
+        "modes": true,
+        "mode": "off",
+        "available": [
+          "off",
+          "anc",
+          "ambient",
+          "talkthru"
+        ],
+        "worn": true
+      }
+    },
+    {
+      "line_count": 3
+    },
+    {
+      "device": "05 5d 08 00 01 09 05 00 00 01 07 00",
+      "note": "a mode event keeps the wear state on the line"
+    },
+    {
+      "line": {
+        "modes": true,
+        "mode": "anc",
+        "available": [
+          "off",
+          "anc",
+          "ambient",
+          "talkthru"
+        ],
+        "worn": true,
+        "strength": 7
+      }
+    },
+    {
+      "sent": [
+        "05 5a 04 00 01 09 05 00"
+      ]
+    },
+    {
+      "exit": null
+    }
+  ]
+}

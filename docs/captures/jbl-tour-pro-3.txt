@@ -1,0 +1,148 @@
+JBL Tour Pro 3 — Airoha RACE channel (RFCOMM, vendor UUID 00000000-0000-0000-0099-aabbccddeeff)
+Owner: rickthestig.  Captured 2026-11-05.  Classic address anonymised (A0:11:22:33:44:55 in
+the bluetoothctl listing).  Times are seconds from the start of each run.  Hex is spaced.
+The first byte of every frame is 05; byte 2 is the RACE type (5a command, 5b reply, 5c/5d
+notification); bytes 3-4 the payload length (little endian); bytes 5-6 the command id.
+
+Omitted: periodic frames `05 5d 0a 00 93 00 00 aa b1 04 02 ..` (a 3 s heartbeat-like status,
+not read), the app's repeated `05 5a 09 00 93 00 aa b1 04 01 00 01 00` polling burst, and every
+connect-time command outside the windows in section 2.
+Also not here: the BLE GATT tree (Airoha 5052494d-… service; no excelpoint.com service), which
+is why jbl-bridge cannot serve this model — see PROTOCOL.md.
+
+=== 1. Passive PC listener, mode changed on the earbuds by hand (nothing sent) ===
+Each run opens the channel and prints every byte received.  The earbuds do not report the
+current mode on connect; only on a change, as `05 5d 08 00 01 09 05 00 00 <mode> ..`.
+
+--- run: ANC -> Ambient (earbuds' own control; PC sent nothing) ---
+  0.40 connected
+  0.40 ConnectProfile ok
+  0.45 RX 05 5d 1e 00 82 00 00 01 01 00 01 01 01 01 01 01 05 06 04 00 00 00 00 00 00 01 01 01 01 01 01 01 01 01
+  9.04 RX 05 5d 08 00 01 09 05 00 00 0a 07 00
+
+--- run: Ambient -> TalkThru (earbuds' own control; PC sent nothing) ---
+  0.41 connected
+  0.41 ConnectProfile ok
+ 11.96 RX 05 5d 04 00 0b 00 00 3e
+ 13.61 RX 05 5d 08 00 01 09 05 00 00 0a 07 00
+ 14.30 RX 05 5d 08 00 01 09 05 00 00 09 00 04
+
+--- run: TalkThru -> Off (earbuds' own control; PC sent nothing) ---
+  0.41 connected
+  0.41 ConnectProfile ok
+  5.18 RX 05 5d 08 00 01 09 05 00 00 00 1e e4
+
+--- run: Off -> ANC (earbuds' own control; PC sent nothing) ---
+  0.42 connected
+  0.42 ConnectProfile ok
+  0.46 RX 05 5d 1e 00 82 00 00 01 01 00 01 01 01 01 01 01 05 06 04 00 00 00 00 00 00 01 01 01 01 01 01 01 01 01
+  7.03 RX 05 5d 04 00 0b 00 00 3e
+  8.80 RX 05 5d 05 00 86 00 00 01 00 05 5d 08 00 01 09 05 00 00 01 07 00
+
+=== 2. JBL Headphones app on an Android phone, from the phone's HCI snoop log ===
+Extracted RFCOMM data on the Airoha channel.  TX = phone -> earbuds, RX = earbuds -> phone.
+Fragments that the L2CAP layer split are shown as logged (a lone continuation byte appears
+at the start of the next TX line).  Windows shown: 9.3-11.3 s (connect: the app's get-mode query
+at 10.22 s) and 20-32 s.  The mode sets in the log, in order: ANC (20.37), Ambient (23.31),
+TalkThru (25.20), Ambient (27.13), ANC (29.00), Off (30.92).  Other app commands in the first
+window are shown as logged and are not understood; the bridge sends none of them.
+The Off set (30.92) was logged in two fragments, `05 5a 04 00 06 0e 00` and `0b`; whole, it is
+`05 5a 04 00 06 0e 00 0b`, and the earbuds' reply at 31.00 echoes `06 0e 00 0b`.
+    9.39 RX 05 5b 03 00 09 00 00
+    9.40 RX 05 5d 05 00 09 00 00 00 00
+    9.40 TX 05 5a 03 00 09 00 01
+    9.57 RX 05 5b 03 00 09 00 00
+    9.57 RX 05 5d 05 00 09 00 00 01 00
+    9.58 TX 05 5a 02 00 0b 00
+    9.76 RX 05 5b 03 00 0b 00 00
+    9.80 RX 05 5d 04 00 0b 00 00 3e
+    9.80 TX 05 5a 03 00 d6 0c 00
+    9.91 RX 05 5b 03 00 d6 0c 00
+    9.91 RX 05 5d 05 00 d6 0c 00 00 4a
+    9.91 TX 05 5a 03 00 d6 0c 01
+   10.11 RX 05 5b 03 00 d6 0c 00
+   10.21 RX 05 5d 05 00 d6 0c 00 01 54
+   10.22 TX 05 5a 04 00 01 09 05 00
+   10.40 RX 05 5b 09 00 01 09 05 00 00 01 07 00 05
+   10.41 TX 01 05 5a 04 00 01 09 07
+   10.54 RX 05 5b 07 00 01 09 07 00 00 07 00
+   10.55 TX 01 05 5a 06 00 26 0e 00 0d 00
+   10.69 RX 05 5b 0c 00 26 0e 00 0d 01 01 08 02 00 00 00 00
+   10.69 TX 01 05 5a 04 00 17 0e 03
+   10.82 RX 05 5b 05 00 17 0e 00 03 00
+   10.82 TX 01 05 5a 04 00 01 09 05
+   10.95 RX 05 5b 09 00 01 09 05 00 00 01 07 00 05
+   10.95 TX 01 05 5a 04 00 01 09 07
+   11.09 RX 05 5b 07 00 01 09 07 00 00 07 00
+   11.09 TX 01 05 5a 02 00 75
+   11.23 RX 05 5b 04 00 75 00 00 01
+   11.24 TX 01 05 5a 04 00 83 2c 07
+   20.37 TX 05 5a 06 00 06 0e 00 0a 01 00
+   20.46 RX 05 5b 08 00 06 0e 00 0a 01 00 00 00
+   20.77 RX 05 5d 05 00 86 00 00 01 00
+   20.77 RX 05 5d 08 00 01 09 05 00 00 01 07 00
+   21.01 TX 01 05 5a 02 00 11
+   21.10 RX 05 5b 08 00 11 00 00 aa 00 02 15 00
+   23.31 TX 01 05 5a 06 00 06 0e 00 0a 0a
+   23.42 RX 05 5b 08 00 06 0e 00 0a 0a 04 00 00
+   23.92 RX 05 5d 08 00 01 09 05 00 00 0a 07 00
+   24.15 RX 05 5d 0c 00 15 0e 02 00 00 00 00 00 00 00 00 00
+   24.36 RX 05 5d 0c 00 15 0e 03 00 00 00 00 00 00 00 00 00
+   25.20 TX 05 5a 06 00 06 0e 00 0a 09 04
+   25.35 RX 05 5b 08 00 06 0e 00 0a 09 04 00 00
+   25.88 RX 05 5d 08 00 01 09 05 00 00 09 00 04
+   26.08 RX 05 5d 0c 00 15 0e 02 00 00 00 00 00 00 00 00 00
+   26.17 RX 05 5d 0c 00 15 0e 03 00 00 00 00 00 00 00 00 00
+   27.13 TX 05 5a 06 00 06 0e 00 0a 0a 04
+   27.25 RX 05 5b 08 00 06 0e 00 0a 0a 04 00 00
+   27.78 RX 05 5d 08 00 01 09 05 00 00 0a 07 00
+   28.00 RX 05 5d 0c 00 15 0e 02 00 00 00 00 00 00 00 00 00
+   28.13 RX 05 5d 0c 00 15 0e 03 00 00 00 00 00 00 00 00 00
+   29.00 TX 05 5a 06 00 06 0e 00 0a 01 00
+   29.07 RX 05 5b 08 00 06 0e 00 0a 01 00 00 00
+   29.72 RX 05 5d 05 00 86 00 00 01 00
+   29.73 RX 05 5d 08 00 01 09 05 00 00 01 07 00
+   29.86 RX 05 5d 0c 00 15 0e 02 00 00 00 00 00 00 00 00 00
+   29.93 RX 05 5d 0c 00 15 0e 03 00 00 00 00 00 00 00 00 00
+   30.92 TX 01 05 5a 04 00 06 0e 00
+   31.00 RX 05 5b 08 00 06 0e 00 0b 00 00 00 00
+   31.27 RX 05 5d 08 00 01 09 05 00 00 00 1e e4
+   31.75 RX 05 5d 0c 00 15 0e 02 00 00 00 00 00 00 00 00 00
+   31.85 RX 05 5d 0c 00 15 0e 03 00 00 00 00 00 ff ff ff ff
+
+=== 3. PC replaying the app's frames, byte for byte (the hardware test) ===
+Start: Off.  Sequence: get, set ANC, get, set Ambient, get, set TalkThru, get, set Off, get.
+End: Off (restored; get reply `.. 00 00 00 00`).  Earbuds stayed connected for audio.
+  0.43 connected
+  0.43 ConnectProfile ok
+  0.48 RX 05 5d 1e 00 82 00 00 01 01 00 01 01 01 01 01 01 05 06 04 00 00 00 00 00 00 01 01 01 01 01 01 01 01 01
+  1.93 TX 05 5a 04 00 01 09 05 00
+  1.96 RX 05 5b 09 00 01 09 05 00 00 00 00 00 06
+  4.43 TX 05 5a 06 00 06 0e 00 0a 01 00
+  4.46 RX 05 5b 08 00 06 0e 00 0a 01 00 00 00
+  4.81 RX 05 5d 05 00 86 00 00 01 00 05 5d 08 00 01 09 05 00 00 01 07 00
+  6.93 TX 05 5a 04 00 01 09 05 00
+  6.97 RX 05 5b 09 00 01 09 05 00 00 01 07 00 05
+  9.43 TX 05 5a 06 00 06 0e 00 0a 0a 04
+  9.48 RX 05 5b 08 00 06 0e 00 0a 0a 04 00 00
+ 10.05 RX 05 5d 08 00 01 09 05 00 00 0a 07 00
+ 10.29 RX 05 5d 0c 00 15 0e 02 00 00 00 00 00 00 00 00 00
+ 10.32 RX 05 5d 0c 00 15 0e 03 00 00 00 00 00 00 00 00 00
+ 11.93 TX 05 5a 04 00 01 09 05 00
+ 11.96 RX 05 5b 09 00 01 09 05 00 00 0a 07 00 06
+ 13.42 RX 05 5d 04 00 0b 00 00 3e
+ 14.43 TX 05 5a 06 00 06 0e 00 0a 09 04
+ 14.47 RX 05 5b 08 00 06 0e 00 0a 09 04 22 00
+ 15.04 RX 05 5d 08 00 01 09 05 00 00 09 00 04
+ 15.26 RX 05 5d 0c 00 15 0e 02 00 00 00 00 00 00 00 00 00
+ 15.31 RX 05 5d 0c 00 15 0e 03 00 00 00 00 00 00 00 00 00
+ 16.93 TX 05 5a 04 00 01 09 05 00
+ 16.96 RX 05 5b 09 00 01 09 05 00 00 09 00 00 00
+ 19.43 TX 05 5a 04 00 06 0e 00 0b
+ 19.48 RX 05 5b 08 00 06 0e 00 0b 15 00 00 00
+ 19.78 RX 05 5d 08 00 01 09 05 00 00 00 1e e4
+ 20.26 RX 05 5d 0c 00 15 0e 02 00 00 00 00 00 00 00 00 00
+ 20.29 RX 05 5d 0c 00 15 0e 03 00 00 00 00 00 ff ff ff ff
+ 21.93 TX 05 5a 04 00 01 09 05 00
+ 21.96 RX 05 5b 09 00 01 09 05 00 00 00 00 00 00
+ 30.71 done

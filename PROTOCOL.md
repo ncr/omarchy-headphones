@@ -2516,3 +2516,98 @@ that an earlier revision of the probe listed are the length and the value of a
 *setting* (mode 0, anc 0), so the probe sends the bare queries `fe 01 0c` and
 `fe 01 17` instead. Nothing in `SPP_FRAMES` carries a parameter at all, so no
 run of this probe can set a mode on anybody's headphones.
+
+## JBL Tour Pro 3 — Airoha RACE on the vendor RFCOMM channel
+
+A **JBL Tour Pro 3** (`A0:11:22:33:44:55`, modalias `bluetooth:v0094p0004d0100`)
+is not served by `jbl-bridge`. Its LE GATT tree has no `excelpoint.com` service
+(`65786365-…`): the vendor services are Airoha's (`5052494d-2dab-0341-…`, the
+bytes spell `PRIM…ohaBLE`) plus the usual GAP, battery, device information and
+`fe2c` ones. With the default handles `jbl-bridge` fails with "Failed to
+register notify handler". The Fast Pair stream still carries the battery
+(left, right, case), so that part works unchanged; the listening mode does not.
+
+Its classic record lists the vendor UUID `00000000-0000-0000-0099-aabbccddeeff`
+([`docs/captures/jbl-tour-pro-3-bluetoothctl.txt`](docs/captures/jbl-tour-pro-3-bluetoothctl.txt)).
+That channel opens without pairing prompts and speaks Airoha's RACE framing:
+
+```
+05 <type> <length u16 LE> <command u16 LE> <payload>
+type  5a command · 5b reply · 5c / 5d notification
+```
+
+Two other vendor UUIDs in the record (`5052494d-2dab-0341-…`,
+`454c4261-686f-7269-4103-ab2d60875250`) accept a connection and answer every
+write with `01 aa 00 00 06`: they were not pursued.
+
+What the earbuds were seen to do, from a passive listener, from the JBL
+Headphones app's phone-side HCI snoop log, and from a replay of the app's own
+frames ([`docs/captures/jbl-tour-pro-3.txt`](docs/captures/jbl-tour-pro-3.txt)):
+
+| | frame |
+|:--|:--|
+| get mode | `05 5a 04 00 01 09 05 00` |
+| reply | `05 5b 09 00 01 09 05 00 00 <mode> <b> <c> <t>` |
+| event, on any change | `05 5d 08 00 01 09 05 00 00 <mode> <b> <c>` |
+| set Off | `05 5a 04 00 06 0e 00 0b` |
+| set ANC | `05 5a 06 00 06 0e 00 0a 01 00` |
+| set Ambient | `05 5a 06 00 06 0e 00 0a 0a 04` |
+| set TalkThru | `05 5a 06 00 06 0e 00 0a 09 04` |
+
+`<mode>` is `00` Off, `01` ANC, `0a` Ambient, `09` TalkThru, in replies and
+events alike. The three bytes after it differ between the two (Off is
+`00 00 00` in a reply, `00 1e e4` in an event; TalkThru `09 00 00` against
+`09 00 04`) and are not read. A set is acknowledged by an echo of its payload
+(`05 5b 08 00 06 0e 00 0a 01 00 00 00`, the last bytes varied between runs)
+and followed by the event; the acknowledgement is not read. The earbuds do not
+announce their mode on connect, so the bridge asks.
+
+Checked on one pair: Off → ANC → Ambient → TalkThru → Off from a PC, every
+reply and event matching the table, the earbuds back in Off at the end and
+audio uninterrupted. Through the installed plugin as well (IPC set and read back for each mode, restored to Off). **Not tested:** the ambient level, ANC strength, wear
+detection, the case's screen, charging state, a second device connected at the
+same time, and any reconnect behaviour of the bridge itself on hardware.
+Other commands the app sends at connect (`09 00`, `0b 00`, `d6 0c`, `26 0e`,
+`17 0e`, `83 2c`, `75`) are shown in the capture and are not understood.
+
+Airoha's RACE channel is reported to accept far more than mode control on
+some devices (flash and RAM access; see ERNW's white paper on the Airoha
+chipset). The bridge sends only the five frames above, the ones the JBL app
+sends.
+
+### JBL Tour Pro 3 — wear detection
+
+The earbuds announce each ear's wear state unprompted, `05 5c 05 00 0c 00 00 <ear> <state>`:
+`<ear>` 00 or 01 (which is the left is not known), `<state>` 01 in the ear, 00 out.
+Polarity is fixed by the two ends of [`docs/captures/jbl-tour-pro-3-wear.txt`](docs/captures/jbl-tour-pro-3-wear.txt):
+both ears `01` when the earbuds were put back in, `00` when taken out. The earbuds
+do not state it on a fresh connection, and the app's `0009` queries answered
+`… 00 00` even while worn, so no query is used and `worn` is absent from the bridge's
+line until an ear has spoken. `worn` is `false` once both ears are known and out, `true`
+while any ear is in — one bud out does not pause the music. The shell already pauses
+and resumes media on a `worn` edge (`pauseMediaOnDisconnect`).
+
+Not seen: a wear frame in a single read separating an ear that was never in from one taken out.
+
+### JBL Tour Pro 3 — levels, adaptive ANC and spatial state
+
+From the app's phone-side HCI snoop log with the app force-closed and reopened between
+steps, so each connect re-reads the state ([`docs/captures/jbl-tour-pro-3-levels.txt`](docs/captures/jbl-tour-pro-3-levels.txt)).
+LDAC was off. Spatial sound cannot be applied while LDAC is on.
+
+| setting | read | write | in the plugin |
+|:--|:--|:--|:--|
+| Ambient level, 1-7 | `05 5a 04 00 01 09 07 00` → `… 01 09 07 00 00 <level> 00`; also the byte after the mode in a mode reply or event | `05 5a 06 00 06 0e 00 1e <level> 00`, acknowledged by an echo with no level | yes: the panel's Ambient dial, only while in Ambient |
+| ANC strength, 1-7 | the byte after the mode in a mode reply or event, only while in ANC | the same `1e` frame, applied to the mode the earbuds are in | yes: a numeric slider under ANC; written only in ANC, confirmed by asking the mode read again |
+| Adaptive ANC | `05 5a 04 00 17 0e 03 02` → `05 5b 05 00 17 0e 00 03 <state>` | `05 5a 04 00 17 0e 03 01` on / `… 03 00` off, echoed | no: the panel has no switch for it |
+| Spatial sound | notification `05 5d 05 00 13 00 00 <x> 01`, `x` 00 off, 01 on (fixed or head tracking, not told apart) | none seen on this channel | no |
+
+The `1e` write acts on whichever of ANC or Ambient the earbuds are in, which is why
+the bridge writes it only in Ambient. A set is never trusted: the bridge asks for the
+Ambient level again 0.3 s later and prints what the earbuds say.
+
+Auto-compensation was seen too: read with the byte after `0d` in the answer to
+`05 5a 06 00 26 0e 00 0d 00 00`, notified as `05 5d 05 00 86 00 00 <state> 00`, turned
+off with `05 5a 03 00 95 00 00`; turning it on is a long ANC-set frame whose fields
+are not understood. Not used.
+

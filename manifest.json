@@ -17,10 +17,12 @@
   },
   "barWidget": {
     "displayName": "Omaphones",
-    "description": "One icon per connected set, filling with its battery; the panel shows left, right and case, and switches Off / ANC / Ambient — with the ambient level on Sony and Soundcore, ANC strength and low latency on Nothing / CMF. Six listening modes and left, right, case battery on TOZO NC9 Pro. Left, right, case battery on HUAWEI FreeBuds SE 2.",
+    "description": "One icon per connected set, filling with its battery; the panel shows left, right and case, and switches Off / ANC / Ambient — with the ambient level on Sony and Soundcore, ANC strength and low latency on Nothing / CMF. Ambient level and ANC strength 1-7 on JBL Tour Pro 3. Six listening modes and left, right, case battery on TOZO NC9 Pro. Left, right, case battery on HUAWEI FreeBuds SE 2.",
     "category": "Audio",
     "aliases": [
       "jbl",
+      "tour pro",
+      "airoha",
       "sony",
       "samsung",
       "nothing",
@@ -78,7 +80,7 @@
         "type": "boolean",
         "label": "Noise cancellation (Off / ANC / Ambient)",
         "defaultValue": true,
-        "description": "The MODE row, following changes made on the device too — plus the ambient level on Sony and Soundcore, and the ANC strength and low-latency switch on Nothing / CMF. Works on Sony MDR v1 and v2, Samsung Galaxy Buds2, Nothing / CMF, Soundcore, Xiaomi Buds 5 Pro, Redmi Buds 3 Pro, OPPO Enco Air3 Pro, Bose QC45, Bose QC35, TOZO NC9 Pro, and some JBL earbuds (JBL needs Fast Pair above). Hidden when the device answers for none. TOZO NC9 Pro also offers Reduce Wind Noise, Leisure and Adaptive modes."
+        "description": "The MODE row, following changes made on the device too — plus the ambient level on Sony and Soundcore, the ANC strength and low-latency switch on Nothing / CMF, and the Ambient level and ANC strength on JBL Tour Pro 3. Works on Sony MDR v1 and v2, Samsung Galaxy Buds2, Nothing / CMF, Soundcore, Xiaomi Buds 5 Pro, Redmi Buds 3 Pro, OPPO Enco Air3 Pro, Bose QC45, Bose QC35, TOZO NC9 Pro, JBL Tour Pro 3, and some other JBL earbuds (those need Fast Pair above). Hidden when the device answers for none. TOZO NC9 Pro also offers Reduce Wind Noise, Leisure and Adaptive modes."
       },
       {
         "key": "lowBatteryThreshold",

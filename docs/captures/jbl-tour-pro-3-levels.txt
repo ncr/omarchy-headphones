@@ -1,0 +1,117 @@
+JBL Tour Pro 3 — levels, adaptive ANC and spatial state, read from the JBL app's phone-side HCI snoop log.
+Owner: rickthestig.  Captured 2026-11-05.  Seconds from the start of the log (63.7 s = first app connect).
+Airoha RACE frames on the vendor RFCOMM channel (see jbl-tour-pro-3.txt for the framing).  LDAC was off throughout.
+
+The user's order, with the app force-closed and reopened between steps so each connect re-reads the state:
+  start (adaptive ANC on) -> adaptive off -> ANC level 1 -> reopen -> ANC level 7 -> reopen -> Ambient (level 7),
+  set to 1 -> reopen -> set to 7 -> reopen -> ANC (level 7), adaptive on -> reopen -> adaptive off, ANC 7,
+  Ambient control off -> reopen -> spatial off -> fixed -> reopen -> head tracking -> reopen -> off -> reopen.
+
+Omitted: the app's screen-text traffic, EQ, and every other command at connect.
+
+=== Mode read at each connect: 01 09 05 00 -> `05 00 00 <mode> <level> 00 ..` ===
+`<level>` is the level of the mode the earbuds are in (ANC strength in ANC, Ambient level in Ambient).
+
+   64.96 RX 05 5b 09 00 01 09 05 00 00 01 07 00 00
+   65.07 RX 05 5b 09 00 01 09 05 00 00 01 07 00 00
+  165.81 RX 05 5b 09 00 01 09 05 00 00 01 07 00 00
+  166.07 RX 05 5b 09 00 01 09 05 00 00 01 07 00 00
+  192.27 RX 05 5b 09 00 01 09 05 00 00 01 01 00 00
+  192.38 RX 05 5b 09 00 01 09 05 00 00 01 01 00 00
+  203.15 RX 05 5b 09 00 01 09 05 00 00 01 01 00 00
+  203.21 RX 05 5b 09 00 01 09 05 00 00 01 01 00 00
+  240.60 RX 05 5b 09 00 01 09 05 00 00 01 07 00 00
+  240.73 RX 05 5b 09 00 01 09 05 00 00 01 07 00 00
+  271.11 RX 05 5b 09 00 01 09 05 00 00 0a 01 00 06
+  271.19 RX 05 5b 09 00 01 09 05 00 00 0a 01 00 06
+  290.11 RX 05 5b 09 00 01 09 05 00 00 0a 07 00 06
+  290.22 RX 05 5b 09 00 01 09 05 00 00 0a 07 00 06
+  305.41 RX 05 5b 09 00 01 09 05 00 00 01 07 00 00
+  305.57 RX 05 5b 09 00 01 09 05 00 00 01 07 00 00
+  332.78 RX 05 5b 09 00 01 09 05 00 00 01 07 00 00
+  332.92 RX 05 5b 09 00 01 09 05 00 00 01 07 00 00
+  338.92 RX 05 5b 09 00 01 09 05 00 00 01 07 00 00
+  338.97 RX 05 5b 09 00 01 09 05 00 00 01 07 00 00
+  396.52 RX 05 5b 09 00 01 09 05 00 00 00 00 00 00
+  396.61 RX 05 5b 09 00 01 09 05 00 00 00 00 00 00
+  442.24 RX 05 5b 09 00 01 09 05 00 00 00 00 00 00
+  442.38 RX 05 5b 09 00 01 09 05 00 00 00 00 00 00
+  468.57 RX 05 5b 09 00 01 09 05 00 00 00 00 00 00
+  468.67 RX 05 5b 09 00 01 09 05 00 00 00 00 00 00
+  489.23 RX 05 5b 09 00 01 09 05 00 00 00 00 00 00
+  489.33 RX 05 5b 09 00 01 09 05 00 00 00 00 00 00
+
+=== Ambient level read at each connect: 01 09 07 00 -> `07 00 00 <level> 00` (independent of the mode) ===
+   64.99 RX 05 5b 07 00 01 09 07 00 00 07 00
+   65.10 RX 05 5b 07 00 01 09 07 00 00 07 00
+  165.94 RX 05 5b 07 00 01 09 07 00 00 07 00
+  166.18 RX 05 5b 07 00 01 09 07 00 00 07 00
+  192.30 RX 05 5b 07 00 01 09 07 00 00 07 00
+  192.41 RX 05 5b 07 00 01 09 07 00 00 07 00
+  203.17 RX 05 5b 07 00 01 09 07 00 00 07 00
+  203.23 RX 05 5b 07 00 01 09 07 00 00 07 00
+  240.63 RX 05 5b 07 00 01 09 07 00 00 07 00
+  240.75 RX 05 5b 07 00 01 09 07 00 00 07 00
+  271.13 RX 05 5b 07 00 01 09 07 00 00 01 00
+  271.22 RX 05 5b 07 00 01 09 07 00 00 01 00
+  290.13 RX 05 5b 07 00 01 09 07 00 00 07 00
+  290.25 RX 05 5b 07 00 01 09 07 00 00 07 00
+  305.43 RX 05 5b 07 00 01 09 07 00 00 07 00
+  305.70 RX 05 5b 07 00 01 09 07 00 00 07 00
+  332.80 RX 05 5b 07 00 01 09 07 00 00 07 00
+  332.95 RX 05 5b 07 00 01 09 07 00 00 07 00
+  338.95 RX 05 5b 07 00 01 09 07 00 00 07 00
+  339.00 RX 05 5b 07 00 01 09 07 00 00 07 00
+  396.54 RX 05 5b 07 00 01 09 07 00 00 07 00
+  396.64 RX 05 5b 07 00 01 09 07 00 00 07 00
+  442.27 RX 05 5b 07 00 01 09 07 00 00 07 00
+  442.41 RX 05 5b 07 00 01 09 07 00 00 07 00
+  468.60 RX 05 5b 07 00 01 09 07 00 00 07 00
+  468.69 RX 05 5b 07 00 01 09 07 00 00 07 00
+  489.25 RX 05 5b 07 00 01 09 07 00 00 07 00
+  489.35 RX 05 5b 07 00 01 09 07 00 00 07 00
+
+=== Level writes (app -> earbuds), each answered by an echo only: 06 0e 00 1e <level> 00 ===
+  178.39 TX 05 5a 06 00 06 0e 00 1e 01 00
+  204.81 TX 05 5a 06 00 06 0e 00 1e 07 00
+  262.84 TX 05 5a 06 00 06 0e 00 1e 01 00
+  277.55 TX 05 5a 06 00 06 0e 00 1e 07 00
+
+=== Mode events carry the level too: `05 5d 08 00 01 09 05 00 00 <mode> <level> 00` ===
+  247.12 RX 05 5d 08 00 01 09 05 00 00 0a 07 00
+  300.98 RX 05 5d 08 00 01 09 05 00 00 01 07 00
+
+=== Adaptive ANC: get 17 0e 03 02, set 17 0e 03 01 / 00, reply `17 0e 00 03 <state>` ===
+   65.05 RX 05 5b 05 00 17 0e 00 03 01
+  165.71 RX 05 5b 05 00 17 0e 00 03 01
+  167.89 RX 05 5b 05 00 17 0e 00 03 00
+  192.35 RX 05 5b 05 00 17 0e 00 03 00
+  203.12 RX 05 5b 05 00 17 0e 00 03 00
+  240.70 RX 05 5b 05 00 17 0e 00 03 00
+  271.17 RX 05 5b 05 00 17 0e 00 03 00
+  290.19 RX 05 5b 05 00 17 0e 00 03 00
+  305.39 RX 05 5b 05 00 17 0e 00 03 00
+  315.48 RX 05 5b 05 00 17 0e 00 03 01
+  332.90 RX 05 5b 05 00 17 0e 00 03 01
+  338.80 RX 05 5b 05 00 17 0e 00 03 01
+  340.60 RX 05 5b 05 00 17 0e 00 03 00
+  396.59 RX 05 5b 05 00 17 0e 00 03 00
+  442.35 RX 05 5b 05 00 17 0e 00 03 00
+  468.65 RX 05 5b 05 00 17 0e 00 03 00
+  489.31 RX 05 5b 05 00 17 0e 00 03 00
+
+=== Spatial sound state (read only here): 05 5d 05 00 13 00 00 <x> 01 — x=00 off, 01 on (fixed or head tracking) ===
+(no spatial write was seen on this channel; the app sets it another way)
+  396.81 RX 05 5d 05 00 13 00 00 00 01
+  442.58 RX 05 5d 05 00 13 00 00 01 01
+  468.82 RX 05 5d 05 00 13 00 00 01 01
+  489.49 RX 05 5d 05 00 13 00 00 00 01
+
+=== The app's own queries, as sent ===
+   64.93 TX 05 5a 04 00 01 09 05 00
+   64.97 TX 05 5a 04 00 01 09 07 00
+   65.03 TX 05 5a 04 00 17 0e 03 02
+
+=== The echo that answers every level write (carries no level) ===
+  178.41 RX 05 5b 04 00 06 0e 00 1e
+  204.83 RX 05 5b 04 00 06 0e 00 1e

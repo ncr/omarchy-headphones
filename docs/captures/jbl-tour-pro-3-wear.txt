@@ -1,0 +1,38 @@
+JBL Tour Pro 3 — wear notifications on the Airoha RACE channel (RFCOMM vendor UUID
+00000000-0000-0000-0099-aabbccddeeff).  Owner: rickthestig.  Captured 2026-11-05 from the
+phone's HCI snoop log while the JBL Headphones app was connected.  Seconds from the log start.
+
+Frame: 05 5c 05 00 0c 00 00 <ear> <state>   (type 5c notification, command 0x000c)
+  ear   00 or 01 (which is the left is not known)
+  state 01 in the ear, 00 out (see the two runs below: both in at the end, both out at 525.0)
+
+Only wear frames and the mode events around them are shown.  The app's screen-text
+traffic and every other command in these windows are omitted.
+
+=== A. At the app's connect: both ears reported with state 01 (the user was wearing the earbuds) ===
+  105.59 RX d42 05 5c 05 00 0c 00 00 00 01
+  105.61 RX d42 05 5c 05 00 0c 00 00 01 01
+
+=== B. Both earbuds taken out of the ears, then put back in (user-described order) ===
+  521.08 RX d43 05 5c 05 00 0c 00 00 00 01
+  521.10 RX d43 05 5c 05 00 0c 00 00 01 00
+  521.24 RX d43 05 5c 05 00 0c 00 00 00 00
+  521.28 RX d43 05 5c 05 00 0c 00 00 01 00
+  521.39 RX d43 05 5d 08 00 01 09 05 00 00 00 1e e4
+  521.43 RX d43 05 5d 08 00 01 09 05 00 00 00 1e e4
+  523.68 RX d43 05 5c 05 00 0c 00 00 00 01
+  523.71 RX d43 05 5c 05 00 0c 00 00 01 00
+  523.99 RX d43 05 5d 08 00 01 09 05 00 00 0a 07 00
+  524.74 RX d43 05 5d 08 00 01 09 05 00 00 09 00 04
+  525.00 RX d43 05 5c 05 00 0c 00 00 00 00
+  525.00 RX d43 05 5c 05 00 0c 00 00 01 00
+  525.05 RX d43 05 5d 08 00 01 09 05 00 00 00 1e e4
+  525.09 RX d43 05 5d 08 00 01 09 05 00 00 00 1e e4
+  525.48 RX d43 05 5c 05 00 0c 00 00 00 01
+  525.48 RX d43 05 5c 05 00 0c 00 00 01 00
+  525.83 RX d43 05 5d 08 00 01 09 05 00 00 0a 07 00
+  525.87 RX d43 05 5c 05 00 0c 00 00 00 01
+  525.91 RX d43 05 5c 05 00 0c 00 00 01 01
+  526.39 RX d43 05 5d 08 00 01 09 05 00 00 01 07 00
+
+End state: both in (01 01 at 525.91).  Out: 00 00 / 01 00 at 525.00.

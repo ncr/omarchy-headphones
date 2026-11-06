@@ -651,6 +651,19 @@ Item {
       return root.writeAncLevel(root.followerFor(which), level)
     }
 
+    // The numeric ANC strength slider (JBL Tour Pro 3), 1-7, while in ANC.
+    // -1 while nothing has said, and on every device with no such slider.
+    function ancStrength(): string { return String(root.primary ? root.primary.ancStrength : -1) }
+    function ancStrengthFor(which: string): string { return root.levelOf(which, "ancStrength") }
+    function setAncStrength(level: int): string {
+      var f = root.primary
+      return f && f.setAncStrength(level) ? "ok" : "unavailable"
+    }
+    function setAncStrengthFor(level: int, which: string): string {
+      var f = root.followerFor(which)
+      return f && f.setAncStrength(level) ? "ok" : "unavailable"
+    }
+
     // Low latency, on devices whose channel carries the switch (Nothing). "on"
     // or "off", and empty where the bridge has never mentioned it.
     function latency(): string { return root.latencyOf(root.primary) }

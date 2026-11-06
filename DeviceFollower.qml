@@ -242,6 +242,13 @@ Item {
   // panel draws the dial and the voice switch on this, and nothing on a device
   // that never mentioned either.
   readonly property bool ambientControls: ancLive && ambientLevel >= 0
+  // A numeric ANC strength, on a row that has the slider (the JBL Tour Pro 3,
+  // 1-7): the device's own figure while in ANC, -1 until it has said.
+  readonly property int ancStrength: typeof ancState.strength === "number" ? ancState.strength : -1
+  readonly property var strengthRange: Model.strengthRange(controlBackend)
+  readonly property int strengthMin: strengthRange ? strengthRange.min : 0
+  readonly property int strengthMax: strengthRange ? strengthRange.max : 0
+  readonly property bool strengthControls: ancLive && strengthRange !== null && ancStrength >= 0
 
   // On the ears or not, from a wear sensor — confirmed on the Sony WH-1000XM6,
   // over the same SYSTEM status channel as the listening mode. Undefined until
@@ -387,7 +394,7 @@ Item {
       return
     }
     if (parsed === null || typeof parsed !== "object" || Array.isArray(parsed)) return
-    var carried = ["available", "level", "voice", "worn",
+    var carried = ["available", "level", "voice", "worn", "strength",
                    "ancLevel", "ancLevels", "latency", "battery"]
     for (var i = 0; i < carried.length; i++) {
       var key = carried[i]
@@ -499,6 +506,18 @@ Item {
     var level = Math.max(ambientMin, Math.min(ambientMax, Math.round(Number(value))))
     if (!isFinite(level)) return false
     classicBridge.write("level " + level + "\n")
+    return true
+  }
+
+  // The numeric ANC strength, on a row with the slider. The bridge writes it
+  // only while the device is in ANC and prints what the device says after;
+  // outside ANC it is "unavailable" here too, not an "ok" the bridge drops.
+  function setAncStrength(value) {
+    if (!Model.hasStrengthSlider(controlBackend) || !classicLive(controlBackend)) return false
+    if (ancMode !== "anc") return false
+    var level = Math.max(strengthMin, Math.min(strengthMax, Math.round(Number(value))))
+    if (!isFinite(level)) return false
+    classicBridge.write("strength " + level + "\n")
     return true
   }
 

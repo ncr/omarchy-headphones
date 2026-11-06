@@ -1,8 +1,8 @@
 # The bridge contract
 
 A bridge is one process that holds one link to one device and mirrors its
-listening mode — or, where the device has none, its battery. Twelve exist — `jbl-bridge`, `sony-bridge`, `samsung-bridge`,
-`nothing-bridge`, `xiaomi-bridge`, `soundcore-bridge`, `oppo-bridge`, `bose-bridge`, `tozo-bridge`, `huawei-bridge`, `redmi-bridge`, `earfun-bridge` — and the shell does not
+listening mode — or, where the device has none, its battery. Thirteen exist — `jbl-bridge`, `sony-bridge`, `samsung-bridge`,
+`nothing-bridge`, `xiaomi-bridge`, `soundcore-bridge`, `oppo-bridge`, `bose-bridge`, `tozo-bridge`, `huawei-bridge`, `redmi-bridge`, `earfun-bridge`, `airoha-bridge` — and the shell does not
 care which is running: they all print the same lines, read the same commands
 and end the same four ways. This file is that contract, written once. A
 bridge's docstring says what is particular to its protocol and points here
@@ -42,17 +42,18 @@ device changed on its own. Flush after every line. Keys:
 | `error` | string | with `modes: false` — the one sentence the panel shows |
 | `mode` | string | `off` · `anc` · `ambient` · `talkthru` — `MODE_ORDER` in `Model.js`, the names every bridge may use; a row in `BACKENDS` may allow more in its `extraModes` (TOZO: `wind`, `leisure`, `adaptive`) |
 | `available` | list | the modes this device has, from the list above. Absent means all four (the JBL protocol has fixed slots); otherwise list exactly what the device offers |
-| `level` | int | the Ambient dial — Sony 0-20, Soundcore 1-5; the range is the row's `ambient` in `BACKENDS`. Only on a device that has one |
+| `level` | int | the Ambient dial — Sony 0-20, Soundcore 1-5, JBL Tour Pro 3 1-7; the range is the row's `ambient` in `BACKENDS`. Only on a device that has one |
 | `voice` | bool | the switch beside the dial — Focus on voice (Sony), wind noise reduction (Soundcore). Only with `level` |
 | `worn` | bool | a wear sensor: on the ears or not. Sent only after the device has said; a device that never says never carries the key |
+| `strength` | int | a numeric ANC strength while in ANC (JBL Tour Pro 3, 1-7); the range is the row's `strength` in `BACKENDS`. Only on a device that has one |
 | `ancLevel` | string | how strong the noise cancelling is: `low` · `mid` · `high` · `adaptive` (Nothing). With `ancLevels` |
 | `ancLevels` | list | the strengths this device grades in, from the four above, weakest first |
 | `latency` | bool | the low-latency switch (Nothing). Only after the device has answered for it |
 | `battery` | object | `{"left", "right", "case", "headset"}` 0-100 for the parts the device reports, `"charging": [names]`, `"caseStale": bool` when the case reading is the last one seen rather than a live one. A fallback for a device with no Fast Pair stream |
 
 Keys a line omits keep their last value in the shell (`applyAncLine` in
-`DeviceFollower.qml` carries `available`, `level`, `voice`, `worn`, `ancLevel`,
-`ancLevels`, `latency` and `battery` forward), so a bridge that reports only
+`DeviceFollower.qml` carries `available`, `level`, `voice`, `worn`, `strength`,
+`ancLevel`, `ancLevels`, `latency` and `battery` forward), so a bridge that reports only
 what changed is read correctly — but a bridge that reports the whole state is
 simpler to pin, and every bridge here does.
 
@@ -64,7 +65,8 @@ not print the new mode on the strength of having sent it.
 
 ```
 set off | set anc | set ambient | set talkthru
-level <n>                        # the Ambient dial (Sony, Soundcore)
+level <n>                        # the Ambient dial (Sony, Soundcore, JBL Tour Pro 3)
+strength <n>                     # numeric ANC strength, in ANC only (JBL Tour Pro 3)
 level low | mid | high | adaptive  # ANC strength (Nothing); turns ANC on at it
 voice on | off
 latency on | off
@@ -163,6 +165,23 @@ the Fast Pair stream's. The earbuds neither acknowledge a set nor announce a
 change, so after a set the bridge asks every second, at most five times, until
 they report the mode that was set, and asks again every 10 s besides. Exit 3
 means the mode get went unanswered twice.
+
+
+### JBL Tour Pro 3 extension
+
+`airoha-bridge <classic-address> "JBL Tour Pro 3"` opens the vendor RFCOMM
+channel `00000000-0000-0000-0099-aabbccddeeff` through a Profile1 and accepts
+only its owner's model row; a name with no row is exit 4. It reports the mode
+only, `available` `off`, `anc`, `ambient`, `talkthru` and, while in Ambient, a
+`level` 1-7 for the panel's dial (`level <n>` sets it, in Ambient only, and the
+bridge asks again before printing it), while in ANC a `strength` 1-7 the same way
+(`strength <n>`, ANC only), and `worn` once an ear has spoken: the
+battery is the Fast Pair stream's. The bridge asks for the mode once when the channel opens and
+then follows the earbuds' own notifications, which they send for a set from
+here, from the app and from the touch control alike. The first answer is the
+only thing that makes the row live; nothing is sent before it. Exit 3 means
+the first get went unanswered for 5 s. The `airoha` row in `BACKENDS` sits
+above the JBL row, which these earbuds' Fast Pair address would otherwise reach.
 
 
 ### Redmi Buds 3 Pro extension
