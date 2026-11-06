@@ -2574,3 +2574,17 @@ Airoha's RACE channel is reported to accept far more than mode control on
 some devices (flash and RAM access; see ERNW's white paper on the Airoha
 chipset). The bridge sends only the five frames above, the ones the JBL app
 sends.
+
+### JBL Tour Pro 3 — wear detection
+
+The earbuds announce each ear's wear state unprompted, `05 5c 05 00 0c 00 00 <ear> <state>`:
+`<ear>` 00 or 01 (which is the left is not known), `<state>` 01 in the ear, 00 out.
+Polarity is fixed by the two ends of [`docs/captures/jbl-tour-pro-3-wear.txt`](docs/captures/jbl-tour-pro-3-wear.txt):
+both ears `01` when the earbuds were put back in, `00` when taken out. The earbuds
+do not state it on a fresh connection, and the app's `0009` queries answered
+`… 00 00` even while worn, so no query is used and `worn` is absent from the bridge's
+line until an ear has spoken. `worn` is `false` once both ears are known and out, `true`
+while any ear is in — one bud out does not pause the music. The shell already pauses
+and resumes media on a `worn` edge (`pauseMediaOnDisconnect`).
+
+Not seen: a wear frame in a single read separating an ear that was never in from one taken out.

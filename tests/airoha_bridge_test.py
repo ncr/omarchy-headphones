@@ -12,6 +12,7 @@ the earbuds said.
 """
 import io
 import os
+import re
 import unittest
 from unittest import mock
 
@@ -64,16 +65,20 @@ class Evidence(unittest.TestCase):
         pins = harness.pins_for("airoha-bridge")
         self.assertTrue(pins)
         for _path, pin in pins:
-            self.assertEqual(pin["capture"], "docs/captures/jbl-tour-pro-3.txt")
+            self.assertTrue(pin["capture"].startswith("docs/captures/jbl-tour-pro-3"))
+            self.assertTrue(os.path.exists(os.path.join(harness.ROOT, pin["capture"])))
 
     def test_every_frame_in_the_pin_is_in_the_capture(self):
-        with open(CAPTURE) as handle:
-            text = handle.read()
         for _path, pin in harness.pins_for("airoha-bridge"):
+            # The pin's own capture, plus the main one: a wear pin borrows the
+            # mode answer that its session needs from the mode capture.
+            text = ""
+            for name in {pin["capture"], "docs/captures/jbl-tour-pro-3.txt"}:
+                with open(os.path.join(harness.ROOT, name)) as handle:
+                    text += handle.read()
             for step in pin["steps"]:
                 if "device" in step:
-                    for frame in step["device"].replace("05 5d", "|05 5d").replace(
-                            "05 5b", "|05 5b").split("|"):
+                    for frame in re.split(r"(?=05 5[abcd] )", step["device"]):
                         if frame.strip():
                             self.assertTrue(frame.strip() in text, frame)
                 for sent in step.get("sent", []) + [step.get("sent_last")]:
@@ -150,6 +155,37 @@ class NotRead(unittest.TestCase):
         s = Session()
         s.command("set anc")
         self.assertEqual(s.sent, [])
+
+
+class Wear(unittest.TestCase):
+    def lines_for(self, *frames):
+        s = Session()
+        s.device(REPLY_OFF)
+        for frame in frames:
+            s.device(frame)
+        return s.lines
+
+    def test_a_wear_frame_that_is_not_that_exact_shape_says_nothing(self):
+        for frame in (
+            "05 5c 05 00 0c 00 00 02 01",       # synthetic: an ear that does not exist
+            "05 5c 05 00 0c 00 00 00 02",       # synthetic: a state that is neither
+            "05 5c 05 00 0c 00 01 00 01",       # synthetic: a non-zero status
+            "05 5d 05 00 0c 00 00 00 01",       # synthetic: a response, not a notification
+            "05 5c 05 00 0b 00 00 00 01",       # synthetic: another command
+        ):
+            self.assertEqual(self.lines_for(frame), [line("off")], frame)
+
+    def test_both_ears_out_is_not_worn_and_one_ear_in_is_worn(self):
+        out = self.lines_for("05 5c 05 00 0c 00 00 00 00", "05 5c 05 00 0c 00 00 01 00")
+        self.assertEqual(out[-1]["worn"], False)
+        one = self.lines_for("05 5c 05 00 0c 00 00 00 00", "05 5c 05 00 0c 00 00 01 01")
+        self.assertEqual(one[-1]["worn"], True)
+
+    def test_one_ear_heard_out_is_not_a_verdict(self):
+        self.assertEqual(self.lines_for("05 5c 05 00 0c 00 00 00 00"), [line("off")])
+
+    def test_worn_is_left_out_until_an_ear_has_spoken(self):
+        self.assertNotIn("worn", self.lines_for()[-1])
 
 
 class Silent(unittest.TestCase):

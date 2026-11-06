@@ -39,8 +39,17 @@ docs/captures/jbl-tour-pro-3.txt:
 
 `<mode>` is 00 off, 01 anc, 0a ambient, 09 talkthru. The three bytes after it
 differ between a reply and an event (Off is `00 00 00` in a reply and
-`00 1e e4` in an event) and are not read. Nothing else is read: no battery
-(Fast Pair carries it), no wear state, no levels.
+`00 1e e4` in an event) and are not read.
+
+Wear: the earbuds announce each ear's state unprompted, `05 5c 05 00 0c 00 00
+<ear> <state>`, ear 00 or 01 (which is the left is not known) and state 01 in
+the ear, 00 out. Both polarities are in docs/captures/jbl-tour-pro-3-wear.txt.
+`worn` is false once both ears are known and both are out, true once any ear
+is in, and absent until an ear has been heard from (the earbuds do not say
+on connect, and no query for it was seen to answer). One ear out is still
+worn: taking a single bud out to talk should not pause the music.
+
+Nothing else is read: no battery (Fast Pair carries it), no levels.
 """
 import ctypes
 import json
@@ -100,6 +109,7 @@ SET = {
 
 # Command 0x0901 with payload 05 00: the reply and the unprompted event both
 # carry `05 00 00 <mode> ...`; the first byte after that is the mode.
+WEAR_COMMAND = bytes.fromhex("0c00")
 MODE_COMMAND = bytes.fromhex("0109")
 MODE_PREFIX = bytes.fromhex("050000")
 MODE_FROM_BYTE = {0x00: "off", 0x01: "anc", 0x0A: "ambient", 0x09: "talkthru"}
@@ -147,6 +157,22 @@ def parse_mode(frame):
     return MODE_FROM_BYTE.get(frame[9])
 
 
+def parse_wear(frame):
+    """(ear, in_ear) from a wear notification, or None.
+
+    `05 5c 05 00 0c 00 00 <ear> <state>`: only that exact shape — type 5c,
+    length 5, command 0x000c, status 00, ear 0 or 1, state 0 or 1.
+    """
+    if len(frame) != 9 or frame[1] != TYPE_NOTIFY_A or frame[2:4] != b"\x05\x00":
+        return None
+    if frame[4:6] != WEAR_COMMAND or frame[6] != 0:
+        return None
+    ear, state = frame[7], frame[8]
+    if ear not in (0, 1) or state not in (0, 1):
+        return None
+    return ear, state == 1
+
+
 class Bridge:
     def __init__(self, bus, address, loop):
         self.bus = bus
@@ -161,6 +187,8 @@ class Bridge:
         self.buffer = bytearray()
         self.pending = ""
         self.last_mode = None
+        self.ears = {}
+        self.last_line = None
 
     def finish(self, code, message=None):
         if self.exit_code is not None:
@@ -271,12 +299,37 @@ class Bridge:
         except OSError as error:
             self.finish(EXIT_TRANSIENT, "the Airoha channel closed: %s" % error)
 
+    def worn(self):
+        """True once any ear is in, False once both are known and out, else None."""
+        if any(self.ears.values()):
+            return True
+        if len(self.ears) == 2:
+            return False
+        return None
+
+    def publish(self):
+        # Nothing is printed before the earbuds have said what mode they are in.
+        if self.last_mode is None:
+            return
+        line = {"modes": True, "mode": self.last_mode, "available": AVAILABLE}
+        worn = self.worn()
+        if worn is not None:
+            line["worn"] = worn
+        if line != self.last_line:
+            self.last_line = line
+            emit(line)
+
     def on_frame(self, frame):
+        wear = parse_wear(frame)
+        if wear is not None:
+            self.ears[wear[0]] = wear[1]
+            self.publish()
+            return
         mode = parse_mode(frame)
-        if mode is None or mode == self.last_mode:
+        if mode is None:
             return
         self.last_mode = mode
-        emit({"modes": True, "mode": mode, "available": AVAILABLE})
+        self.publish()
 
     def parse_buffer(self):
         while self.buffer:
