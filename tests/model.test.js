@@ -675,10 +675,11 @@ Deno.test("a sony device always has a UUID to register", () => {
 Deno.test("the rows answer what the follower once asked by brand name", () => {
   for (const row of Model.BACKENDS) {
     assertEquals(Model.isBleBackend(row.name), row.name === "jbl", row.name);
-    assertEquals(Model.hasAmbientDial(row.name), row.name === "sony" || row.name === "soundcore", row.name);
+    assertEquals(Model.hasAmbientDial(row.name), row.name === "sony" || row.name === "soundcore" || row.name === "airoha", row.name);
     const command = { sony: "voice", soundcore: "wind" }[row.name] || "";
     assertEquals(Model.ambientRange(row.name).command, command, row.name);
-    const key = row.name === "soundcore" ? "Wind" : "Voice";
+    // The airoha row has a dial and no switch: an empty key and label.
+    const key = row.name === "soundcore" ? "Wind" : row.name === "airoha" ? "" : "Voice";
     assertEquals(Model.ambientRange(row.name).key, key, row.name);
     if (row.name !== "sony")
       assertEquals(Model.bridgeUuid(row.name, [Model.SONY_MDR_V2_UUID, ...(row.uuids || [])]), "", row.name);
@@ -1418,7 +1419,8 @@ Deno.test("JBL Tour Pro 3 is picked by its name and the Airoha RACE UUID, with o
   assertEquals(Model.bridgeArgs("airoha", { address: "AA:BB:CC:00:00:04", name: TOUR_PRO_3 }),
     ["AA:BB:CC:00:00:04", TOUR_PRO_3]);
   assertEquals(Model.fastPairWithoutBattery("airoha"), false);
-  assertEquals(Model.hasAmbientDial("airoha"), false);
+  assertEquals(Model.hasAmbientDial("airoha"), true);
+  assertEquals(Model.ambientRange("airoha"), { min: 1, max: 7, voice: "", command: "", key: "" });
 });
 
 Deno.test("neither the Tour Pro 3 name nor the Airoha UUID alone is the claim", async () => {

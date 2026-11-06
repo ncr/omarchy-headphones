@@ -170,8 +170,10 @@ means the mode get went unanswered twice.
 `airoha-bridge <classic-address> "JBL Tour Pro 3"` opens the vendor RFCOMM
 channel `00000000-0000-0000-0099-aabbccddeeff` through a Profile1 and accepts
 only its owner's model row; a name with no row is exit 4. It reports the mode
-only, `available` `off`, `anc`, `ambient`, `talkthru`: the battery is the Fast
-Pair stream's. The bridge asks for the mode once when the channel opens and
+only, `available` `off`, `anc`, `ambient`, `talkthru` and, while in Ambient, a
+`level` 1-7 for the panel's dial (`level <n>` sets it, in Ambient only, and the
+bridge asks again before printing it), and `worn` once an ear has spoken: the
+battery is the Fast Pair stream's. The bridge asks for the mode once when the channel opens and
 then follows the earbuds' own notifications, which they send for a set from
 here, from the app and from the touch control alike. The first answer is the
 only thing that makes the row live; nothing is sent before it. Exit 3 means

@@ -229,8 +229,10 @@ Panel {
     // they are named only then: a hint that listed them the rest of the time
     // would be offering keys that do nothing. Same for the strengths and the
     // latency switch.
-    if (ambientRowVisible)
-      parts.push("[ ] Level", "f " + ambientVoiceKey)
+    if (ambientRowVisible) {
+      parts.push("[ ] Level")
+      if (ambientVoiceKey !== "") parts.push("f " + ambientVoiceKey)
+    }
     for (var j = 0; j < ancLevelOptions.length; j++)
       if (levelRowVisible) parts.push(ancLevelOptions[j].key + " " + ancLevelOptions[j].label)
     if (latencyRowVisible) parts.push("g Latency")
@@ -373,7 +375,7 @@ Panel {
   // Asked for, not set optimistically: the switch follows the headset the same
   // way the mode buttons do, and moves when it reports.
   function toggleAmbientVoice() {
-    if (!ambientRowVisible || !current) return false
+    if (!ambientRowVisible || !current || ambientVoiceLabel === "") return false
     return current.setAmbientVoice(!ambientVoice)
   }
 
@@ -820,6 +822,9 @@ Panel {
             }
 
             Item {
+              // A device with a dial and no switch (the JBL Tour Pro 3's row
+              // names none) draws only the dial.
+              visible: root.ambientVoiceLabel !== ""
               width: parent.width
               implicitHeight: Math.max(voiceLabel.implicitHeight, voiceSwitch.implicitHeight)
 

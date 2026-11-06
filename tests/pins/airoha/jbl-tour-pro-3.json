@@ -3,7 +3,7 @@
   "owner": "rickthestig",
   "bridge": "airoha-bridge",
   "capture": "docs/captures/jbl-tour-pro-3.txt",
-  "notes": "Airoha RACE on the vendor RFCOMM UUID 00000000-0000-0000-0099-aabbccddeeff. Every device frame is a verbatim reply or notification from the replay run (capture section 3); every sent frame is the JBL app's own, from the phone's HCI snoop log (section 2). Read-and-set of Off, ANC, Ambient and TalkThru.",
+  "notes": "Airoha RACE on the vendor RFCOMM UUID 00000000-0000-0000-0099-aabbccddeeff. Every device frame is a verbatim reply or notification from the replay run (capture section 3); every sent frame is the JBL app's own, from the phone's HCI snoop log (section 2). Read-and-set of Off, ANC, Ambient and TalkThru. Ambient lines carry the level the earbuds reported in the same frame (7 in these captures); amended with the level feature, owner-confirmed on hardware.",
   "session": {},
   "steps": [
     {
@@ -107,7 +107,8 @@
           "anc",
           "ambient",
           "talkthru"
-        ]
+        ],
+        "level": 7
       }
     },
     {
@@ -228,7 +229,8 @@
             "anc",
             "ambient",
             "talkthru"
-          ]
+          ],
+          "level": 7
         },
         {
           "modes": true,

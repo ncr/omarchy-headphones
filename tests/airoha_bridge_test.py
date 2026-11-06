@@ -34,8 +34,10 @@ EVENTS = {
 }
 
 
-def line(mode):
-    return {"modes": True, "mode": mode, "available": AVAILABLE}
+def line(mode, **extra):
+    if mode == "ambient":
+        extra.setdefault("level", 7)        # EVENTS["ambient"] reports 7
+    return dict({"modes": True, "mode": mode, "available": AVAILABLE}, **extra)
 
 
 class Session(harness.Session):
@@ -186,6 +188,56 @@ class Wear(unittest.TestCase):
 
     def test_worn_is_left_out_until_an_ear_has_spoken(self):
         self.assertNotIn("worn", self.lines_for()[-1])
+
+
+class Levels(unittest.TestCase):
+    AMBIENT = "05 5b 09 00 01 09 05 00 00 0a 04 00 06"        # synthetic: level 4
+
+    def ambient_session(self):
+        s = Session()
+        s.device(self.AMBIENT)
+        return s
+
+    def test_the_level_is_the_one_the_earbuds_reported_in_ambient(self):
+        self.assertEqual(self.ambient_session().lines, [line("ambient", level=4)])
+
+    def test_synthetic_levels_outside_one_to_seven_are_not_read(self):
+        for level in ("00", "08", "ff"):
+            s = Session()
+            s.device("05 5b 09 00 01 09 05 00 00 0a %s 00 06" % level)
+            self.assertEqual(s.lines, [{"modes": True, "mode": "ambient", "available": AVAILABLE}], level)
+            s.device("05 5b 07 00 01 09 07 00 00 %s 00" % level)
+            self.assertEqual(len(s.lines), 1, level)
+
+    def test_synthetic_level_answers_of_the_wrong_shape_say_nothing(self):
+        s = self.ambient_session()
+        for frame in (
+            "05 5d 07 00 01 09 07 00 00 02 00",       # a notification, not the reply
+            "05 5b 07 00 01 09 06 00 00 02 00",       # another query
+            "05 5b 07 00 01 09 07 00 01 02 00",       # a non-zero status
+            "05 5b 08 00 01 09 07 00 00 02 00 00",    # a longer frame
+        ):
+            s.device(frame)
+        self.assertEqual(s.lines, [line("ambient", level=4)])
+
+    def test_the_level_is_set_with_the_apps_frame_for_every_step(self):
+        for level in range(1, 8):
+            s = self.ambient_session()
+            s.command("level %d" % level)
+            self.assertEqual(s.sent[-1], "05 5a 06 00 06 0e 00 1e %02x 00" % level)
+
+    def test_a_level_is_not_printed_on_the_strength_of_having_been_sent(self):
+        s = self.ambient_session()
+        s.command("level 6")
+        self.assertEqual(s.lines, [line("ambient", level=4)])
+
+    def test_the_read_back_stops_once_the_bridge_has_stopped(self):
+        s = self.ambient_session()
+        s.command("level 6")
+        s.bridge.finish(0)
+        sent = len(s.sent)
+        s.fire()
+        self.assertEqual(len(s.sent), sent)
 
 
 class Silent(unittest.TestCase):

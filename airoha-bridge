@@ -5,10 +5,11 @@
 
 Prints one JSON object per line, and reads one command per line:
 
-    stdout   {"modes": true, "mode": "anc",
+    stdout   {"modes": true, "mode": "ambient", "level": 4,
               "available": ["off","anc","ambient","talkthru"]}
              {"modes": false, "error": "..."}
     stdin    set off | set anc | set ambient | set talkthru
+             level <1-7>                       (Ambient only)
 
 Exit codes, which the shell-side service reads to decide what to do next:
 
@@ -49,7 +50,20 @@ is in, and absent until an ear has been heard from (the earbuds do not say
 on connect, and no query for it was seen to answer). One ear out is still
 worn: taking a single bud out to talk should not pause the music.
 
-Nothing else is read: no battery (Fast Pair carries it), no levels.
+Ambient level, 1 to 7, the panel's Ambient dial:
+
+    get   05 5a 04 00 01 09 07 00
+    reply 05 5b 07 00 01 09 07 00 00 <level> 00
+    set   05 5a 06 00 06 0e 00 1e <level> 00      (applies to the mode the earbuds are in)
+    ack   05 5b 04 00 06 0e 00 1e                 (an echo; says nothing about the level)
+
+The byte after `<mode>` in a mode reply or event is that mode's level too; it is
+read only for Ambient. The get above answers with the Ambient level whatever the
+mode; it is asked 0.3 s after each set, as the earbuds' own confirmation. `level <n>` is therefore written only while
+the earbuds are in Ambient, where the 1e frame is the Ambient level; in ANC the
+same frame is the ANC strength, which this bridge does not touch.
+
+Nothing else is read: no battery (Fast Pair carries it).
 """
 import ctypes
 import json
@@ -100,6 +114,16 @@ TYPES = (TYPE_COMMAND, TYPE_REPLY, TYPE_NOTIFY_A, TYPE_NOTIFY_B)
 MAX_LENGTH = 512
 
 GET_MODE = bytes.fromhex("055a040001090500")
+GET_AMBIENT_LEVEL = bytes.fromhex("055a040001090700")
+LEVEL_MIN = 1
+LEVEL_MAX = 7
+READBACK_DELAY = 300
+
+
+def set_level(level):
+    return bytes.fromhex("055a0600060e001e") + bytes([level, 0])
+
+
 SET = {
     "off":      bytes.fromhex("055a0400060e000b"),
     "anc":      bytes.fromhex("055a0600060e000a0100"),
@@ -157,6 +181,25 @@ def parse_mode(frame):
     return MODE_FROM_BYTE.get(frame[9])
 
 
+def parse_mode_level(frame):
+    """The level byte that follows the mode in a mode frame, or None."""
+    if parse_mode(frame) is None or len(frame) < 11:
+        return None
+    return frame[10] if LEVEL_MIN <= frame[10] <= LEVEL_MAX else None
+
+
+def parse_ambient_level(frame):
+    """The Ambient level from the answer to the level get, or None.
+
+    `05 5b 07 00 01 09 07 00 00 <level> 00`: only that exact shape.
+    """
+    if len(frame) != 11 or frame[1] != TYPE_REPLY or frame[2:4] != b"\x07\x00":
+        return None
+    if frame[4:9] != bytes.fromhex("0109070000"):
+        return None
+    return frame[9] if LEVEL_MIN <= frame[9] <= LEVEL_MAX else None
+
+
 def parse_wear(frame):
     """(ear, in_ear) from a wear notification, or None.
 
@@ -188,6 +231,7 @@ class Bridge:
         self.pending = ""
         self.last_mode = None
         self.ears = {}
+        self.level = None
         self.last_line = None
 
     def finish(self, code, message=None):
@@ -312,6 +356,10 @@ class Bridge:
         if self.last_mode is None:
             return
         line = {"modes": True, "mode": self.last_mode, "available": AVAILABLE}
+        # Only while in Ambient: the dial belongs to that mode, and a stale
+        # figure on the other modes' lines would say more than the earbuds did.
+        if self.last_mode == "ambient" and self.level is not None:
+            line["level"] = self.level
         worn = self.worn()
         if worn is not None:
             line["worn"] = worn
@@ -325,11 +373,27 @@ class Bridge:
             self.ears[wear[0]] = wear[1]
             self.publish()
             return
+        level = parse_ambient_level(frame)
+        if level is not None:
+            self.level = level
+            self.publish()
+            return
         mode = parse_mode(frame)
         if mode is None:
             return
         self.last_mode = mode
+        if mode == "ambient":
+            mode_level = parse_mode_level(frame)
+            if mode_level is not None:
+                self.level = mode_level
         self.publish()
+
+    def read_back(self):
+        # The earbuds answer a set with an echo that carries no level, so the
+        # level that is printed is the one they give when asked afterwards.
+        if self.exit_code is None:
+            self.write(GET_AMBIENT_LEVEL)
+        return False
 
     def parse_buffer(self):
         while self.buffer:
@@ -358,12 +422,29 @@ class Bridge:
 
     def command(self, line):
         parts = line.strip().split()
+        if len(parts) == 2 and parts[0] == "level":
+            self.set_ambient_level(parts[1])
+            return
         if len(parts) != 2 or parts[0] != "set" or parts[1] not in SET:
             return
         # Nothing goes out before the earbuds have said what mode they are in.
         if self.last_mode is None:
             return
         self.write(SET[parts[1]])
+
+    def set_ambient_level(self, text):
+        # Only in Ambient, where the 1e frame is the Ambient level; in any other
+        # mode it would move a different setting.
+        if self.last_mode != "ambient":
+            return
+        try:
+            level = int(text)
+        except ValueError:
+            return
+        if not LEVEL_MIN <= level <= LEVEL_MAX:
+            return
+        self.write(set_level(level))
+        GLib.timeout_add(READBACK_DELAY, self.read_back)
 
     def on_io(self, _fd, condition):
         if condition & (GLib.IO_HUP | GLib.IO_ERR):

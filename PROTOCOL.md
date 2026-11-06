@@ -2588,3 +2588,26 @@ while any ear is in — one bud out does not pause the music. The shell already 
 and resumes media on a `worn` edge (`pauseMediaOnDisconnect`).
 
 Not seen: a wear frame in a single read separating an ear that was never in from one taken out.
+
+### JBL Tour Pro 3 — levels, adaptive ANC and spatial state
+
+From the app's phone-side HCI snoop log with the app force-closed and reopened between
+steps, so each connect re-reads the state ([`docs/captures/jbl-tour-pro-3-levels.txt`](docs/captures/jbl-tour-pro-3-levels.txt)).
+LDAC was off. Spatial sound cannot be applied while LDAC is on.
+
+| setting | read | write | in the plugin |
+|:--|:--|:--|:--|
+| Ambient level, 1-7 | `05 5a 04 00 01 09 07 00` → `… 01 09 07 00 00 <level> 00`; also the byte after the mode in a mode reply or event | `05 5a 06 00 06 0e 00 1e <level> 00`, acknowledged by an echo with no level | yes: the panel's Ambient dial, only while in Ambient |
+| ANC strength, 1-7 | the byte after the mode in a mode reply or event, only while in ANC | the same `1e` frame, applied to the mode the earbuds are in | no: the panel's ANC strengths are named, not numbered |
+| Adaptive ANC | `05 5a 04 00 17 0e 03 02` → `05 5b 05 00 17 0e 00 03 <state>` | `05 5a 04 00 17 0e 03 01` on / `… 03 00` off, echoed | no: the panel has no switch for it |
+| Spatial sound | notification `05 5d 05 00 13 00 00 <x> 01`, `x` 00 off, 01 on (fixed or head tracking, not told apart) | none seen on this channel | no |
+
+The `1e` write acts on whichever of ANC or Ambient the earbuds are in, which is why
+the bridge writes it only in Ambient. A set is never trusted: the bridge asks for the
+Ambient level again 0.3 s later and prints what the earbuds say.
+
+Auto-compensation was seen too: read with the byte after `0d` in the answer to
+`05 5a 06 00 26 0e 00 0d 00 00`, notified as `05 5d 05 00 86 00 00 <state> 00`, turned
+off with `05 5a 03 00 95 00 00`; turning it on is a long ANC-set frame whose fields
+are not understood. Not used.
+

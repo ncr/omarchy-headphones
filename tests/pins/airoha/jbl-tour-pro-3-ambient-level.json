@@ -1,0 +1,190 @@
+{
+  "model": "JBL Tour Pro 3 (ambient level)",
+  "owner": "rickthestig",
+  "bridge": "airoha-bridge",
+  "capture": "docs/captures/jbl-tour-pro-3-levels.txt",
+  "notes": "Ambient level 1-7: read from the mode frames and the 01 09 07 00 query, written with 06 0e 00 1e <level> 00 only while in Ambient, confirmed by asking again. The ANC strength uses the same frame and is deliberately not written.",
+  "session": {},
+  "steps": [
+    {
+      "call": "open"
+    },
+    {
+      "sent": [
+        "05 5a 04 00 01 09 05 00"
+      ]
+    },
+    {
+      "device": "05 5b 09 00 01 09 05 00 00 0a 01 00 06",
+      "note": "mode read at connect: Ambient, level 1 (levels capture, 271.11)"
+    },
+    {
+      "lines": [
+        {
+          "modes": true,
+          "mode": "ambient",
+          "available": [
+            "off",
+            "anc",
+            "ambient",
+            "talkthru"
+          ],
+          "level": 1
+        }
+      ]
+    },
+    {
+      "command": "level 7"
+    },
+    {
+      "sent_last": "05 5a 06 00 06 0e 00 1e 07 00",
+      "note": "Ambient only: the app's own 1e frame"
+    },
+    {
+      "timers": [
+        300
+      ],
+      "note": "the read-back is scheduled, not sent at once"
+    },
+    {
+      "device": "05 5b 04 00 06 0e 00 1e",
+      "note": "the echo says nothing about the level"
+    },
+    {
+      "line_count": 1
+    },
+    {
+      "fire": null
+    },
+    {
+      "sent_last": "05 5a 04 00 01 09 07 00",
+      "note": "the earbuds are asked what level they now have"
+    },
+    {
+      "device": "05 5b 07 00 01 09 07 00 00 07 00",
+      "note": "and answer: 7"
+    },
+    {
+      "line": {
+        "modes": true,
+        "mode": "ambient",
+        "available": [
+          "off",
+          "anc",
+          "ambient",
+          "talkthru"
+        ],
+        "level": 7
+      }
+    },
+    {
+      "line_count": 2
+    },
+    {
+      "command": "level 0",
+      "note": "not a level the earbuds were seen to take, or not a command: nothing goes out"
+    },
+    {
+      "command": "level 8",
+      "note": "not a level the earbuds were seen to take, or not a command: nothing goes out"
+    },
+    {
+      "command": "level x",
+      "note": "not a level the earbuds were seen to take, or not a command: nothing goes out"
+    },
+    {
+      "command": "level 3 4",
+      "note": "not a level the earbuds were seen to take, or not a command: nothing goes out"
+    },
+    {
+      "command": "level -1",
+      "note": "not a level the earbuds were seen to take, or not a command: nothing goes out"
+    },
+    {
+      "command": "level",
+      "note": "not a level the earbuds were seen to take, or not a command: nothing goes out"
+    },
+    {
+      "sent": [
+        "05 5a 04 00 01 09 05 00",
+        "05 5a 06 00 06 0e 00 1e 07 00",
+        "05 5a 04 00 01 09 07 00"
+      ]
+    },
+    {
+      "timers": []
+    },
+    {
+      "device": "05 5d 08 00 01 09 05 00 00 01 07 00",
+      "note": "ANC (capture: ANC level 7): the line has no level"
+    },
+    {
+      "line": {
+        "modes": true,
+        "mode": "anc",
+        "available": [
+          "off",
+          "anc",
+          "ambient",
+          "talkthru"
+        ]
+      }
+    },
+    {
+      "command": "level 3",
+      "note": "in ANC the same 1e frame is the ANC strength: not written"
+    },
+    {
+      "sent": [
+        "05 5a 04 00 01 09 05 00",
+        "05 5a 06 00 06 0e 00 1e 07 00",
+        "05 5a 04 00 01 09 07 00"
+      ]
+    },
+    {
+      "device": "05 5d 08 00 01 09 05 00 00 00 1e e4"
+    },
+    {
+      "line": {
+        "modes": true,
+        "mode": "off",
+        "available": [
+          "off",
+          "anc",
+          "ambient",
+          "talkthru"
+        ]
+      }
+    },
+    {
+      "command": "level 3"
+    },
+    {
+      "sent": [
+        "05 5a 04 00 01 09 05 00",
+        "05 5a 06 00 06 0e 00 1e 07 00",
+        "05 5a 04 00 01 09 07 00"
+      ]
+    },
+    {
+      "device": "05 5d 08 00 01 09 05 00 00 0a 07 00",
+      "note": "back to Ambient: the event carries the level"
+    },
+    {
+      "line": {
+        "modes": true,
+        "mode": "ambient",
+        "available": [
+          "off",
+          "anc",
+          "ambient",
+          "talkthru"
+        ],
+        "level": 7
+      }
+    },
+    {
+      "exit": null
+    }
+  ]
+}

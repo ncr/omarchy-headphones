@@ -585,7 +585,10 @@ var BACKENDS = [
     // another brand's earbuds is not a claim. The battery stays Fast Pair's.
     modelNames: ["JBL Tour Pro 3"],
     modelUuids: [AIROHA_RACE_UUID],
-    args: ["address", "name"] },
+    args: ["address", "name"],
+    // The Ambient dial, 1-7, and no switch beside it: an empty label is a row
+    // the panel does not draw.
+    ambient: { min: 1, max: 7, voice: "", command: "", key: "" } },
   { name: "jbl", bridge: "jbl-bridge",
     ble: true, args: ["bleAddress", "modelId"] }
 ]
