@@ -1,0 +1,36 @@
+Owner: defkode
+Model: HUAWEI FreeBuds SE 3 (BTFT0016L), firmware 1.0.1.210
+Date: 2026-11-13
+Source: tools/huawei_probe.py on RFCOMM channel 1. Read only: the probe
+  sends no set. One session, both buds out of the case, nothing moved.
+Redactions: the serial numbers in the device-info answer (tags 09 and 18)
+  are masked "**" by the probe; the two address values this model adds to
+  that answer (tags 05 and 1b) are masked the same way by hand. Every
+  other byte is verbatim. Timestamps are the probe's own elapsed clock,
+  kept for ordering, not a timing model.
+
+The battery frames are the FreeBuds SE 2's, byte for byte in layout: the
+empty 01 06 as the channel opens, the unasked 01 27, and the 01 08 answer
+with tags 1 to 4. The lid closing on a bud, and the case on a cable, were
+not exercised here.
+
+### SESSION 1 — huawei_probe.py --info --listen 20 --poll 3
+  0.03s connected to channel 1
+  0.03s -> battery       5a 00 09 00 01 08 01 00 02 00 03 00 fb b9   tag 1=, tag 2=, charging
+  0.07s <- hello         5a 00 03 00 01 06 3e bd
+  0.07s <- battery-event 5a 00 14 00 01 27 01 01 61 02 03 61 61 5d 03 03 00 00 00 04 02 14 0a 4e 39   overall 97%, left 97% right 97% case 93%, charging 00 00 00, tag 4=14 0a
+  0.10s <- battery       5a 00 14 00 01 08 01 01 61 02 03 61 61 5d 03 03 00 00 00 04 02 14 0a ba 5c   overall 97%, left 97% right 97% case 93%, charging 00 00 00, tag 4=14 0a
+  1.03s -> device-info   5a 00 35 00 01 07 00 00 01 00 02 00 03 00 04 00 05 00 06 00 07 00 08 00 09 00 0a 00 0b 00 0c 00 0d 00 0e 00 0f 00 10 00 11 00 12 00 13 00 14 00 15 00 16 00 17 00 18 00 1e 41   tag 0 , tag 1 , hardware , region , tag 4 , tag 5 , tag 6 , firmware , tag 8 , serial (redacted), build , tag 11 , tag 12 , tag 13 , tag 14 , model , tag 16 , tag 17 , tag 18 , tag 19 , tag 20 , tag 21 , tag 22 , tag 23 , bud serials (redacted)
+  1.07s <- device-info   5a 00 8c 00 01 07 02 02 01 5b 03 05 42 4a 31 35 43 05 11 ** ** ** ** ** ** ** ** ** ** ** ** ** ** ** ** ** 07 09 31 2e 30 2e 31 2e 32 31 30 09 10 ** ** ** ** ** ** ** ** ** ** ** ** ** ** ** ** 0a 0f 42 54 46 54 30 30 31 36 2d 30 30 30 31 35 42 0f 09 42 54 46 54 30 30 31 36 4c 18 25 ** ** ** ** ** ** ** ** ** ** ** ** ** ** ** ** ** ** ** ** ** ** ** ** ** ** ** ** ** ** ** ** ** ** ** ** ** 19 01 02 1b 06 ** ** ** ** ** ** 24 fa   hardware 01 5b, region BJ15C, tag 5 (address, redacted), firmware 1.0.1.210, serial (redacted), build BTFT0016-00015B, model BTFT0016L, bud serials (redacted), flag 02, tag 27 (redacted)
+  4.03s -> battery       5a 00 09 00 01 08 01 00 02 00 03 00 fb b9   tag 1=, tag 2=, charging
+  4.07s <- battery       5a 00 14 00 01 08 01 01 61 02 03 61 61 5d 03 03 00 00 00 04 02 14 0a ba 5c   overall 97%, left 97% right 97% case 93%, charging 00 00 00, tag 4=14 0a
+  7.04s -> battery       5a 00 09 00 01 08 01 00 02 00 03 00 fb b9   tag 1=, tag 2=, charging
+  7.08s <- battery       5a 00 14 00 01 08 01 01 61 02 03 61 61 5d 03 03 00 00 00 04 02 14 0a ba 5c   overall 97%, left 97% right 97% case 93%, charging 00 00 00, tag 4=14 0a
+ 10.04s -> battery       5a 00 09 00 01 08 01 00 02 00 03 00 fb b9   tag 1=, tag 2=, charging
+ 10.08s <- battery       5a 00 14 00 01 08 01 01 61 02 03 61 61 5d 03 03 00 00 00 04 02 14 0a ba 5c   overall 97%, left 97% right 97% case 93%, charging 00 00 00, tag 4=14 0a
+ 13.05s -> battery       5a 00 09 00 01 08 01 00 02 00 03 00 fb b9   tag 1=, tag 2=, charging
+ 13.08s <- battery       5a 00 14 00 01 08 01 01 61 02 03 61 61 5d 03 03 00 00 00 04 02 14 0a ba 5c   overall 97%, left 97% right 97% case 93%, charging 00 00 00, tag 4=14 0a
+ 16.05s -> battery       5a 00 09 00 01 08 01 00 02 00 03 00 fb b9   tag 1=, tag 2=, charging
+ 16.09s <- battery       5a 00 14 00 01 08 01 01 61 02 03 61 61 5d 03 03 00 00 00 04 02 14 0a ba 5c   overall 97%, left 97% right 97% case 93%, charging 00 00 00, tag 4=14 0a
+ 19.05s -> battery       5a 00 09 00 01 08 01 00 02 00 03 00 fb b9   tag 1=, tag 2=, charging
+ 19.09s <- battery       5a 00 14 00 01 08 01 01 61 02 03 61 61 5d 03 03 00 00 00 04 02 14 0a ba 5c   overall 97%, left 97% right 97% case 93%, charging 00 00 00, tag 4=14 0a

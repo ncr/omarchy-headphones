@@ -2453,6 +2453,38 @@ Whether a bud's charging byte ever changes — at a lower level than 95%,
 perhaps. What tag 4 means. No write
 was ever sent.
 
+
+## HUAWEI FreeBuds SE 3 — battery over SPP
+
+Owner: [@defkode](https://github.com/defkode). Evidence is
+`docs/captures/huawei-freebuds-se-3.txt` (one `tools/huawei_probe.py`
+session; serial numbers and addresses masked) and
+`huawei-freebuds-se-3-bluetoothctl.txt` (the complete SDP list). Model
+BTFT0016L, firmware 1.0.1.210.
+
+The same channel and frames as the FreeBuds SE 2 above: RFCOMM channel 1
+behind the Serial Port UUID, the empty `01 06` as the channel opens, the
+battery announced unasked as `01 27` and answered to the SE 2's query as
+`01 08`, with tags 1 to 4 laid out the same way. The SDP list is the SE 2's
+twelve UUIDs. Routing requires the exact reported name
+`HUAWEI FreeBuds SE 3` and the Serial Port UUID.
+
+| Operation | TX | Observed RX |
+|:--|:--|:--|
+| (channel opens) | — | `5a 00 03 00 01 06 3e bd`, empty, once |
+| Battery | `5a 00 09 00 01 08 01 00 02 00 03 00 fb b9` | `5a 00 14 00 01 08 01 01 61 02 03 61 61 5d 03 03 00 00 00 04 02 14 0a ba 5c` |
+| Battery, unasked | — | the same tags as `01 27`, on connect |
+
+Verified on the hardware: both buds and the case reported from the first
+frame (left 97, right 97, case 93), and the query was answered every time
+it was asked, 3 s apart. The device-info answer carries two tags the SE 2's
+did not, 05 and 1b, both addresses; neither is read.
+
+Not established on this model: a bud reading 0 with the lid closed on it,
+the `2b 5f` frames, the case byte in tag 3 on a cable, and the refusal
+while a phone holds the channel. The bridge treats them as it does for the
+SE 2.
+
 ## QCY H3: battery only, no reachable control channel
 
 Owner: [@carraly](https://github.com/carraly). The evidence is

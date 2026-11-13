@@ -156,6 +156,15 @@ Headphones not on the list? [Add yours](#add-your-own-headphones).
 </tr>
 </table>
 
+<table>
+<tr>
+<td width="50%"><img src="docs/gallery/huawei-freebuds-se-3.png" alt="HUAWEI FreeBuds SE 3: left, right and case batteries, no mode row" width="100%"></td>
+</tr>
+<tr>
+<td align="center">HUAWEI FreeBuds SE 3 — <a href="https://github.com/defkode">@defkode</a></td>
+</tr>
+</table>
+
 ## What it does
 
 - **Battery level** — per earbud and the case, or the single battery of
@@ -216,6 +225,7 @@ same idea, built for Apple's own protocol, and the plugin this one is modelled o
 | Sony WH-CH520             | <img src="docs/icons/yes.svg" width="14" alt="yes"> one figure (BlueZ) | <img src="docs/icons/no.svg" width="14" alt="no"> none — Sony lists no ANC/Ambient on this model, confirmed on hardware | [@enobale](https://github.com/enobale) |
 | TOZO NC9 Pro (earbuds) | <img src="docs/icons/yes.svg" width="14" alt="yes"> left, right, case | <img src="docs/icons/yes.svg" width="14" alt="yes"> Normal · ANC · Transparency · Reduce Wind Noise · Leisure · Adaptive | [@seth-reee](https://github.com/seth-reee) |
 | HUAWEI FreeBuds SE 2 (earbuds) | <img src="docs/icons/yes.svg" width="14" alt="yes"> left, right, case | <img src="docs/icons/no.svg" width="14" alt="no"> none — the model has no noise control | [@defkode](https://github.com/defkode) |
+| HUAWEI FreeBuds SE 3 (earbuds) | <img src="docs/icons/yes.svg" width="14" alt="yes"> left, right, case | <img src="docs/icons/no.svg" width="14" alt="no"> none — the model has no noise control | [@defkode](https://github.com/defkode) |
 | QCY H3 (over-ear)     | <img src="docs/icons/yes.svg" width="14" alt="yes"> one figure (BlueZ) | <img src="docs/icons/no.svg" width="14" alt="no"> none — its Serial Port channel answers none of the QCY reads (see [PROTOCOL.md](PROTOCOL.md#qcy-h3-battery-only-no-reachable-control-channel)) | [@carraly](https://github.com/carraly) |
 | other Fast Pair headphones  | <img src="docs/icons/yes.svg" width="14" alt="yes"> expected          | <img src="docs/icons/unknown.svg" width="14" alt="untested">                                    | —                              |
 
