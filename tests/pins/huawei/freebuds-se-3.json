@@ -3,7 +3,7 @@
   "owner": "defkode",
   "bridge": "huawei-bridge",
   "capture": "docs/captures/huawei-freebuds-se-3.txt",
-  "notes": "Battery only, on RFCOMM channel 1, with the FreeBuds SE 2's frames: the empty 01 06 as the channel opens, the battery announced unasked (01 27) and answered to the query (01 08) with the same tags. Both buds were out of the case throughout; the lid closing on a bud and the case on a cable were not exercised on this model. No noise control: the line lists no modes. Frames from session 1 of the capture.",
+  "notes": "Battery only, on RFCOMM channel 1, with the FreeBuds SE 2's frames: the empty 01 06 as the channel opens, the battery announced unasked (01 27) and answered to the query (01 08) with the same tags. A bud reads 0 once the case lid closes on it, and is left out; seen for each bud. Tag 3 is not read: its case byte followed the cable only with a bud docked under an open lid. The 0a 0d event-log frames are not read. No noise control: the line lists no modes. Frames from sessions 1 to 3 of the capture.",
   "session": {
     "name": "HUAWEI FreeBuds SE 3"
   },
@@ -48,6 +48,105 @@
     {
       "line_count": 1,
       "note": "an unchanged reading is not printed again"
+    },
+    {
+      "device": "5a 00 14 00 01 27 01 01 60 02 03 60 60 5d 03 03 00 00 00 04 02 14 0a 3b f9",
+      "note": "session 2: left 96, right 96, case 93"
+    },
+    {
+      "line": {
+        "modes": true,
+        "available": [],
+        "battery": {
+          "left": 96,
+          "right": 96,
+          "case": 93,
+          "caseStale": false
+        }
+      }
+    },
+    {
+      "device": "5a 00 06 00 2b 5f 01 01 01 13 24",
+      "note": "the lid closes on the left bud"
+    },
+    {
+      "line_count": 2,
+      "note": "2b 5f is not read"
+    },
+    {
+      "device": "5a 00 14 00 01 08 01 01 60 02 03 00 60 5d 03 03 00 00 00 04 02 14 0a 7c 7c",
+      "note": "left reads 0 in the closed case"
+    },
+    {
+      "line": {
+        "modes": true,
+        "available": [],
+        "battery": {
+          "right": 96,
+          "case": 93,
+          "caseStale": false
+        }
+      },
+      "note": "left left out, not drawn empty"
+    },
+    {
+      "device": "5a 00 06 00 2b 5f 01 01 00 03 05",
+      "note": "the lid opens"
+    },
+    {
+      "device": "5a 00 14 00 01 08 01 01 60 02 03 60 60 5d 03 03 00 00 00 04 02 14 0a cf 9c",
+      "note": "left back"
+    },
+    {
+      "line": {
+        "modes": true,
+        "available": [],
+        "battery": {
+          "left": 96,
+          "right": 96,
+          "case": 93,
+          "caseStale": false
+        }
+      }
+    },
+    {
+      "device": "5a 00 14 00 01 27 01 01 60 02 03 60 00 5c 03 03 00 00 00 04 02 14 0a ba 13",
+      "note": "session 3: the right bud in the closed case"
+    },
+    {
+      "line": {
+        "modes": true,
+        "available": [],
+        "battery": {
+          "left": 96,
+          "case": 92,
+          "caseStale": false
+        }
+      }
+    },
+    {
+      "device": "5a 00 14 00 01 27 01 01 60 02 03 60 60 5c 03 03 00 00 00 04 02 14 0a 54 bc",
+      "note": "the lid open again"
+    },
+    {
+      "line": {
+        "modes": true,
+        "available": [],
+        "battery": {
+          "left": 96,
+          "right": 96,
+          "case": 92,
+          "caseStale": false
+        }
+      }
+    },
+    {
+      "device": "5a 00 14 00 01 27 01 01 60 02 03 60 60 5c 03 03 00 00 01 04 02 14 0a fe ed",
+      "note": "the cable in, right bud docked: case byte 01"
+    },
+    {
+      "line_count": 6,
+      "note": "tag 3 is not read, so nothing is printed"
     },
     {
       "command": "set anc",

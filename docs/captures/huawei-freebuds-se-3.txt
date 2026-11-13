@@ -2,17 +2,25 @@ Owner: defkode
 Model: HUAWEI FreeBuds SE 3 (BTFT0016L), firmware 1.0.1.210
 Date: 2026-11-13
 Source: tools/huawei_probe.py on RFCOMM channel 1. Read only: the probe
-  sends no set. One session, both buds out of the case, nothing moved.
+  sends no set. Three sessions: the first with nothing moved, the second
+  and third guided step by step by a desktop notification every 12 s or
+  14 s.
 Redactions: the serial numbers in the device-info answer (tags 09 and 18)
   are masked "**" by the probe; the two address values this model adds to
-  that answer (tags 05 and 1b) are masked the same way by hand. Every
-  other byte is verbatim. Timestamps are the probe's own elapsed clock,
-  kept for ordering, not a timing model.
+  that answer (tags 05 and 1b) are masked the same way by hand. The 0a 0d
+  frames, a JSON event log this model sends in bursts as a bud is moved,
+  are counted and left out: the bridge does not read them and their fields
+  were not examined for identifiers. Python's traceback on a reset channel
+  is replaced by one line saying so. Every other byte is verbatim.
+  Timestamps are the probe's own elapsed clock, kept for ordering, not a
+  timing model.
 
 The battery frames are the FreeBuds SE 2's, byte for byte in layout: the
 empty 01 06 as the channel opens, the unasked 01 27, and the 01 08 answer
-with tags 1 to 4. The lid closing on a bud, and the case on a cable, were
-not exercised here.
+with tags 1 to 4. So is the lid: 2b 5f 01 and a bud at 0 as it closes,
+2b 5f 00 and the level again as it opens. New on this model: the channel
+was reset when the lid first closed on the right bud (sessions 2 and 3),
+and not when it closed on it a second time (session 3).
 
 ### SESSION 1 — huawei_probe.py --info --listen 20 --poll 3
   0.03s connected to channel 1
@@ -34,3 +42,219 @@ not exercised here.
  16.09s <- battery       5a 00 14 00 01 08 01 01 61 02 03 61 61 5d 03 03 00 00 00 04 02 14 0a ba 5c   overall 97%, left 97% right 97% case 93%, charging 00 00 00, tag 4=14 0a
  19.05s -> battery       5a 00 09 00 01 08 01 00 02 00 03 00 fb b9   tag 1=, tag 2=, charging
  19.09s <- battery       5a 00 14 00 01 08 01 01 61 02 03 61 61 5d 03 03 00 00 00 04 02 14 0a ba 5c   overall 97%, left 97% right 97% case 93%, charging 00 00 00, tag 4=14 0a
+
+### SESSION 2 — huawei_probe.py --listen 150 --poll 3, guided
+Both buds in the case, lid open, no cable. The steps were announced at
+these times on the probe's clock (the times are the schedule's; the
+script failed to log them): 8s right bud out, 20s lid closed on the left
+bud, 32s lid open, 44s left bud out, 56s right bud docked, 68s lid closed
+on the right bud. The channel was reset there; the later steps are session 3.
+  1.78s connected to channel 1
+  1.78s -> battery       5a 00 09 00 01 08 01 00 02 00 03 00 fb b9   tag 1=, tag 2=, charging
+  1.83s <- hello         5a 00 03 00 01 06 3e bd
+  1.83s <- battery-event 5a 00 14 00 01 27 01 01 60 02 03 60 60 5d 03 03 00 00 00 04 02 14 0a 3b f9   overall 96%, left 96% right 96% case 93%, charging 00 00 00, tag 4=14 0a
+  1.83s <- battery       5a 00 14 00 01 08 01 01 60 02 03 60 60 5d 03 03 00 00 00 04 02 14 0a cf 9c   overall 96%, left 96% right 96% case 93%, charging 00 00 00, tag 4=14 0a
+  4.78s -> battery       5a 00 09 00 01 08 01 00 02 00 03 00 fb b9   tag 1=, tag 2=, charging
+  4.81s <- battery       5a 00 14 00 01 08 01 01 60 02 03 60 60 5d 03 03 00 00 00 04 02 14 0a cf 9c   overall 96%, left 96% right 96% case 93%, charging 00 00 00, tag 4=14 0a
+  5.40s <- 0a 0d         (9 frames to 7.78s, a JSON event log; elided, not read)
+  7.78s -> battery       5a 00 09 00 01 08 01 00 02 00 03 00 fb b9   tag 1=, tag 2=, charging
+  7.82s <- battery       5a 00 14 00 01 08 01 01 60 02 03 60 60 5d 03 03 00 00 00 04 02 14 0a cf 9c   overall 96%, left 96% right 96% case 93%, charging 00 00 00, tag 4=14 0a
+  8.08s <- 0a 0d         (8 frames to 10.27s, a JSON event log; elided, not read)
+ 10.78s -> battery       5a 00 09 00 01 08 01 00 02 00 03 00 fb b9   tag 1=, tag 2=, charging
+ 10.82s <- battery       5a 00 14 00 01 08 01 01 60 02 03 60 60 5d 03 03 00 00 00 04 02 14 0a cf 9c   overall 96%, left 96% right 96% case 93%, charging 00 00 00, tag 4=14 0a
+ 13.78s -> battery       5a 00 09 00 01 08 01 00 02 00 03 00 fb b9   tag 1=, tag 2=, charging
+ 13.82s <- battery       5a 00 14 00 01 08 01 01 60 02 03 60 60 5d 03 03 00 00 00 04 02 14 0a cf 9c   overall 96%, left 96% right 96% case 93%, charging 00 00 00, tag 4=14 0a
+ 15.17s <- 0a 0d         (2 frames to 15.23s, a JSON event log; elided, not read)
+ 16.79s -> battery       5a 00 09 00 01 08 01 00 02 00 03 00 fb b9   tag 1=, tag 2=, charging
+ 16.82s <- battery       5a 00 14 00 01 08 01 01 60 02 03 60 60 5d 03 03 00 00 00 04 02 14 0a cf 9c   overall 96%, left 96% right 96% case 93%, charging 00 00 00, tag 4=14 0a
+ 19.79s -> battery       5a 00 09 00 01 08 01 00 02 00 03 00 fb b9   tag 1=, tag 2=, charging
+ 19.82s <- battery       5a 00 14 00 01 08 01 01 60 02 03 60 60 5d 03 03 00 00 00 04 02 14 0a cf 9c   overall 96%, left 96% right 96% case 93%, charging 00 00 00, tag 4=14 0a
+ 22.79s -> battery       5a 00 09 00 01 08 01 00 02 00 03 00 fb b9   tag 1=, tag 2=, charging
+ 22.83s <- battery       5a 00 14 00 01 08 01 01 60 02 03 60 60 5d 03 03 00 00 00 04 02 14 0a cf 9c   overall 96%, left 96% right 96% case 93%, charging 00 00 00, tag 4=14 0a
+ 25.80s -> battery       5a 00 09 00 01 08 01 00 02 00 03 00 fb b9   tag 1=, tag 2=, charging
+ 25.80s <- 2b 5f         5a 00 06 00 2b 5f 01 01 01 13 24
+ 25.84s <- battery       5a 00 14 00 01 08 01 01 60 02 03 00 60 5d 03 03 00 00 00 04 02 14 0a 7c 7c   overall 96%, left 0% right 96% case 93%, charging 00 00 00, tag 4=14 0a
+ 28.80s -> battery       5a 00 09 00 01 08 01 00 02 00 03 00 fb b9   tag 1=, tag 2=, charging
+ 28.84s <- battery       5a 00 14 00 01 08 01 01 60 02 03 00 60 5d 03 03 00 00 00 04 02 14 0a 7c 7c   overall 96%, left 0% right 96% case 93%, charging 00 00 00, tag 4=14 0a
+ 31.80s -> battery       5a 00 09 00 01 08 01 00 02 00 03 00 fb b9   tag 1=, tag 2=, charging
+ 31.84s <- battery       5a 00 14 00 01 08 01 01 60 02 03 00 60 5d 03 03 00 00 00 04 02 14 0a 7c 7c   overall 96%, left 0% right 96% case 93%, charging 00 00 00, tag 4=14 0a
+ 34.61s <- 2b 5f         5a 00 06 00 2b 5f 01 01 00 03 05
+ 34.81s -> battery       5a 00 09 00 01 08 01 00 02 00 03 00 fb b9   tag 1=, tag 2=, charging
+ 34.84s <- battery       5a 00 14 00 01 08 01 01 60 02 03 60 60 5d 03 03 00 00 00 04 02 14 0a cf 9c   overall 96%, left 96% right 96% case 93%, charging 00 00 00, tag 4=14 0a
+ 37.81s -> battery       5a 00 09 00 01 08 01 00 02 00 03 00 fb b9   tag 1=, tag 2=, charging
+ 37.85s <- battery       5a 00 14 00 01 08 01 01 60 02 03 60 60 5d 03 03 00 00 00 04 02 14 0a cf 9c   overall 96%, left 96% right 96% case 93%, charging 00 00 00, tag 4=14 0a
+ 40.81s -> battery       5a 00 09 00 01 08 01 00 02 00 03 00 fb b9   tag 1=, tag 2=, charging
+ 40.85s <- battery       5a 00 14 00 01 08 01 01 60 02 03 60 60 5d 03 03 00 00 00 04 02 14 0a cf 9c   overall 96%, left 96% right 96% case 93%, charging 00 00 00, tag 4=14 0a
+ 43.82s -> battery       5a 00 09 00 01 08 01 00 02 00 03 00 fb b9   tag 1=, tag 2=, charging
+ 43.85s <- battery       5a 00 14 00 01 08 01 01 60 02 03 60 60 5d 03 03 00 00 00 04 02 14 0a cf 9c   overall 96%, left 96% right 96% case 93%, charging 00 00 00, tag 4=14 0a
+ 46.82s -> battery       5a 00 09 00 01 08 01 00 02 00 03 00 fb b9   tag 1=, tag 2=, charging
+ 46.85s <- battery       5a 00 14 00 01 08 01 01 60 02 03 60 60 5c 03 03 00 00 00 04 02 14 0a a0 d9   overall 96%, left 96% right 96% case 92%, charging 00 00 00, tag 4=14 0a
+ 49.83s -> battery       5a 00 09 00 01 08 01 00 02 00 03 00 fb b9   tag 1=, tag 2=, charging
+ 49.86s <- battery       5a 00 14 00 01 08 01 01 60 02 03 60 60 5c 03 03 00 00 00 04 02 14 0a a0 d9   overall 96%, left 96% right 96% case 92%, charging 00 00 00, tag 4=14 0a
+ 52.83s -> battery       5a 00 09 00 01 08 01 00 02 00 03 00 fb b9   tag 1=, tag 2=, charging
+ 52.86s <- battery       5a 00 14 00 01 08 01 01 60 02 03 60 60 5c 03 03 00 00 00 04 02 14 0a a0 d9   overall 96%, left 96% right 96% case 92%, charging 00 00 00, tag 4=14 0a
+ 55.83s -> battery       5a 00 09 00 01 08 01 00 02 00 03 00 fb b9   tag 1=, tag 2=, charging
+ 55.87s <- battery       5a 00 14 00 01 08 01 01 60 02 03 60 60 5c 03 03 00 00 00 04 02 14 0a a0 d9   overall 96%, left 96% right 96% case 92%, charging 00 00 00, tag 4=14 0a
+ 58.84s -> battery       5a 00 09 00 01 08 01 00 02 00 03 00 fb b9   tag 1=, tag 2=, charging
+ 58.87s <- battery       5a 00 14 00 01 08 01 01 60 02 03 60 60 5c 03 03 00 00 00 04 02 14 0a a0 d9   overall 96%, left 96% right 96% case 92%, charging 00 00 00, tag 4=14 0a
+ 61.84s -> battery       5a 00 09 00 01 08 01 00 02 00 03 00 fb b9   tag 1=, tag 2=, charging
+ 61.88s <- battery       5a 00 14 00 01 08 01 01 60 02 03 60 60 5c 03 03 00 00 00 04 02 14 0a a0 d9   overall 96%, left 96% right 96% case 92%, charging 00 00 00, tag 4=14 0a
+ 64.85s -> battery       5a 00 09 00 01 08 01 00 02 00 03 00 fb b9   tag 1=, tag 2=, charging
+ 64.88s <- battery       5a 00 14 00 01 08 01 01 60 02 03 60 60 5c 03 03 00 00 00 04 02 14 0a a0 d9   overall 96%, left 96% right 96% case 92%, charging 00 00 00, tag 4=14 0a
+ 67.85s -> battery       5a 00 09 00 01 08 01 00 02 00 03 00 fb b9   tag 1=, tag 2=, charging
+ 67.88s <- battery       5a 00 14 00 01 08 01 01 60 02 03 60 60 5c 03 03 00 00 00 04 02 14 0a a0 d9   overall 96%, left 96% right 96% case 92%, charging 00 00 00, tag 4=14 0a
+ 70.50s <- 0a 0d         (7 frames to 70.82s, a JSON event log; elided, not read)
+ 70.87s -> battery       5a 00 09 00 01 08 01 00 02 00 03 00 fb b9   tag 1=, tag 2=, charging
+ 70.87s <- 0a 0d         (1 frames to 70.87s, a JSON event log; elided, not read)
+ 70.90s <- battery       5a 00 14 00 01 08 01 01 60 02 03 60 60 5c 03 03 00 00 00 04 02 14 0a a0 d9   overall 96%, left 96% right 96% case 92%, charging 00 00 00, tag 4=14 0a
+ 70.93s <- 0a 0d         (34 frames to 72.77s, a JSON event log; elided, not read)
+ 73.87s -> battery       5a 00 09 00 01 08 01 00 02 00 03 00 fb b9   tag 1=, tag 2=, charging
+        the earbuds reset the channel (ECONNRESET)
+
+### SESSION 3 — huawei_probe.py --listen N --poll 3, guided, restarted on a reset
+Both buds in the case, lid open, no cable. The probe was started again
+2 s after the reset; each run has its own clock, and the ### lines place
+them on the session's. Steps, on the session clock, as announced:
+   8.0s  step 1: left bud out; right docked, lid open
+  22.0s  step 2: lid closed on the right bud
+  36.0s  step 3: lid open
+  50.0s  step 4: cable in; right docked, lid open
+  64.1s  step 5: cable out
+  78.1s  step 6: lid closed on the right bud, cable in
+  92.1s  step 7: cable out, lid open
+ 106.1s  step 8: right bud out, cable in; case empty
+ 120.1s  step 9: cable out; both buds out
+ 134.1s  end
+
+### probe started at    0.0s on the session clock
+  0.59s connected to channel 1
+  0.59s -> battery       5a 00 09 00 01 08 01 00 02 00 03 00 fb b9   tag 1=, tag 2=, charging
+  0.63s <- hello         5a 00 03 00 01 06 3e bd
+  0.63s <- battery-event 5a 00 14 00 01 27 01 01 60 02 03 60 60 5c 03 03 00 00 00 04 02 14 0a 54 bc   overall 96%, left 96% right 96% case 92%, charging 00 00 00, tag 4=14 0a
+  0.64s <- battery       5a 00 14 00 01 08 01 01 60 02 03 60 60 5c 03 03 00 00 00 04 02 14 0a a0 d9   overall 96%, left 96% right 96% case 92%, charging 00 00 00, tag 4=14 0a
+  3.59s -> battery       5a 00 09 00 01 08 01 00 02 00 03 00 fb b9   tag 1=, tag 2=, charging
+  3.63s <- battery       5a 00 14 00 01 08 01 01 60 02 03 60 60 5c 03 03 00 00 00 04 02 14 0a a0 d9   overall 96%, left 96% right 96% case 92%, charging 00 00 00, tag 4=14 0a
+  6.59s -> battery       5a 00 09 00 01 08 01 00 02 00 03 00 fb b9   tag 1=, tag 2=, charging
+  6.63s <- battery       5a 00 14 00 01 08 01 01 60 02 03 60 60 5c 03 03 00 00 00 04 02 14 0a a0 d9   overall 96%, left 96% right 96% case 92%, charging 00 00 00, tag 4=14 0a
+  9.60s -> battery       5a 00 09 00 01 08 01 00 02 00 03 00 fb b9   tag 1=, tag 2=, charging
+  9.63s <- battery       5a 00 14 00 01 08 01 01 60 02 03 60 60 5c 03 03 00 00 00 04 02 14 0a a0 d9   overall 96%, left 96% right 96% case 92%, charging 00 00 00, tag 4=14 0a
+ 12.60s -> battery       5a 00 09 00 01 08 01 00 02 00 03 00 fb b9   tag 1=, tag 2=, charging
+ 12.64s <- 0a 0d         (1 frames to 12.64s, a JSON event log; elided, not read)
+ 12.64s <- battery       5a 00 14 00 01 08 01 01 60 02 03 60 60 5c 03 03 00 00 00 04 02 14 0a a0 d9   overall 96%, left 96% right 96% case 92%, charging 00 00 00, tag 4=14 0a
+ 12.95s <- 0a 0d         (9 frames to 15.40s, a JSON event log; elided, not read)
+ 15.60s -> battery       5a 00 09 00 01 08 01 00 02 00 03 00 fb b9   tag 1=, tag 2=, charging
+ 15.64s <- battery       5a 00 14 00 01 08 01 01 60 02 03 60 60 5c 03 03 00 00 00 04 02 14 0a a0 d9   overall 96%, left 96% right 96% case 92%, charging 00 00 00, tag 4=14 0a
+ 15.70s <- 0a 0d         (10 frames to 18.41s, a JSON event log; elided, not read)
+ 18.60s -> battery       5a 00 09 00 01 08 01 00 02 00 03 00 fb b9   tag 1=, tag 2=, charging
+ 18.64s <- battery       5a 00 14 00 01 08 01 01 60 02 03 60 60 5c 03 03 00 00 00 04 02 14 0a a0 d9   overall 96%, left 96% right 96% case 92%, charging 00 00 00, tag 4=14 0a
+ 18.69s <- 0a 0d         (4 frames to 19.62s, a JSON event log; elided, not read)
+ 21.61s -> battery       5a 00 09 00 01 08 01 00 02 00 03 00 fb b9   tag 1=, tag 2=, charging
+ 21.64s <- battery       5a 00 14 00 01 08 01 01 60 02 03 60 60 5c 03 03 00 00 00 04 02 14 0a a0 d9   overall 96%, left 96% right 96% case 92%, charging 00 00 00, tag 4=14 0a
+ 24.05s <- 0a 0d         (11 frames to 24.57s, a JSON event log; elided, not read)
+ 24.62s -> battery       5a 00 09 00 01 08 01 00 02 00 03 00 fb b9   tag 1=, tag 2=, charging
+ 24.62s <- 0a 0d         (1 frames to 24.62s, a JSON event log; elided, not read)
+ 24.65s <- battery       5a 00 14 00 01 08 01 01 60 02 03 60 60 5c 03 03 00 00 00 04 02 14 0a a0 d9   overall 96%, left 96% right 96% case 92%, charging 00 00 00, tag 4=14 0a
+ 24.69s <- 0a 0d         (6 frames to 24.94s, a JSON event log; elided, not read)
+        the earbuds reset the channel (ECONNRESET)
+### probe ended at   27.5s, exit 0
+### probe started at   29.5s on the session clock
+  0.08s connected to channel 1
+  0.08s -> battery       5a 00 09 00 01 08 01 00 02 00 03 00 fb b9   tag 1=, tag 2=, charging
+  0.13s <- hello         5a 00 03 00 01 06 3e bd
+  0.13s <- battery-event 5a 00 14 00 01 27 01 01 60 02 03 60 00 5c 03 03 00 00 00 04 02 14 0a ba 13   overall 96%, left 96% right 0% case 92%, charging 00 00 00, tag 4=14 0a
+  0.13s <- battery       5a 00 14 00 01 08 01 01 60 02 03 60 00 5c 03 03 00 00 00 04 02 14 0a 4e 76   overall 96%, left 96% right 0% case 92%, charging 00 00 00, tag 4=14 0a
+  3.09s -> battery       5a 00 09 00 01 08 01 00 02 00 03 00 fb b9   tag 1=, tag 2=, charging
+  3.13s <- battery       5a 00 14 00 01 08 01 01 60 02 03 60 00 5c 03 03 00 00 00 04 02 14 0a 4e 76   overall 96%, left 96% right 0% case 92%, charging 00 00 00, tag 4=14 0a
+  6.09s -> battery       5a 00 09 00 01 08 01 00 02 00 03 00 fb b9   tag 1=, tag 2=, charging
+  6.13s <- battery       5a 00 14 00 01 08 01 01 60 02 03 60 00 5c 03 03 00 00 00 04 02 14 0a 4e 76   overall 96%, left 96% right 0% case 92%, charging 00 00 00, tag 4=14 0a
+  9.10s -> battery       5a 00 09 00 01 08 01 00 02 00 03 00 fb b9   tag 1=, tag 2=, charging
+  9.13s <- battery       5a 00 14 00 01 08 01 01 60 02 03 60 00 5c 03 03 00 00 00 04 02 14 0a 4e 76   overall 96%, left 96% right 0% case 92%, charging 00 00 00, tag 4=14 0a
+ 11.15s <- 2b 5f         5a 00 06 00 2b 5f 01 01 00 03 05
+ 11.23s <- battery-event 5a 00 14 00 01 27 01 01 60 02 03 60 60 5c 03 03 00 00 00 04 02 14 0a 54 bc   overall 96%, left 96% right 96% case 92%, charging 00 00 00, tag 4=14 0a
+ 12.10s -> battery       5a 00 09 00 01 08 01 00 02 00 03 00 fb b9   tag 1=, tag 2=, charging
+ 12.13s <- battery       5a 00 14 00 01 08 01 01 60 02 03 60 60 5c 03 03 00 00 00 04 02 14 0a a0 d9   overall 96%, left 96% right 96% case 92%, charging 00 00 00, tag 4=14 0a
+ 12.29s <- 0a 0d         (10 frames to 14.98s, a JSON event log; elided, not read)
+ 15.10s -> battery       5a 00 09 00 01 08 01 00 02 00 03 00 fb b9   tag 1=, tag 2=, charging
+ 15.13s <- battery       5a 00 14 00 01 08 01 01 60 02 03 60 60 5c 03 03 00 00 00 04 02 14 0a a0 d9   overall 96%, left 96% right 96% case 92%, charging 00 00 00, tag 4=14 0a
+ 15.29s <- 0a 0d         (2 frames to 15.58s, a JSON event log; elided, not read)
+ 18.10s -> battery       5a 00 09 00 01 08 01 00 02 00 03 00 fb b9   tag 1=, tag 2=, charging
+ 18.13s <- battery       5a 00 14 00 01 08 01 01 60 02 03 60 60 5c 03 03 00 00 00 04 02 14 0a a0 d9   overall 96%, left 96% right 96% case 92%, charging 00 00 00, tag 4=14 0a
+ 21.11s -> battery       5a 00 09 00 01 08 01 00 02 00 03 00 fb b9   tag 1=, tag 2=, charging
+ 21.15s <- battery       5a 00 14 00 01 08 01 01 60 02 03 60 60 5c 03 03 00 00 00 04 02 14 0a a0 d9   overall 96%, left 96% right 96% case 92%, charging 00 00 00, tag 4=14 0a
+ 24.11s -> battery       5a 00 09 00 01 08 01 00 02 00 03 00 fb b9   tag 1=, tag 2=, charging
+ 24.15s <- battery       5a 00 14 00 01 08 01 01 60 02 03 60 60 5c 03 03 00 00 00 04 02 14 0a a0 d9   overall 96%, left 96% right 96% case 92%, charging 00 00 00, tag 4=14 0a
+ 27.11s -> battery       5a 00 09 00 01 08 01 00 02 00 03 00 fb b9   tag 1=, tag 2=, charging
+ 27.15s <- battery       5a 00 14 00 01 08 01 01 60 02 03 60 60 5c 03 03 00 00 00 04 02 14 0a a0 d9   overall 96%, left 96% right 96% case 92%, charging 00 00 00, tag 4=14 0a
+ 27.21s <- battery-event 5a 00 14 00 01 27 01 01 60 02 03 60 60 5c 03 03 00 00 01 04 02 14 0a fe ed   overall 96%, left 96% right 96% case 92%, charging 00 00 01, tag 4=14 0a
+ 30.12s -> battery       5a 00 09 00 01 08 01 00 02 00 03 00 fb b9   tag 1=, tag 2=, charging
+ 30.15s <- battery       5a 00 14 00 01 08 01 01 60 02 03 60 60 5c 03 03 00 00 01 04 02 14 0a 0a 88   overall 96%, left 96% right 96% case 92%, charging 00 00 01, tag 4=14 0a
+ 33.12s -> battery       5a 00 09 00 01 08 01 00 02 00 03 00 fb b9   tag 1=, tag 2=, charging
+ 33.16s <- battery       5a 00 14 00 01 08 01 01 60 02 03 60 60 5c 03 03 00 00 01 04 02 14 0a 0a 88   overall 96%, left 96% right 96% case 92%, charging 00 00 01, tag 4=14 0a
+ 36.12s -> battery       5a 00 09 00 01 08 01 00 02 00 03 00 fb b9   tag 1=, tag 2=, charging
+ 36.16s <- battery       5a 00 14 00 01 08 01 01 60 02 03 60 60 5c 03 03 00 00 01 04 02 14 0a 0a 88   overall 96%, left 96% right 96% case 92%, charging 00 00 01, tag 4=14 0a
+ 36.88s <- battery-event 5a 00 14 00 01 27 01 01 60 02 03 60 60 5c 03 03 00 00 00 04 02 14 0a 54 bc   overall 96%, left 96% right 96% case 92%, charging 00 00 00, tag 4=14 0a
+ 39.13s -> battery       5a 00 09 00 01 08 01 00 02 00 03 00 fb b9   tag 1=, tag 2=, charging
+ 39.16s <- battery       5a 00 14 00 01 08 01 01 60 02 03 60 60 5c 03 03 00 00 00 04 02 14 0a a0 d9   overall 96%, left 96% right 96% case 92%, charging 00 00 00, tag 4=14 0a
+ 42.13s -> battery       5a 00 09 00 01 08 01 00 02 00 03 00 fb b9   tag 1=, tag 2=, charging
+ 42.17s <- battery       5a 00 14 00 01 08 01 01 60 02 03 60 60 5c 03 03 00 00 00 04 02 14 0a a0 d9   overall 96%, left 96% right 96% case 92%, charging 00 00 00, tag 4=14 0a
+ 45.13s -> battery       5a 00 09 00 01 08 01 00 02 00 03 00 fb b9   tag 1=, tag 2=, charging
+ 45.17s <- battery       5a 00 14 00 01 08 01 01 60 02 03 60 60 5c 03 03 00 00 00 04 02 14 0a a0 d9   overall 96%, left 96% right 96% case 92%, charging 00 00 00, tag 4=14 0a
+ 48.14s -> battery       5a 00 09 00 01 08 01 00 02 00 03 00 fb b9   tag 1=, tag 2=, charging
+ 48.17s <- battery       5a 00 14 00 01 08 01 01 60 02 03 60 60 5c 03 03 00 00 00 04 02 14 0a a0 d9   overall 96%, left 96% right 96% case 92%, charging 00 00 00, tag 4=14 0a
+ 51.14s -> battery       5a 00 09 00 01 08 01 00 02 00 03 00 fb b9   tag 1=, tag 2=, charging
+ 51.20s <- battery       5a 00 14 00 01 08 01 01 60 02 03 60 60 5c 03 03 00 00 00 04 02 14 0a a0 d9   overall 96%, left 96% right 96% case 92%, charging 00 00 00, tag 4=14 0a
+ 53.41s <- 2b 5f         5a 00 06 00 2b 5f 01 01 01 13 24
+ 53.41s <- battery-event 5a 00 14 00 01 27 01 01 60 02 03 60 00 5c 03 03 00 00 00 04 02 14 0a ba 13   overall 96%, left 96% right 0% case 92%, charging 00 00 00, tag 4=14 0a
+ 54.14s -> battery       5a 00 09 00 01 08 01 00 02 00 03 00 fb b9   tag 1=, tag 2=, charging
+ 54.18s <- battery       5a 00 14 00 01 08 01 01 60 02 03 60 00 5c 03 03 00 00 00 04 02 14 0a 4e 76   overall 96%, left 96% right 0% case 92%, charging 00 00 00, tag 4=14 0a
+ 57.15s -> battery       5a 00 09 00 01 08 01 00 02 00 03 00 fb b9   tag 1=, tag 2=, charging
+ 57.18s <- battery       5a 00 14 00 01 08 01 01 60 02 03 60 00 5c 03 03 00 00 00 04 02 14 0a 4e 76   overall 96%, left 96% right 0% case 92%, charging 00 00 00, tag 4=14 0a
+ 60.15s -> battery       5a 00 09 00 01 08 01 00 02 00 03 00 fb b9   tag 1=, tag 2=, charging
+ 60.18s <- battery       5a 00 14 00 01 08 01 01 60 02 03 60 00 5c 03 03 00 00 00 04 02 14 0a 4e 76   overall 96%, left 96% right 0% case 92%, charging 00 00 00, tag 4=14 0a
+ 63.15s -> battery       5a 00 09 00 01 08 01 00 02 00 03 00 fb b9   tag 1=, tag 2=, charging
+ 63.19s <- battery       5a 00 14 00 01 08 01 01 60 02 03 60 00 5c 03 03 00 00 00 04 02 14 0a 4e 76   overall 96%, left 96% right 0% case 92%, charging 00 00 00, tag 4=14 0a
+ 66.16s -> battery       5a 00 09 00 01 08 01 00 02 00 03 00 fb b9   tag 1=, tag 2=, charging
+ 66.19s <- battery       5a 00 14 00 01 08 01 01 60 02 03 60 00 5c 03 03 00 00 00 04 02 14 0a 4e 76   overall 96%, left 96% right 0% case 92%, charging 00 00 00, tag 4=14 0a
+ 68.48s <- 2b 5f         5a 00 06 00 2b 5f 01 01 00 03 05
+ 68.57s <- battery-event 5a 00 14 00 01 27 01 01 60 02 03 60 60 5d 03 03 00 00 00 04 02 14 0a 3b f9   overall 96%, left 96% right 96% case 93%, charging 00 00 00, tag 4=14 0a
+ 69.16s -> battery       5a 00 09 00 01 08 01 00 02 00 03 00 fb b9   tag 1=, tag 2=, charging
+ 69.20s <- battery       5a 00 14 00 01 08 01 01 60 02 03 60 60 5d 03 03 00 00 00 04 02 14 0a cf 9c   overall 96%, left 96% right 96% case 93%, charging 00 00 00, tag 4=14 0a
+ 72.16s -> battery       5a 00 09 00 01 08 01 00 02 00 03 00 fb b9   tag 1=, tag 2=, charging
+ 72.20s <- battery       5a 00 14 00 01 08 01 01 60 02 03 60 60 5d 03 03 00 00 00 04 02 14 0a cf 9c   overall 96%, left 96% right 96% case 93%, charging 00 00 00, tag 4=14 0a
+ 75.17s -> battery       5a 00 09 00 01 08 01 00 02 00 03 00 fb b9   tag 1=, tag 2=, charging
+ 75.20s <- battery       5a 00 14 00 01 08 01 01 60 02 03 60 60 5d 03 03 00 00 00 04 02 14 0a cf 9c   overall 96%, left 96% right 96% case 93%, charging 00 00 00, tag 4=14 0a
+ 78.17s -> battery       5a 00 09 00 01 08 01 00 02 00 03 00 fb b9   tag 1=, tag 2=, charging
+ 78.21s <- battery       5a 00 14 00 01 08 01 01 60 02 03 60 60 5d 03 03 00 00 00 04 02 14 0a cf 9c   overall 96%, left 96% right 96% case 93%, charging 00 00 00, tag 4=14 0a
+ 80.61s <- battery-event 5a 00 14 00 01 27 01 01 60 02 03 60 60 5d 03 03 00 00 00 04 02 14 0a 3b f9   overall 96%, left 96% right 96% case 93%, charging 00 00 00, tag 4=14 0a
+ 80.98s <- 0a 0d         (1 frames to 80.98s, a JSON event log; elided, not read)
+ 81.17s -> battery       5a 00 09 00 01 08 01 00 02 00 03 00 fb b9   tag 1=, tag 2=, charging
+ 81.21s <- battery       5a 00 14 00 01 08 01 01 60 02 03 60 60 5d 03 03 00 00 00 04 02 14 0a cf 9c   overall 96%, left 96% right 96% case 93%, charging 00 00 00, tag 4=14 0a
+ 81.29s <- 0a 0d         (10 frames to 84.00s, a JSON event log; elided, not read)
+ 84.17s -> battery       5a 00 09 00 01 08 01 00 02 00 03 00 fb b9   tag 1=, tag 2=, charging
+ 84.21s <- battery       5a 00 14 00 01 08 01 01 60 02 03 60 60 5d 03 03 00 00 00 04 02 14 0a cf 9c   overall 96%, left 96% right 96% case 93%, charging 00 00 00, tag 4=14 0a
+ 84.29s <- 0a 0d         (1 frames to 84.29s, a JSON event log; elided, not read)
+ 87.18s -> battery       5a 00 09 00 01 08 01 00 02 00 03 00 fb b9   tag 1=, tag 2=, charging
+ 87.21s <- battery       5a 00 14 00 01 08 01 01 60 02 03 60 60 5d 03 03 00 00 00 04 02 14 0a cf 9c   overall 96%, left 96% right 96% case 93%, charging 00 00 00, tag 4=14 0a
+ 90.18s -> battery       5a 00 09 00 01 08 01 00 02 00 03 00 fb b9   tag 1=, tag 2=, charging
+ 90.22s <- battery       5a 00 14 00 01 08 01 01 60 02 03 60 60 5d 03 03 00 00 00 04 02 14 0a cf 9c   overall 96%, left 96% right 96% case 93%, charging 00 00 00, tag 4=14 0a
+ 93.19s -> battery       5a 00 09 00 01 08 01 00 02 00 03 00 fb b9   tag 1=, tag 2=, charging
+ 93.22s <- battery       5a 00 14 00 01 08 01 01 60 02 03 60 60 5d 03 03 00 00 00 04 02 14 0a cf 9c   overall 96%, left 96% right 96% case 93%, charging 00 00 00, tag 4=14 0a
+ 96.19s -> battery       5a 00 09 00 01 08 01 00 02 00 03 00 fb b9   tag 1=, tag 2=, charging
+ 96.23s <- battery       5a 00 14 00 01 08 01 01 60 02 03 60 60 5d 03 03 00 00 00 04 02 14 0a cf 9c   overall 96%, left 96% right 96% case 93%, charging 00 00 00, tag 4=14 0a
+ 99.19s -> battery       5a 00 09 00 01 08 01 00 02 00 03 00 fb b9   tag 1=, tag 2=, charging
+ 99.23s <- battery       5a 00 14 00 01 08 01 01 60 02 03 60 60 5d 03 03 00 00 00 04 02 14 0a cf 9c   overall 96%, left 96% right 96% case 93%, charging 00 00 00, tag 4=14 0a
+102.20s -> battery       5a 00 09 00 01 08 01 00 02 00 03 00 fb b9   tag 1=, tag 2=, charging
+102.23s <- battery       5a 00 14 00 01 08 01 01 60 02 03 60 60 5d 03 03 00 00 00 04 02 14 0a cf 9c   overall 96%, left 96% right 96% case 93%, charging 00 00 00, tag 4=14 0a
+105.20s -> battery       5a 00 09 00 01 08 01 00 02 00 03 00 fb b9   tag 1=, tag 2=, charging
+105.24s <- battery       5a 00 14 00 01 08 01 01 60 02 03 60 60 5d 03 03 00 00 00 04 02 14 0a cf 9c   overall 96%, left 96% right 96% case 93%, charging 00 00 00, tag 4=14 0a
+108.20s -> battery       5a 00 09 00 01 08 01 00 02 00 03 00 fb b9   tag 1=, tag 2=, charging
+108.24s <- battery       5a 00 14 00 01 08 01 01 60 02 03 60 60 5d 03 03 00 00 00 04 02 14 0a cf 9c   overall 96%, left 96% right 96% case 93%, charging 00 00 00, tag 4=14 0a
+111.21s -> battery       5a 00 09 00 01 08 01 00 02 00 03 00 fb b9   tag 1=, tag 2=, charging
+111.24s <- battery       5a 00 14 00 01 08 01 01 60 02 03 60 60 5d 03 03 00 00 00 04 02 14 0a cf 9c   overall 96%, left 96% right 96% case 93%, charging 00 00 00, tag 4=14 0a
+114.21s -> battery       5a 00 09 00 01 08 01 00 02 00 03 00 fb b9   tag 1=, tag 2=, charging
+114.25s <- battery       5a 00 14 00 01 08 01 01 60 02 03 60 60 5d 03 03 00 00 00 04 02 14 0a cf 9c   overall 96%, left 96% right 96% case 93%, charging 00 00 00, tag 4=14 0a
+117.22s -> battery       5a 00 09 00 01 08 01 00 02 00 03 00 fb b9   tag 1=, tag 2=, charging
+117.25s <- battery       5a 00 14 00 01 08 01 01 60 02 03 60 60 5d 03 03 00 00 00 04 02 14 0a cf 9c   overall 96%, left 96% right 96% case 93%, charging 00 00 00, tag 4=14 0a
+120.22s -> battery       5a 00 09 00 01 08 01 00 02 00 03 00 fb b9   tag 1=, tag 2=, charging
+120.25s <- battery       5a 00 14 00 01 08 01 01 60 02 03 60 60 5d 03 03 00 00 00 04 02 14 0a cf 9c   overall 96%, left 96% right 96% case 93%, charging 00 00 00, tag 4=14 0a
+### probe ended at  150.6s, exit 0
