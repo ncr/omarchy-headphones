@@ -2453,6 +2453,67 @@ Whether a bud's charging byte ever changes — at a lower level than 95%,
 perhaps. What tag 4 means. No write
 was ever sent.
 
+
+## HUAWEI FreeBuds SE 3 — battery over SPP
+
+Owner: [@defkode](https://github.com/defkode). Evidence is
+`docs/captures/huawei-freebuds-se-3.txt` (three `tools/huawei_probe.py`
+sessions, two guided step by step; serial numbers and addresses masked) and
+`huawei-freebuds-se-3-bluetoothctl.txt` (the complete SDP list). Model
+BTFT0016L, firmware 1.0.1.210.
+
+The same channel and frames as the FreeBuds SE 2 above: RFCOMM channel 1
+behind the Serial Port UUID, the empty `01 06` as the channel opens, the
+battery announced unasked as `01 27` and answered to the SE 2's query as
+`01 08`, with tags 1 to 4 laid out the same way. The SDP list is the SE 2's
+twelve UUIDs. Routing requires the exact reported name
+`HUAWEI FreeBuds SE 3` and the Serial Port UUID.
+
+| Operation | TX | Observed RX |
+|:--|:--|:--|
+| (channel opens) | — | `5a 00 03 00 01 06 3e bd`, empty, once |
+| Battery | `5a 00 09 00 01 08 01 00 02 00 03 00 fb b9` | `5a 00 14 00 01 08 01 01 61 02 03 61 61 5d 03 03 00 00 00 04 02 14 0a ba 5c` |
+| Battery, unasked | — | the same tags as `01 27`, on connect |
+
+### What was verified on the hardware
+
+- Both buds and the case reported from the first frame, and the query was
+  answered every time it was asked, 3 s apart.
+- **The lid, as on the SE 2.** When the lid closes on a docked bud,
+  `5a 00 06 00 2b 5f 01 01 01 13 24` arrives and the bud reads 0; when it
+  opens, `… 01 01 00 03 05` and its level again. Seen for each bud. The
+  overall level did not follow it to 0.
+- **The channel is reset when the lid first closes on the right bud.** With
+  the left bud out and the right one docked, closing the lid ended the
+  RFCOMM channel (`ECONNRESET`) within 5 s, twice in two sessions; a
+  connect 2 s later was answered, with the right bud at 0. Closing the lid
+  on it again in the same session sent `2b 5f 01` and kept the channel.
+  Closing it on the left bud never reset it. This reads like the link
+  moving from one bud to the other, which was not established.
+- **The case byte in tag 3 follows the cable only through a docked bud
+  under an open lid.** With the right bud docked and the lid open it went
+  `00` → `01` about 7 s after the cable went in and back about 2 s after it
+  came out. With the lid closed on that bud, and with the case empty, the
+  cable changed nothing. The buds' bytes stayed `00` throughout.
+- The case level moved 93 → 92 → 93 across the sessions, the rise reported
+  as the lid opened after a spell on the cable.
+- The device-info answer carries two tags the SE 2's did not, 05 and 1b,
+  both addresses; neither is read.
+- `0a 0d` frames, which the SE 2 never sent: bursts of up to some dozens,
+  each a JSON object, as a bud is docked or taken out. Not read, and left
+  out of the capture.
+
+### In the widget
+
+As for the SE 2: a 0 is left out of the line, tag 3 is not read, and no
+part is reported charging. The reset as the lid closes on the right bud is
+exit 1, which the shell retries; the next connect finds that bud at 0.
+
+### Not established
+
+The refusal while a phone holds the channel. What `0a 0d` carries. No write
+was ever sent.
+
 ## QCY H3: battery only, no reachable control channel
 
 Owner: [@carraly](https://github.com/carraly). The evidence is
