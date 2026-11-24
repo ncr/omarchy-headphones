@@ -2508,6 +2508,10 @@ twelve UUIDs. Routing requires the exact reported name
 As for the SE 2: a 0 is left out of the line, tag 3 is not read, and no
 part is reported charging. The reset as the lid closes on the right bud is
 exit 1, which the shell retries; the next connect finds that bud at 0.
+Until that connect is answered (the backoff is at least 10 s) the panel
+shows the bridge's error where a mode row would be, and the single BlueZ
+figure in place of left, right and case — what the SE 2 also shows while a
+phone holds its channel.
 
 ### Not established
 

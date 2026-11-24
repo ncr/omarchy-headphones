@@ -537,7 +537,7 @@ var BACKENDS = [
     extraModes: ["wind", "leisure", "adaptive"],
     modeLabels: { off: "Normal", ambient: "Transparency" } },
   { name: "huawei", bridge: "huawei-bridge",
-    // Battery only: the FreeBuds SE 2 has no noise control, and its bridge
+    // Battery only: the FreeBuds SE 2 and SE 3 have no noise control, and their bridge
     // lists no modes. Claimed by its reported name and the plain SPP service
     // its battery channel sits behind, like the TOZO row above.
     modelNames: ["HUAWEI FreeBuds SE 2", "HUAWEI FreeBuds SE 3"],
