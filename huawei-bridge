@@ -9,8 +9,8 @@ Prints one JSON object per line, and reads one command per line:
               "battery": {"left": 95, "right": 96, "case": 64,
                           "caseStale": false}}
              {"modes": false, "error": "..."}
-    stdin    nothing it acts on: the FreeBuds SE 2 has no listening modes,
-             so every line is ignored, and EOF is a clean stop
+    stdin    nothing it acts on: the FreeBuds SE 2 and SE 3 have no
+             listening modes, so every line is ignored, and EOF is a clean stop
 
 Exit codes are BRIDGE.md's: 0 clean stop, 1 transient (the channel never
 opened, or closed under us; also the channel refused — the earbuds serve it
@@ -19,7 +19,7 @@ to one client, and a phone's AI Life app holding it is the case seen),
 (bad arguments, a model this bridge has no row for, a Python without
 Bluetooth sockets).
 
-A battery-only bridge. The FreeBuds SE 2 has no noise control, so the line
+A battery-only bridge. The FreeBuds SE 2 and SE 3 have no noise control, so the line
 says `"available": []` — the panel draws no mode row — and carries the
 per-bud battery the Fast Pair stream would otherwise give: these earbuds have
 no Fast Pair stream, and BlueZ alone sees one figure for the pair.
@@ -30,7 +30,7 @@ widget only starts this bridge for a name in `modelNames` of the `huawei` row
 in Model.js, and a name with no row here is exit 4.
 
 Protocol, as the FreeBuds SE 2 answered it (docs/captures/huawei-freebuds-se-2.txt,
-PROTOCOL.md):
+PROTOCOL.md); the SE 3 answers the same (docs/captures/huawei-freebuds-se-3.txt):
 
     frame    5A <len u16 BE> 00 <service> <command> <tlv...> <crc u16 BE>
              len counts from the 00 to the last TLV byte; CRC-16/XMODEM
@@ -66,6 +66,7 @@ ADDRESS = re.compile(r"^([0-9A-Fa-f]{2}:){5}[0-9A-Fa-f]{2}$")
 # Keyed by the name the earbuds report, exactly as bluetoothctl prints it.
 MODELS = {
     "HUAWEI FreeBuds SE 2": {"channel": 1},
+    "HUAWEI FreeBuds SE 3": {"channel": 1},
 }
 
 SOF = 0x5A

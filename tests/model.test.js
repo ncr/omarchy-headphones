@@ -1185,6 +1185,23 @@ Deno.test("FreeBuds SE 2 routing requires its reported name and its SPP service"
   assertEquals(Model.modeOptions([], "huawei"), []);
 });
 
+Deno.test("FreeBuds SE 3 routing requires its reported name and its SPP service", async () => {
+  const record = await Deno.readTextFile(
+    new URL("../docs/captures/huawei-freebuds-se-3-bluetoothctl.txt", import.meta.url));
+  const ids = Model.uuidsFromBluetoothctl(record);
+  assertEquals(ids.length, 12, "complete captured UUID list");
+  const name = "HUAWEI FreeBuds SE 3";
+  for (const uuids of [ids, [...ids].reverse(), ids.map(id => id.toUpperCase())]) {
+    assertEquals(Model.controlBackend(uuids, "", name), "huawei");
+  }
+  assertEquals(Model.controlBackend(ids, ""), "");
+  assertEquals(Model.controlBackend(ids, "", "HUAWEI FreeBuds SE 3i"), "");
+  assertEquals(Model.controlBackend([], "", name), "");
+  assertEquals(Model.controlBackend([Model.SONY_MDR_V2_UUID, ...ids], "", name), "sony");
+  assertEquals(Model.bridgeArgs("huawei", { address: "00:8A:55:00:00:01", name }),
+    ["00:8A:55:00:00:01", name]);
+});
+
 Deno.test("a device with no mode row is not told it cancels noise", () => {
   const all = ["Counting electrons per ear", "Cancelling noise, politely", "Reading the room, ambiently"];
   const modes = ["Cancelling noise, politely", "Reading the room, ambiently"];
