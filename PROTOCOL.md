@@ -2275,6 +2275,97 @@ installed from that revision and nothing else holding channel 8:
 - **The `[5.1]` and `[4.2]` frames** sent after the init are recorded in the
   capture and stepped over by the framer; their meaning is not known.
 
+## Bose QuietComfort Headphones — custom modes from the Bose app
+
+Confirmed on a **Bose QuietComfort Headphones** — product `0x4075`
+(`Modalias: bluetooth:v009Ep4075d0106`), firmware `1.0.6-80+f5f219b`, the
+unit sold at retail as the *QuietComfort SC* (the same headphones with a soft
+case) — on 2026-11-28. It is not a QC45 (`0x4039`) but serves the same BMAP:
+its SDP record carries the QC45's two vendor UUIDs
+([`bose-qc-headphones-bluetoothctl.txt`](docs/captures/bose-qc-headphones-bluetoothctl.txt)),
+so the `bose` row in `Model.js` picks it unchanged; BMAP is on RFCOMM channel
+**8**, the `[0.1]` init answers `"1.1.0"`, the battery `[2.2]` is the QC45's
+four bytes, and the listening mode is `[31.3]`, switched with START and acked
+with PROCESSING, exactly as above.
+
+What the QC45 capture never showed is a custom mode. This headset's owner set
+one up in the Bose app, and it lives in the slots after Quiet and Aware:
+
+```
+->  1f 03 01 00                [31.3] GET
+<-  1f 03 03 01 02             [31.3] STATUS: index 2 — neither Quiet nor Aware
+```
+
+### The slot table
+
+START `[31.1]` (GetAll) with an empty payload answers with the same burst the
+QC45 capture shows, including one 47-byte `[31.6]` ModeConfig STATUS per slot.
+Read with the field layout bosectl documents for this headset (`prince`),
+these are this unit's own bytes:
+
+| Slot | `[1:3]` prompt | `[3]` editable | `[4]` configured | `[5]` in rotation | `[6:38]` name | `[42]` |
+|------|----------------|----------------|------------------|-------------------|---------------|--------|
+| 0 | `00 01` | 0 | 0 | 1 | `Quiet` | `00` |
+| 1 | `00 02` | 0 | 0 | 1 | `Aware` | `0a` |
+| 2 | `00 0b` | 1 | 1 | 1 | *(empty)* | `00` |
+| 3 | `00 00` | 1 | 1 | 0 | *(empty)* | `00` |
+
+Slot 2 has no name of its own but carries voice prompt `00 0b`. bosectl's
+prompt table names `00 0b` WORK, and the owner confirms the Bose app shows this
+mode as Work. `[31.8]` answers `04 07`: bits 0, 1 and 2, which match byte
+`[5]` on the three slots that have it set (read as the Action button's
+rotation, after bosectl). The QC45 capture's
+slots 2 and 3 answer `configured` 0 — set up on neither unit by default.
+
+Switching to a custom slot is the same START: `1f 03 05 02 02 00` →
+PROCESSING, then the GET reads `02`. The capture drives 0, 1, 2 and 3 in turn
+on one socket and reads each back.
+
+### In the widget
+
+`bose-bridge` asks for the table only when `[31.3]` first reports an index
+other than 0 or 1, once per run, so a headset that stays on Quiet and Aware —
+every QC45 frame in `tests/pins/bose/qc45.json` — is sent nothing new. Every
+slot that is editable, configured and has a name or a voice prompt is offered
+as `custom<index>`, under its name, else its prompt, in `modeLabels`:
+
+```json
+{"modes": true, "mode": "custom2", "available": ["anc","ambient","custom2"],
+ "modeLabels": {"custom2": "Work"}, "battery": {"headset": 90, "charging": []}}
+```
+
+Only the prompts this headset answered with are named (`00 01` Quiet, `00 02`
+Aware, `00 0b` Work); a slot with another prompt and no name is still offered,
+and the panel numbers it. Slot 3 here has neither and is not offered. While the
+table is on its way the line reports `"mode": "other"` — the headset has
+answered, so the battery shows and ANC / Ambient can be chosen — rather than
+leaving the headset unanswered and parked, which is what happened before:
+an index other than 0 or 1 used to be dropped, the ten-second answer deadline
+passed, and the bridge exited 3.
+
+The panel draws each custom mode as a button after ANC and Ambient, with a
+key taken from its name that no fixed mode or panel key uses (`w` for Work).
+
+### The capture and its limits
+
+[`docs/captures/bose-qc-headphones.txt`](docs/captures/bose-qc-headphones.txt)
+is `tools/bose_session.py`, unchanged, with mode control off: init, battery,
+the initial mode (2), the GetAll burst, modes 0–3 driven and read back on one
+socket, and mode 2 restored and verified — 28 s, every frame answered.
+`tests/pins/bose/qc-headphones.json` replays its frames.
+
+- **Unsolicited changes** were not recorded: the owner did not use the
+  headset's own controls during the capture. A change made on the headset is
+  seen on the next poll.
+- **Names.** No slot on this unit has a name of its own; a named slot is
+  covered by the bridge tests only.
+- **Prompts** other than the three above were not seen.
+- **One BMAP client at a time.** While a socket was open on channel 8, a
+  second one opened on channel 9 was answered (`[0.1]`, `[31.3]`), and from
+  that moment the socket on 8 answered nothing more, even after the one on 9
+  closed. That is why the capture needs mode control off: the widget's own
+  bridge, restarted while the channel is held, reaches 9.
+
 ## Canonical owner captures — 2026-09-08
 
 The maintainer @ncr retested his **Sony WH-CH720N** and **JBL TUNE230NC TWS**.

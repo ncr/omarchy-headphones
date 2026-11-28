@@ -1,0 +1,40 @@
+Bose QuietComfort Headphones (product 0x4075, "prince") — `bluetoothctl info`,
+2026-11-28, BlueZ on Omarchy, connected. Redacted by the owner: the address
+(XX:XX:XX:XX:XX:XX), the name (renamed in the Bose app, shown as <owner's name>),
+the BLE manufacturer data value, and two unrelated nearby devices that
+bluetoothctl printed while the command ran. Nothing else is changed.
+The UUID list is the same as the QC45's two vendor UUIDs plus the standard
+audio profiles, so Model.js picks the bose backend for it unchanged.
+
+Device XX:XX:XX:XX:XX:XX (public)
+	Name: <owner's name>
+	Alias: <owner's name>
+	Class: 0x00240418 (2360344)
+	Icon: audio-headphones
+	Paired: yes
+	Bonded: yes
+	Trusted: yes
+	Blocked: no
+	Connected: yes
+	LegacyPairing: no
+	CablePairing: no
+	UUID: Vendor specific           (00000000-deca-fade-deca-deafdecacaff)
+	UUID: Serial Port               (00001101-0000-1000-8000-00805f9b34fb)
+	UUID: Headset                   (00001108-0000-1000-8000-00805f9b34fb)
+	UUID: Audio Sink                (0000110b-0000-1000-8000-00805f9b34fb)
+	UUID: A/V Remote Control Target (0000110c-0000-1000-8000-00805f9b34fb)
+	UUID: Advanced Audio Distribu.. (0000110d-0000-1000-8000-00805f9b34fb)
+	UUID: A/V Remote Control        (0000110e-0000-1000-8000-00805f9b34fb)
+	UUID: Handsfree                 (0000111e-0000-1000-8000-00805f9b34fb)
+	UUID: PnP Information           (00001200-0000-1000-8000-00805f9b34fb)
+	UUID: Bose Corporation          (0000febe-0000-1000-8000-00805f9b34fb)
+	UUID: Vendor specific           (9b26d8c0-a8ed-440b-95b0-c4714a518bcc)
+	Modalias: bluetooth:v009Ep4075d0106
+	ManufacturerData.Key: 0x4703 (18179)
+	ManufacturerData.Value:
+  <redacted>
+	RSSI: 0xffffffd7 (-41)
+	TxPower: 0xfffffff6 (-10)
+	AdvertisingFlags:
+  18                                               .               
+	Battery Percentage: 0x5a (90)

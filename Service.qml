@@ -715,7 +715,7 @@ Item {
   }
 
   function writeMode(follower, mode) {
-    if (Model.allModeNames().indexOf(String(mode)) === -1)
+    if (!Model.isModeName(mode))
       return "unknown mode: " + mode
     if (!follower) return "unavailable"
     if (follower.setAncMode(mode)) return "ok"

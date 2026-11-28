@@ -1,0 +1,70 @@
+Bose QuietComfort Headphones (product 0x4075, "prince", firmware 1.0.6-80+f5f219b)
+— one session, 2026-11-28, mode control disabled (useModeControl false, so no
+bridge held or reached for the channel).
+tools/bose_session.py <address> 2 (unchanged from main), on RFCOMM channel 8.
+Raw RX chunks at receipt plus decoded frames; initial mode read before any
+write; modes 0-3 driven and read back on the same socket; initial mode 2
+(the owner's custom slot "Work") restored and verified. 28 s on one socket,
+every frame answered.
+
+The mode table (START [31.1], 6.10 s) is what the bridge reads: four 47-byte
+[31.6] ModeConfig STATUS frames — slot 0 "Quiet" and slot 1 "Aware" (prompt
+00 01 / 00 02, not editable), slot 2 prompt 00 0b ("Work"), editable 01,
+configured 01, in the Action button's rotation 01, no name; slot 3 editable
+and configured but with neither prompt nor name, not in rotation. [31.8]
+answers 04 07: bits 0-2, the three slots in rotation.
+
+   0.00s >>> init 00010100
+   0.04s <<< RAW 00010305312e312e30
+   0.04s <<< FRAME 00010305312e312e30
+   2.04s >>> battery 02020100
+   2.07s <<< RAW 020203045affff00
+   2.07s <<< FRAME 020203045affff00
+   4.07s >>> initial mode 1f030100
+   4.09s <<< RAW 1f03030102
+   4.09s <<< FRAME 1f03030102
+   6.10s >>> mode table 1f010500
+   6.12s <<< RAW 1f0107001f0203060202000000091f030301021f050301011f0607001f06032f00000100000151756965740000000000000000000000000000000000000000000000000000000000000000000000001f06032f0100020000014177617265000000000000000000000000000000000000000000000000000000000000000a000000001f06032f02000b01010100000000000000000000000000000000000000000000000000000000000000000000000900000000001f06032f03000001010000000000000000000000000000000000000000000000000000000000000000000000000900000000001f0606001f08030204071f010600
+   6.12s <<< FRAME 1f010700
+   6.12s <<< FRAME 1f020306020200000009
+   6.12s <<< FRAME 1f03030102
+   6.12s <<< FRAME 1f05030101
+   6.12s <<< FRAME 1f060700
+   6.12s <<< FRAME 1f06032f0000010000015175696574000000000000000000000000000000000000000000000000000000000000000000000000
+   6.12s <<< FRAME 1f06032f0100020000014177617265000000000000000000000000000000000000000000000000000000000000000a00000000
+   6.12s <<< FRAME 1f06032f02000b0101010000000000000000000000000000000000000000000000000000000000000000000000090000000000
+   6.12s <<< FRAME 1f06032f0300000101000000000000000000000000000000000000000000000000000000000000000000000000090000000000
+   6.12s <<< FRAME 1f060600
+   6.12s <<< FRAME 1f0803020407
+   6.12s <<< FRAME 1f010600
+   8.12s >>> set mode 0 1f0305020000
+   8.15s <<< RAW 1f030700
+   8.15s <<< FRAME 1f030700
+  10.15s >>> readback 1f030100
+  10.17s <<< RAW 1f03030100
+  10.17s <<< FRAME 1f03030100
+  12.17s >>> set mode 1 1f0305020100
+  12.20s <<< RAW 1f030700
+  12.20s <<< FRAME 1f030700
+  14.20s >>> readback 1f030100
+  14.22s <<< RAW 1f03030101
+  14.22s <<< FRAME 1f03030101
+  16.22s >>> set mode 2 1f0305020200
+  16.25s <<< RAW 1f030700
+  16.25s <<< FRAME 1f030700
+  18.25s >>> readback 1f030100
+  18.30s <<< RAW 1f03030102
+  18.30s <<< FRAME 1f03030102
+  20.30s >>> set mode 3 1f0305020300
+  20.33s <<< RAW 1f030700
+  20.33s <<< FRAME 1f030700
+  22.33s >>> readback 1f030100
+  22.35s <<< RAW 1f03030103
+  22.35s <<< FRAME 1f03030103
+  24.35s >>> restore mode 2 1f0305020200
+  24.38s <<< RAW 1f030700
+  24.38s <<< FRAME 1f030700
+  26.38s >>> restore check 1f030100
+  26.40s <<< RAW 1f03030102
+  26.41s <<< FRAME 1f03030102
+  28.41s == restored initial mode 2
