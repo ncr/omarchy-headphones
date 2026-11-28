@@ -1,0 +1,242 @@
+{
+  "model": "Bose QuietComfort Headphones",
+  "owner": "aronnaxlin",
+  "bridge": "bose-bridge",
+  "capture": "docs/captures/bose-qc-headphones.txt",
+  "notes": "Product 0x4075 (codename prince), firmware 1.0.6-80+f5f219b; the owner's unit is the retail “QuietComfort SC” (the QuietComfort Headphones sold with a soft case). Same SDP UUIDs as the QC45 (docs/captures/bose-qc-headphones-bluetoothctl.txt), so the bose row picks it unchanged; BMAP on RFCOMM channel 8 with the same [0.1] init ('1.1.0') and the QC45's [31.3] audio modes. What is new is that its owner set up a custom mode in the Bose app: slot 2, voice prompt 00 0b (Work). When [31.3] reports an index other than 0 or 1, the bridge sends START [31.1] (GetAll) once; every configured custom slot with a name or a voice prompt is offered as custom<index>, named in modeLabels. Slot 3 here is configured but has neither, so it is not offered. Every device frame in this pin is from docs/captures/bose-qc-headphones.txt; the capture switched 0, 1, 2, 3 and back on one socket, 28 s, every frame answered.",
+  "session": {},
+  "steps": [
+    {
+      "call": "open",
+      "note": "the socket is up and the [0.1] init has been answered ('1.1.0'); battery and current-mode queries go out, exactly as for a QC45"
+    },
+    {
+      "sent": [
+        "02 02 01 00",
+        "1f 03 01 00"
+      ]
+    },
+    {
+      "device": "02 02 03 04 5a ff ff 00",
+      "note": "[2.2] STATUS: 90% (0x5a), four bytes as on the QC45"
+    },
+    {
+      "lines": [],
+      "note": "nothing is printed until the mode is known"
+    },
+    {
+      "device": "1f 03 03 01 02",
+      "note": "[31.3] STATUS: index 2 — the owner's custom slot, neither Quiet nor Aware"
+    },
+    {
+      "sent_last": "1f 01 05 00",
+      "note": "so the slot table is asked for: START [31.1] GetAll, once"
+    },
+    {
+      "line": {
+        "modes": true,
+        "mode": "other",
+        "available": [
+          "anc",
+          "ambient"
+        ],
+        "battery": {
+          "headset": 90,
+          "charging": []
+        }
+      },
+      "note": "the headset counts as answered (battery shown, ANC / Ambient offered) while the table is on its way; no button is lit"
+    },
+    {
+      "device": "1f 01 07 00"
+    },
+    {
+      "device": "1f 02 03 06 02 02 00 00 00 09"
+    },
+    {
+      "device": "1f 03 03 01 02"
+    },
+    {
+      "device": "1f 05 03 01 01"
+    },
+    {
+      "device": "1f 06 07 00"
+    },
+    {
+      "device": "1f 06 03 2f 00 00 01 00 00 01 51 75 69 65 74 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00"
+    },
+    {
+      "device": "1f 06 03 2f 01 00 02 00 00 01 41 77 61 72 65 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 0a 00 00 00 00"
+    },
+    {
+      "device": "1f 06 03 2f 02 00 0b 01 01 01 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 09 00 00 00 00 00",
+      "note": "[31.6] slot 2: prompt 00 0b (Work), editable, configured, in rotation, no name — offered"
+    },
+    {
+      "device": "1f 06 03 2f 03 00 00 01 01 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 09 00 00 00 00 00",
+      "note": "[31.6] slot 3: editable and configured, but no prompt and no name — not offered"
+    },
+    {
+      "device": "1f 06 06 00"
+    },
+    {
+      "device": "1f 08 03 02 04 07"
+    },
+    {
+      "device": "1f 01 06 00"
+    },
+    {
+      "line": {
+        "modes": true,
+        "mode": "custom2",
+        "available": [
+          "anc",
+          "ambient",
+          "custom2"
+        ],
+        "modeLabels": {
+          "custom2": "Work"
+        },
+        "battery": {
+          "headset": 90,
+          "charging": []
+        }
+      },
+      "note": "slot 2 is offered as custom2 under the name its voice prompt gives it, and it is the current mode"
+    },
+    {
+      "command": "set anc"
+    },
+    {
+      "sent_last": "1f 03 05 02 00 00"
+    },
+    {
+      "device": "1f 03 07 00",
+      "note": "PROCESSING is not the switch; the readback is"
+    },
+    {
+      "fire": "poll"
+    },
+    {
+      "sent_last": "1f 03 01 00"
+    },
+    {
+      "device": "1f 03 03 01 00"
+    },
+    {
+      "line": {
+        "modes": true,
+        "mode": "anc",
+        "available": [
+          "anc",
+          "ambient",
+          "custom2"
+        ],
+        "modeLabels": {
+          "custom2": "Work"
+        },
+        "battery": {
+          "headset": 90,
+          "charging": []
+        }
+      }
+    },
+    {
+      "command": "set ambient"
+    },
+    {
+      "sent_last": "1f 03 05 02 01 00"
+    },
+    {
+      "device": "1f 03 07 00"
+    },
+    {
+      "device": "1f 03 03 01 01"
+    },
+    {
+      "line": {
+        "modes": true,
+        "mode": "ambient",
+        "available": [
+          "anc",
+          "ambient",
+          "custom2"
+        ],
+        "modeLabels": {
+          "custom2": "Work"
+        },
+        "battery": {
+          "headset": 90,
+          "charging": []
+        }
+      }
+    },
+    {
+      "command": "set custom2"
+    },
+    {
+      "sent_last": "1f 03 05 02 02 00"
+    },
+    {
+      "device": "1f 03 07 00"
+    },
+    {
+      "device": "1f 03 03 01 02"
+    },
+    {
+      "line": {
+        "modes": true,
+        "mode": "custom2",
+        "available": [
+          "anc",
+          "ambient",
+          "custom2"
+        ],
+        "modeLabels": {
+          "custom2": "Work"
+        },
+        "battery": {
+          "headset": 90,
+          "charging": []
+        }
+      }
+    },
+    {
+      "command": "set custom3",
+      "note": "slot 3 is not offered, so nothing is sent"
+    },
+    {
+      "device": "1f 03 03 01 03",
+      "note": "the capture's readback after the headset was driven to slot 3 by the capture tool: an index not offered keeps the last mode"
+    },
+    {
+      "line": {
+        "modes": true,
+        "mode": "custom2",
+        "available": [
+          "anc",
+          "ambient",
+          "custom2"
+        ],
+        "modeLabels": {
+          "custom2": "Work"
+        },
+        "battery": {
+          "headset": 90,
+          "charging": []
+        }
+      }
+    },
+    {
+      "sent": [
+        "02 02 01 00",
+        "1f 03 01 00",
+        "1f 01 05 00",
+        "1f 03 05 02 00 00",
+        "1f 03 01 00",
+        "1f 03 05 02 01 00",
+        "1f 03 05 02 02 00"
+      ]
+    }
+  ]
+}

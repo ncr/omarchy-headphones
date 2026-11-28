@@ -56,8 +56,9 @@ The parts of the block table the QC45 answered for are the only ones used:
     START [31.3] switches the mode; payload [idx, voice-prompt-flag 0]
 
 The QC45 has no "off": noise cancelling is Quiet or Aware, unmapped indexes
-(its two custom slots, unconfigured on this unit) are dropped rather than
-forced into a name. There is no ambient dial and no wear sensor, so the line
+(its two custom slots, unconfigured on this unit) are never forced into
+Quiet or Aware (custom slots that are set up: see the QuietComfort
+Headphones below). There is no ambient dial and no wear sensor, so the line
 carries no level, voice or worn key. The headset never speaks on its own —
 every change it makes is only visible on a [31.3] GET — so the bridge polls.
 
@@ -88,6 +89,25 @@ and `ancLevels`, the same keys nothing-bridge fills — because the QC35's two
 strengths are one `anc` mode graded twice, not two modes. Its "off" is a real
 off, so `available` is ["off", "anc"]; there is no ambient or TalkThru on
 this headset and neither is ever offered or sent.
+
+The QuietComfort Headphones (product 0x4075, "prince", firmware
+1.0.6-80+f5f219b; confirmed 2026-11-28, docs/captures/bose-qc-headphones.txt)
+serves the QC45's [31.3] path on the same channel 8, and its owner can set up
+custom modes in the Bose app: slots 2 and 3 after Quiet and Aware. When [31.3]
+reports an index that is neither 0 nor 1, the bridge sends START [31.1]
+(GetAll) once and offers every custom slot that is configured and named (or
+has a voice prompt) as "custom<index>", with its name in `modeLabels`:
+
+    START [31.1]  answered with one 47-byte [31.6] ModeConfig STATUS per slot
+    START [31.3]  idx 2 or 3 switches to a custom slot, the same as 0 and 1
+
+    stdout   {"modes": true, "mode": "custom2",
+              "available": ["anc","ambient","custom2"],
+              "modeLabels": {"custom2": "Work"}, ...}
+    stdin    set custom2
+
+A headset that stays on Quiet and Aware is never sent GetAll, so a QC45's wire
+is unchanged, frame for frame.
 """
 import json
 import os
@@ -127,11 +147,50 @@ def set_noise(value):
 
 
 # The modes the QC45 serves, by the index [31.3] reports. 0 and 1 are the
-# preset Quiet and Aware pair every silent-capable Bose serves; the two
-# custom slots 2 and 3 carry whatever the owner's app stored into them, so
-# they are not given names the panel could act on wrongly.
+# preset Quiet and Aware pair every silent-capable Bose serves; the custom
+# slots after them carry whatever the owner's app stored into them, and are
+# offered below only under the name the headset itself reports.
 MODE_BY_IDX = {0: "anc", 1: "ambient"}
 AVAILABLE = ["anc", "ambient"]
+
+# Every custom slot the owner set up is offered as a mode of its own,
+# "custom<index>" (custom2 and custom3 on a QuietComfort Headphones),
+# under the name the headset gives it in `modeLabels`. The value carries the
+# slot index so it stays the same when another slot comes or goes. The slot
+# table comes from START [31.1] (GetAll), which answers with one 47-byte
+# ModeConfig STATUS [31.6] per slot:
+#   [0] index  [1:3] voice prompt  [3] editable  [4] configured
+#   [5] in the Action button's rotation  [6:38] name, UTF-8, NUL-padded
+# (field meanings per bosectl's notes for this headset; the bytes are a
+# QuietComfort Headphones' own, docs/captures/bose-qc-headphones.txt: slot 2
+# = prompt (0, 11) "Work", editable, configured, in rotation).
+# A slot is offered only if it is editable, configured and has a name or a
+# voice prompt; a slot with neither is a blank the owner never set up. The
+# name wins over the prompt, which is what the headset announces when it
+# switches to the slot.
+GET_ALL = bytes([0x1f, 0x01, OP_START, 0x00])  # START [31.1]
+CUSTOM_PREFIX = "custom"
+CUSTOM_MODE = re.compile(r"^custom([0-9]+)$")
+# A slot the bridge does not name, seen before any named mode: reported so the
+# headset still counts as answered, and matches no button.
+UNNAMED = "other"
+MODE_CONFIG_LEN = 47
+# The voice prompts a QuietComfort Headphones was seen to answer with, and
+# only those (docs/captures/bose-qc-headphones.txt). A slot with a prompt not listed
+# here is still offered, with no label, and the panel numbers it.
+PROMPTS = {1: "Quiet", 2: "Aware", 11: "Work"}
+
+
+def parse_mode_config(payload):
+    """A [31.6] STATUS as (index, name or prompt, has a name or prompt,
+    editable, configured)."""
+    if len(payload) < MODE_CONFIG_LEN:
+        return None
+    name = bytes(payload[6:38]).split(b"\0", 1)[0].decode("utf-8", "replace").strip()
+    prompt_id = (payload[1] << 8) | payload[2]
+    label = name or PROMPTS.get(prompt_id, "")
+    return (payload[0], label, bool(name) or prompt_id != 0,
+            bool(payload[3]), bool(payload[4]))
 
 # The two questions a Bose headset can be on. Every one starts on MODES, the
 # QC45's [31.3]; a headset that answers it with an ERROR moves to NOISE and
@@ -183,6 +242,7 @@ ANSWER_TIMEOUT = 10.0
 # After a set, schedule a readback; periodic polling follows subsequent
 # changes. These delays are policy, not measured switching latency.
 READBACK_DELAY = 2.0
+
 
 
 def emit(payload):
@@ -270,6 +330,10 @@ class Bridge:
         self.mode = None
         self.battery = None
         self.last_line = None
+        # The custom slots offered, index -> label, from the GetAll answer.
+        self.customs = {}
+        self.asked_slots = False
+        self.last_index = None
 
         # Which question this headset answers, and what the [1.6] path knows:
         # the strength last seen and the values the headset's mask named.
@@ -282,6 +346,7 @@ class Bridge:
         self.next_poll = None
         self.readback_at = None
         self.polls = 0
+
 
     # ---- The link.
 
@@ -449,10 +514,16 @@ class Bridge:
                 # included: this headset serves the QC45's audio modes.
                 self.modes_answered = True
             if op == OP_STATUS and len(payload) == 1:
-                mode = MODE_BY_IDX.get(payload[0])
-                if mode is not None and mode != self.mode:
-                    self.mode = mode
-                    self.report()
+                self.last_index = payload[0]
+                # The slot table is asked for only when the headset is on a
+                # slot that is not Quiet or Aware, once per run. A headset
+                # that stays on those two is sent exactly what it was sent
+                # before custom slots were read (tests/pins/bose/qc45.json),
+                # and one on the [1.6] path (the QC35) never gets here.
+                if payload[0] not in MODE_BY_IDX and not self.asked_slots:
+                    self.asked_slots = True
+                    self.send(GET_ALL)
+                self.apply_index()
             elif op == OP_ERROR and self.path == PATH_MODES \
                     and not self.modes_answered:
                 # This headset does not serve the QC45's audio modes. Ask the
@@ -463,9 +534,52 @@ class Bridge:
                 # such an ERROR would mean.
                 self.path = PATH_NOISE
                 self.send(NOISE)
+        elif (fblock, func) == (31, 6) and op == OP_STATUS:
+            self.on_mode_config(payload)
         elif (fblock, func) == (1, 6) and op == OP_STATUS \
                 and self.path == PATH_NOISE:
             self.on_noise(payload)
+
+    def mode_of(self, index):
+        if index in MODE_BY_IDX:
+            return MODE_BY_IDX[index]
+        if index in self.customs:
+            return CUSTOM_PREFIX + str(index)
+        return None
+
+    def apply_index(self):
+        """Name the last [31.3] index and report it if it changed."""
+        mode = self.mode_of(self.last_index)
+        # A headset already sitting in a slot the bridge does not name when it
+        # starts would otherwise never report and be parked as unanswered:
+        # call it UNNAMED, which lights no button but shows the battery and
+        # lets ANC / Ambient be chosen. Once a mode is known, an unnamed index
+        # keeps it, as before.
+        if mode is None and self.mode in (None, UNNAMED):
+            mode = UNNAMED
+        if mode is not None and mode != self.mode:
+            self.mode = mode
+            self.report()
+
+    def on_mode_config(self, payload):
+        """One slot of the GetAll answer: offer it if it is a named custom slot,
+        and stop offering it if it no longer is."""
+        parsed = parse_mode_config(payload)
+        if parsed is None:
+            return
+        index, label, named, editable, configured = parsed
+        if index in MODE_BY_IDX:
+            return
+        if editable and configured and named:
+            self.customs[index] = label
+        elif self.customs.pop(index, None) is None:
+            return
+        # The slot the headset is on may be the one just named.
+        self.apply_index()
+        self.report()
+
+    def custom_modes(self):
+        return [CUSTOM_PREFIX + str(index) for index in sorted(self.customs)]
 
     def on_noise(self, payload):
         """A [1.6] STATUS: what the headset is set to, and what it takes."""
@@ -505,6 +619,15 @@ class Bridge:
                 "mode": self.mode,
                 "available": AVAILABLE,
             }
+            if self.customs:
+                line["available"] = AVAILABLE + self.custom_modes()
+                # A slot with an unlisted prompt and no name has no label;
+                # the panel numbers it.
+                labels = dict(
+                    (CUSTOM_PREFIX + str(index), label)
+                    for index, label in sorted(self.customs.items()) if label)
+                if labels:
+                    line["modeLabels"] = labels
         if self.battery is not None:
             line["battery"] = {"headset": self.battery, "charging": []}
         if line != self.last_line:
@@ -534,6 +657,10 @@ class Bridge:
             index = 0
         elif value == "ambient":
             index = 1
+        else:
+            match = CUSTOM_MODE.match(value)
+            if match and int(match.group(1)) in self.customs:
+                index = int(match.group(1))
         return None if index is None else start_mode(index)
 
     def noise_frame(self, verb, value):

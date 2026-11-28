@@ -175,6 +175,130 @@ class Unsupported(unittest.TestCase):
         self.assertEqual(s.lines[-1]["mode"], "ambient")
 
 
+def mode_config(index, prompt=0, editable=0, configured=0, favourite=0,
+                name=b"", cnc=0):
+    """A 47-byte [31.6] STATUS frame as the QC45 sends it, as a hex string."""
+    payload = bytearray(47)
+    payload[0], payload[1], payload[2] = index, prompt >> 8, prompt & 0xff
+    payload[3], payload[4], payload[5] = editable, configured, favourite
+    payload[6:6 + len(name)] = name
+    payload[42] = cnc
+    return (bytes([0x1f, 0x06, 0x03, 47]) + payload).hex(" ")
+
+
+class CustomSlots(unittest.TestCase):
+    """Every configured custom slot from GetAll is offered as its own mode,
+    "custom<index>", under its name or, with none, the voice prompt the
+    headset announces for it. GetAll is sent only once the headset reports a
+    slot that is not Quiet or Aware. The base table is the QC45 in
+    tests/pins/bose/qc-headphones.json: slot 2 is prompt Work, slot 3
+    is configured but has neither name nor prompt."""
+
+    def _session(self, current="1f 03 03 01 02", slot3=None):
+        s = Session()
+        s.do_open()
+        s.device("02 02 03 04 64 ff ff 00")
+        s.device(current)
+        s.device(mode_config(0, prompt=1, favourite=1, name=b"Quiet"))
+        s.device(mode_config(1, prompt=2, favourite=1, name=b"Aware", cnc=10))
+        s.device(mode_config(2, prompt=11, editable=1, configured=1, favourite=1))
+        s.device(slot3 or mode_config(3, editable=1, configured=1))
+        return s
+
+    def test_quiet_and_aware_alone_never_ask_for_the_slot_table(self):
+        s = Session()
+        s.do_open()
+        s.device("1f 03 03 01 01")
+        s.device("1f 03 03 01 00")
+        s.fire()
+        self.assertNotIn("1f 01 05 00", s.sent)
+
+    def test_a_custom_slot_asks_for_the_table_once(self):
+        s = self._session()
+        self.assertEqual(s.sent.count("1f 01 05 00"), 1)
+        s.device("1f 03 03 01 03")
+        s.device("1f 03 03 01 02")
+        self.assertEqual(s.sent.count("1f 01 05 00"), 1)
+
+    def test_the_prompt_names_a_slot_with_no_name(self):
+        s = self._session()
+        self.assertEqual(s.lines[-1]["available"], ["anc", "ambient", "custom2"])
+        self.assertEqual(s.lines[-1]["modeLabels"], {"custom2": "Work"})
+        self.assertEqual(s.lines[-1]["mode"], "custom2")
+
+    def test_both_slots_set_up_are_both_offered_in_slot_order(self):
+        s = self._session(slot3=mode_config(3, editable=1, configured=1,
+                                            name=b"Late night"))
+        self.assertEqual(s.lines[-1]["available"],
+                         ["anc", "ambient", "custom2", "custom3"])
+        self.assertEqual(s.lines[-1]["modeLabels"],
+                         {"custom2": "Work", "custom3": "Late night"})
+        s.command("set custom3")
+        self.assertEqual(s.sent[-1], "1f 03 05 02 03 00")
+        s.device("1f 03 03 01 03")
+        self.assertEqual(s.lines[-1]["mode"], "custom3")
+
+    def test_a_prompt_never_seen_is_offered_without_a_label(self):
+        s = self._session(slot3=mode_config(3, prompt=12, editable=1, configured=1))
+        self.assertEqual(s.lines[-1]["available"],
+                         ["anc", "ambient", "custom2", "custom3"])
+        self.assertEqual(s.lines[-1]["modeLabels"], {"custom2": "Work"})
+
+    def test_more_slots_than_a_qc45_has(self):
+        s = Session()
+        s.do_open()
+        s.device("1f 03 03 01 05")
+        for index in range(5, 11):
+            s.device(mode_config(index, name=b"Slot %d" % index,
+                                 editable=1, configured=1))
+        self.assertEqual(s.lines[-1]["available"][2:],
+                         ["custom5", "custom6", "custom7", "custom8", "custom9", "custom10"])
+        self.assertEqual(s.lines[-1]["mode"], "custom5")
+
+    def test_switching_away_and_back(self):
+        s = self._session()
+        s.command("set anc")
+        self.assertEqual(s.sent[-1], "1f 03 05 02 00 00")
+        s.device("1f 03 03 01 00")
+        self.assertEqual(s.lines[-1]["mode"], "anc")
+        s.command("set custom2")
+        self.assertEqual(s.sent[-1], "1f 03 05 02 02 00")
+        s.device("1f 03 03 01 02")
+        self.assertEqual(s.lines[-1]["mode"], "custom2")
+
+    def test_a_slot_not_offered_is_never_switched_to(self):
+        s = self._session()
+        before = list(s.sent)
+        s.command("set custom3")   # configured, but no name or prompt
+        s.command("set custom9")   # no such slot
+        s.command("set custom")    # the bare prefix names nothing
+        self.assertEqual(s.sent, before)
+
+    def test_a_slot_that_stops_qualifying_is_withdrawn(self):
+        s = self._session(current="1f 03 03 01 01")
+        s.device("1f 03 03 01 02")
+        s.device(mode_config(2, prompt=11, editable=1, configured=1))
+        self.assertIn("custom2", s.lines[-1]["available"])
+        s.device(mode_config(2, prompt=11, editable=1, configured=0))
+        self.assertNotIn("modeLabels", s.lines[-1])
+        self.assertEqual(s.lines[-1]["available"], ["anc", "ambient"])
+
+    def test_the_owners_own_name_wins_over_the_prompt(self):
+        s = Session()
+        s.do_open()
+        s.device("1f 03 03 01 02")
+        s.device(mode_config(2, prompt=11, editable=1, configured=1, name=b"Desk"))
+        self.assertEqual(s.lines[-1]["modeLabels"], {"custom2": "Desk"})
+
+    def test_an_unconfigured_slot_as_in_the_original_capture_is_not_offered(self):
+        s = Session()
+        s.do_open()
+        s.device("1f 03 03 01 02")
+        s.device(mode_config(2, editable=1, configured=0))
+        self.assertNotIn("modeLabels", s.lines[-1])
+        self.assertEqual(s.lines[-1]["available"], ["anc", "ambient"])
+
+
 class ChannelSelection(unittest.TestCase):
     """The known channel is asked first, then the others, and a channel only
     counts when it answers the [0.1] probe as well as opening."""

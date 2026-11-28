@@ -1241,6 +1241,56 @@ Deno.test("extra modes come from the backend row, and only that row", () => {
   assertEquals(Model.allModeNames(), [...Model.MODE_ORDER, "wind", "leisure", "adaptive"]);
 });
 
+Deno.test("Bose custom slots: one button each, named by the headset", () => {
+  // The QC45 this was written on: slot 2 is Work, slot 3 unnamed (not listed).
+  const one = { available: ["anc", "ambient", "custom2"], modeLabels: { custom2: "Work" } };
+  const modes = Model.modesAvailable(one, "bose");
+  assertEquals(modes, ["anc", "ambient", "custom2"]);
+  assertEquals(Model.modeOptions(modes, "bose", one.modeLabels).map(o => [o.key, o.label]),
+    [["n", "ANC"], ["a", "Ambient"], ["w", "Work"]]);
+  // Both slots full: two buttons, two keys, in the bridge's order.
+  const both = { available: ["anc", "ambient", "custom2", "custom3"],
+                 modeLabels: { custom2: "Work", custom3: "Workout" } };
+  assertEquals(Model.modeOptions(Model.modesAvailable(both, "bose"), "bose", both.modeLabels)
+    .map(o => [o.value, o.key, o.label]),
+    [["anc", "n", "ANC"], ["ambient", "a", "Ambient"],
+     ["custom2", "w", "Work"], ["custom3", "o", "Workout"]]);
+  // No reported name: a numbered label, never an empty button.
+  assertEquals(Model.modeOptions(["custom2"], "bose", {}).map(o => o.label), ["Custom 1"]);
+  // Another brand never draws them, whatever its bridge says.
+  assertEquals(Model.modesAvailable(both, "sony"), ["anc", "ambient"]);
+  // setMode takes them; anything else still is an unknown mode.
+  assertEquals(Model.isModeName("custom3"), true);
+  assertEquals(Model.isModeName("custom"), false);
+  assertEquals(Model.isModeName("anc"), true);
+});
+
+Deno.test("custom mode keys avoid the panel's own and each other", () => {
+  // f, g, b, v, r belong to the panel; h, j, k, l, x to the key catcher.
+  assertEquals(Model.customKey("Flight", []), "i");
+  assertEquals(Model.customKey("Gym", []), "y");
+  assertEquals(Model.customKey("Work", ["w", "o", "r", "k"]), "a");
+  // Every letter gone: no key, the button still works with the mouse.
+  const all = "abcdefghijklmnopqrstuvwxyz".split("");
+  assertEquals(Model.customKey("Work", all), "");
+  // Seven named slots on a newer Bose: seven distinct keys, none reserved.
+  const names = ["Work", "Workout", "Walk", "Wind down", "Whisper", "Woods", "Wake"];
+  const line = { available: ["anc", "ambient", ...names.map((_, i) => "custom" + (i + 4))],
+                 modeLabels: Object.fromEntries(names.map((n, i) => ["custom" + (i + 4), n])) };
+  const keys = Model.modeOptions(Model.modesAvailable(line, "bose"), "bose", line.modeLabels)
+    .map(o => o.key);
+  assertEquals(new Set(keys).size, keys.length);
+  for (const k of keys) assertEquals("bvrfghjklx".includes(k), false, k);
+});
+
+Deno.test("mode rows: one up to four, then rows of three", () => {
+  const opts = n => Array.from({ length: n }, (_, i) => i);
+  assertEquals(Model.modeRows(opts(4)), [[0, 1, 2, 3]]);
+  assertEquals(Model.modeRows(opts(6)), [[0, 1, 2], [3, 4, 5]]);
+  assertEquals(Model.modeRows(opts(9)), [[0, 1, 2], [3, 4, 5], [6, 7, 8]]);
+  assertEquals(Model.modeRows(opts(5)), [[0, 1, 2], [3, 4]]);
+});
+
 // ---- Redmi Buds 5: its SDP record, as docs/captures/redmi-buds-5-bluetoothctl.txt
 //      printed it, and what must not be taken for it.
 

@@ -209,9 +209,9 @@ Panel {
   }
 
   readonly property var ancOptions: Model.modeOptions(modesAvailable,
-    current ? current.controlBackend : "")
-  readonly property var modeRows: ancOptions.length > 4
-    ? [ancOptions.slice(0, 3), ancOptions.slice(3)] : [ancOptions]
+    current ? current.controlBackend : "",
+    current && current.ancState ? current.ancState.modeLabels : null)
+  readonly property var modeRows: Model.modeRows(ancOptions)
 
   // The strengths, on digits: every letter near the hand already means a mode
   // or a panel, and h / l — the letters a person would reach for — are taken
@@ -233,8 +233,10 @@ Panel {
 
   readonly property string ancHint: {
     var parts = []
+    // A custom mode that found no free letter has no key, and is not offered
+    // one here; its button still works.
     for (var i = 0; i < ancOptions.length; i++)
-      parts.push(ancOptions[i].key + " " + ancOptions[i].label)
+      if (ancOptions[i].key !== "") parts.push(ancOptions[i].key + " " + ancOptions[i].label)
     // The two Ambient keys exist only while the row they drive is on screen, so
     // they are named only then: a hint that listed them the rest of the time
     // would be offering keys that do nothing. Same for the strengths and the
@@ -475,6 +477,7 @@ Panel {
   // sending a command the headset answers by ignoring.
   function setAncModeByKey(key) {
     var wanted = String(key).toLowerCase()
+    if (wanted === "") return false
     for (var i = 0; i < ancOptions.length; i++)
       if (ancOptions[i].key === wanted) return setAncMode(ancOptions[i].value)
     return false

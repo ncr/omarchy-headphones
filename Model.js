@@ -527,7 +527,9 @@ var BACKENDS = [
     // claims are the QC45's actual vendor UUIDs. The first also serves an
     // iAP2-style DETECT channel that is not BMAP — the bridge probes its
     // channel candidates with BMAP itself.
-    uuids: [BOSE_BMAP_UUID, BOSE_SPP_UUID], args: ["address"] },
+    uuids: [BOSE_BMAP_UUID, BOSE_SPP_UUID], args: ["address"],
+    // The custom slots the owner set up, named by the headset (QC45: "Work").
+    customModes: true },
   { name: "tozo", bridge: "tozo-bridge",
     modelNames: ["TOZO NC9 Pro"],
     modelUuids: ["00001101-0000-1000-8000-00805f9b34fb", "0000b610-0000-1000-8000-00805f9b34fb"],
@@ -747,6 +749,39 @@ var MODE_OPTIONS = [
   { value: "adaptive", key: "d", label: "Adaptive", tooltip: "Adaptive Mode" }
 ]
 
+// ---- Modes the owner set up on the device itself.
+//
+// A Bose headset keeps custom slots (two on a QC45, more on newer models) that
+// its owner names in the Bose app. A bridge on a row with `customModes` offers
+// each as "custom<slot>" and reports its name in `modeLabels`; how many there
+// are is the device's to say, so they are not in MODE_OPTIONS. They are drawn
+// after the fixed modes, in the order the bridge lists them.
+var CUSTOM_MODE = /^custom[0-9]+$/
+
+function isCustomMode(name) {
+  return CUSTOM_MODE.test(String(name))
+}
+
+// Letters a custom mode's key may never take: the panel's own (b v r f g) and
+// the ones PanelKeyCatcher keeps for moving, closing and deleting (h j k l x).
+var RESERVED_KEYS = "bvrfghjklx"
+
+// The key for a custom mode: the first letter of its name that is neither
+// reserved nor taken by a button already drawn, else any free letter, else
+// none (the button still works with the mouse). Keys are only live for the
+// buttons on screen, so "taken" is just this panel's other buttons.
+function customKey(label, taken) {
+  var free = function(c) {
+    return c >= "a" && c <= "z" && RESERVED_KEYS.indexOf(c) === -1 && taken.indexOf(c) === -1
+  }
+  var name = String(label).toLowerCase()
+  for (var i = 0; i < name.length; i++)
+    if (free(name[i])) return name[i]
+  for (var code = 97; code <= 122; code++)
+    if (free(String.fromCharCode(code))) return String.fromCharCode(code)
+  return ""
+}
+
 // The names this backend may report: MODE_ORDER, plus its row's extras.
 function modeNames(backend) {
   var row = backendRow(backend)
@@ -784,7 +819,20 @@ function modesAvailable(state, backend) {
   var order = modeNames(backend)
   for (var i = 0; i < order.length; i++)
     if (list.indexOf(order[i]) !== -1) out.push(order[i])
+  // The device's own custom modes, on a row that has them, as the bridge
+  // listed them, each once.
+  var row = backendRow(backend)
+  if (row && row.customModes) {
+    for (var j = 0; j < list.length; j++)
+      if (isCustomMode(list[j]) && out.indexOf(list[j]) === -1) out.push(list[j])
+  }
   return out
+}
+
+// Whether a mode name could be meant at all — what setMode accepts before the
+// follower checks it against the device's own list.
+function isModeName(name) {
+  return allModeNames().indexOf(String(name)) !== -1 || isCustomMode(name)
 }
 
 // ---- How strong the noise cancelling is, on devices that grade it.
@@ -845,16 +893,41 @@ function bridgeCaseStale(state) {
 }
 
 // The buttons for the modes this device offers, in drawing order, each under
-// the name its row gives it.
-function modeOptions(available, backend) {
+// the name its row gives it. Custom modes come last, under the name the
+// device reported for each (`modeLabels` on the bridge's line), with a key
+// picked from that name so two of them never share one.
+function modeOptions(available, backend, reported) {
   var row = backendRow(backend)
   var labels = row && row.modeLabels ? row.modeLabels : {}
+  var named = reported && typeof reported === "object" ? reported : {}
   var out = []
+  var taken = []
   for (var i = 0; i < MODE_OPTIONS.length; i++) {
     var option = MODE_OPTIONS[i]
     if (available.indexOf(option.value) === -1) continue
     out.push({ value: option.value, key: option.key,
                label: labels[option.value] || option.label, tooltip: option.tooltip })
+    taken.push(option.key)
+  }
+  var custom = 0
+  for (var j = 0; j < available.length; j++) {
+    var value = available[j]
+    if (!isCustomMode(value)) continue
+    custom++
+    var label = typeof named[value] === "string" && named[value] !== ""
+      ? named[value] : "Custom " + custom
+    var key = customKey(label, taken)
+    if (key !== "") taken.push(key)
+    out.push({ value: value, key: key, label: label, tooltip: label + " (custom mode)" })
   }
   return out
+}
+
+// The mode buttons as rows: one row up to four, else rows of three, so a
+// headset with many custom modes wraps instead of squeezing one long row.
+function modeRows(options) {
+  if (options.length <= 4) return [options]
+  var rows = []
+  for (var i = 0; i < options.length; i += 3) rows.push(options.slice(i, i + 3))
+  return rows
 }
